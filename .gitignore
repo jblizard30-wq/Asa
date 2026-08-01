@@ -1,0 +1,24 @@
+# dependencies
+/node_modules
+/node_modules_stale_*
+/node_modules_broken_icloud
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# env
+.env
+.env*.local
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
