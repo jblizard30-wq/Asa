@@ -4,16 +4,22 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 import { getTaskDetail, updateTask, deleteTask } from '@/lib/actions/tasks';
+import { setTaskCustomFieldValue } from '@/lib/actions/customFields';
 import { addComment } from '@/lib/actions/comments';
-import { PRIORITY_LABELS, STATUS_LABELS } from '@/lib/format';
+import { PRIORITY_LABELS, STATUS_LABELS, RECURRENCE_LABELS } from '@/lib/format';
+import { QuickAddTask } from '@/components/QuickAddTask';
+import { SendReminderModal } from '@/components/SendReminderModal';
 
 type TaskDetail = NonNullable<Awaited<ReturnType<typeof getTaskDetail>>>;
+type FieldValue = TaskDetail['fieldValues'][number];
 
 export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: () => void }) {
   const router = useRouter();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [showReminder, setShowReminder] = useState(false);
   const commentFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -35,11 +41,22 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
     router.refresh();
   }
 
-  function handleFieldChange(field: string, value: string | null) {
+  function handleFieldChange(field: string, value: string | number | null) {
+    handleFieldsChange({ [field]: value });
+  }
+
+  function handleFieldsChange(fields: Record<string, string | number | null>) {
     if (!task) return;
-    setTask({ ...task, [field]: value } as TaskDetail);
+    const previous = task;
+    setTask({ ...task, ...fields } as TaskDetail);
+    setStatusError(null);
     startTransition(async () => {
-      await updateTask(taskId, { [field]: value } as never);
+      const result = await updateTask(taskId, fields as never);
+      if (!result.success) {
+        setTask(previous);
+        setStatusError(result.error ?? 'Could not save that change.');
+        return;
+      }
       router.refresh();
     });
   }
@@ -48,6 +65,38 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
     await addComment(taskId, formData);
     commentFormRef.current?.reset();
     refresh();
+  }
+
+  async function handleToggleSubtask(subtaskId: string, done: boolean) {
+    if (!task) return;
+    setTask({
+      ...task,
+      subtasks: task.subtasks.map((s) => (s.id === subtaskId ? { ...s, status: done ? 'DONE' : 'TODO' } : s)),
+    });
+    await updateTask(subtaskId, { status: done ? 'DONE' : 'TODO' });
+    router.refresh();
+  }
+
+  function handleCustomFieldChange(fieldId: string, patch: Partial<Omit<FieldValue, 'customFieldId'>>) {
+    if (!task) return;
+    const next: FieldValue = {
+      customFieldId: fieldId,
+      textValue: null,
+      numberValue: null,
+      dateValue: null,
+      boolValue: null,
+      optionId: null,
+      ...task.fieldValues.find((v) => v.customFieldId === fieldId),
+      ...patch,
+    };
+    setTask({
+      ...task,
+      fieldValues: [...task.fieldValues.filter((v) => v.customFieldId !== fieldId), next],
+    });
+    startTransition(async () => {
+      await setTaskCustomFieldValue(taskId, fieldId, patch);
+      router.refresh();
+    });
   }
 
   async function handleDelete() {
@@ -90,9 +139,41 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
               className="mt-4 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
             />
 
+            <div className="mt-2">
+              <label className="block text-xs font-medium text-slate-500">Link</label>
+              <input
+                type="url"
+                defaultValue={task.url ?? ''}
+                placeholder="https://…"
+                onBlur={(e) => e.target.value !== (task.url ?? '') && handleFieldChange('url', e.target.value || null)}
+                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+              />
+              {task.url && (
+                <a
+                  href={task.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-block truncate text-xs text-brand-600 hover:underline"
+                >
+                  {task.url}
+                </a>
+              )}
+            </div>
+
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div>
-                <label className="block text-xs font-medium text-slate-500">Assignee</label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-slate-500">Assignee</label>
+                  {(task.viewerRole === 'ADMIN' || task.viewerRole === 'MANAGER') && task.assigneeId && (
+                    <button
+                      type="button"
+                      onClick={() => setShowReminder(true)}
+                      className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                    >
+                      🔔 Remind
+                    </button>
+                  )}
+                </div>
                 <select
                   defaultValue={task.assigneeId ?? ''}
                   onChange={(e) => handleFieldChange('assigneeId', e.target.value || null)}
@@ -132,6 +213,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
               <div>
                 <label className="block text-xs font-medium text-slate-500">Status</label>
                 <select
+                  key={task.status}
                   defaultValue={task.status}
                   onChange={(e) => handleFieldChange('status', e.target.value)}
                   className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5"
@@ -142,6 +224,220 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                     </option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            {statusError && <p className="mt-2 text-xs text-red-600">{statusError}</p>}
+
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold text-slate-700">Sequence</h3>
+
+              {task.locked && task.predecessor && (
+                <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  🔒 Locked until &ldquo;{task.predecessor.title}&rdquo; is marked done.
+                </p>
+              )}
+
+              <div className="mt-2">
+                <label className="block text-xs font-medium text-slate-500">Comes after</label>
+                <select
+                  key={task.predecessor?.id ?? 'none'}
+                  defaultValue={task.predecessor?.id ?? ''}
+                  onChange={(e) => handleFieldChange('predecessorId', e.target.value || null)}
+                  className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+                >
+                  <option value="">No predecessor — can start anytime</option>
+                  {task.projectTasks.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {task.successors.length > 0 && (
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-slate-500">
+                    Then ({task.successors.length})
+                  </label>
+                  <ul className="mt-1 space-y-1">
+                    {task.successors.map((s) => (
+                      <li key={s.id} className="flex items-center justify-between text-sm text-slate-700">
+                        <span className="truncate">{s.title}</span>
+                        <span className="ml-2 shrink-0 text-xs text-slate-400">{STATUS_LABELS[s.status]}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="mt-2">
+                <QuickAddTask
+                  projectId={task.projectId}
+                  sectionId={task.sectionId}
+                  predecessorId={task.id}
+                  label="+ Add task after this one"
+                  onAdded={refresh}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <label className="block text-xs font-medium text-slate-500">Repeat</label>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <select
+                  value={task.recurrence}
+                  onChange={(e) => handleFieldChange('recurrence', e.target.value)}
+                  className="rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+                >
+                  {Object.entries(RECURRENCE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+
+                {task.recurrence !== 'NONE' && (
+                  <>
+                    <span className="text-sm text-slate-500">every</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={task.recurrenceInterval}
+                      onChange={(e) => handleFieldChange('recurrenceInterval', Number(e.target.value) || 1)}
+                      className="w-16 rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+                    />
+                    <span className="text-sm text-slate-500">
+                      {
+                        {
+                          DAILY: 'day(s)',
+                          WEEKLY: 'week(s)',
+                          MONTHLY: 'month(s)',
+                          YEARLY: 'year(s)',
+                        }[task.recurrence]
+                      }
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {task.recurrence !== 'NONE' && (
+                <div className="mt-2 flex items-center gap-2">
+                  <label className="text-xs font-medium text-slate-500">Ends on</label>
+                  <input
+                    type="date"
+                    value={task.recurrenceEndDate ? task.recurrenceEndDate.slice(0, 10) : ''}
+                    onChange={(e) => handleFieldChange('recurrenceEndDate', e.target.value || null)}
+                    className="rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+                  />
+                  <span className="text-xs text-slate-400">(optional)</span>
+                </div>
+              )}
+
+              {task.recurrence !== 'NONE' && (
+                <p className="mt-2 text-xs text-slate-400">
+                  Completing this task will automatically reschedule it to the next occurrence instead of marking it
+                  done for good.
+                </p>
+              )}
+            </div>
+
+            {task.customFields.length > 0 && (
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <h3 className="text-sm font-semibold text-slate-700">Custom fields</h3>
+                <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                  {task.customFields.map((field) => {
+                    const value = task.fieldValues.find((v) => v.customFieldId === field.id);
+                    return (
+                      <div key={field.id}>
+                        <label className="block text-xs font-medium text-slate-500">{field.name}</label>
+                        {field.type === 'TEXT' && (
+                          <input
+                            defaultValue={value?.textValue ?? ''}
+                            onBlur={(e) =>
+                              e.target.value !== (value?.textValue ?? '') &&
+                              handleCustomFieldChange(field.id, { textValue: e.target.value || null })
+                            }
+                            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5"
+                          />
+                        )}
+                        {field.type === 'NUMBER' && (
+                          <input
+                            type="number"
+                            defaultValue={value?.numberValue ?? ''}
+                            onBlur={(e) =>
+                              handleCustomFieldChange(field.id, {
+                                numberValue: e.target.value === '' ? null : Number(e.target.value),
+                              })
+                            }
+                            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5"
+                          />
+                        )}
+                        {field.type === 'DATE' && (
+                          <input
+                            type="date"
+                            defaultValue={value?.dateValue ? value.dateValue.slice(0, 10) : ''}
+                            onChange={(e) => handleCustomFieldChange(field.id, { dateValue: e.target.value || null })}
+                            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5"
+                          />
+                        )}
+                        {field.type === 'CHECKBOX' && (
+                          <input
+                            type="checkbox"
+                            defaultChecked={value?.boolValue ?? false}
+                            onChange={(e) => handleCustomFieldChange(field.id, { boolValue: e.target.checked })}
+                            className="mt-2 h-4 w-4"
+                          />
+                        )}
+                        {field.type === 'SELECT' && (
+                          <select
+                            defaultValue={value?.optionId ?? ''}
+                            onChange={(e) => handleCustomFieldChange(field.id, { optionId: e.target.value || null })}
+                            className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5"
+                          >
+                            <option value="">—</option>
+                            {field.options.map((o) => (
+                              <option key={o.id} value={o.id}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold text-slate-700">
+                Subtasks {task.subtasks.length > 0 && `(${task.subtasks.filter((s) => s.status === 'DONE').length}/${task.subtasks.length})`}
+              </h3>
+              <ul className="mt-2 space-y-1">
+                {task.subtasks.map((s) => (
+                  <li key={s.id} className="flex items-center gap-2 rounded-md px-1 py-1 hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      checked={s.status === 'DONE'}
+                      onChange={(e) => handleToggleSubtask(s.id, e.target.checked)}
+                      className="h-4 w-4 shrink-0"
+                    />
+                    <span className={`truncate text-sm ${s.status === 'DONE' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                      {s.title}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-2">
+                <QuickAddTask
+                  projectId={task.projectId}
+                  sectionId={task.sectionId}
+                  parentTaskId={task.id}
+                  label="+ Add subtask"
+                  onAdded={refresh}
+                />
               </div>
             </div>
 
@@ -188,6 +484,15 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
           </div>
         )}
       </div>
+
+      {showReminder && task && task.assigneeId && (
+        <SendReminderModal
+          recipientId={task.assigneeId}
+          recipientName={task.members.find((m) => m.id === task.assigneeId)?.name ?? 'this user'}
+          taskId={task.id}
+          onClose={() => setShowReminder(false)}
+        />
+      )}
     </div>
   );
 }

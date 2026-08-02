@@ -43,7 +43,7 @@ export async function signUp(formData: FormData): Promise<SignUpResult> {
       name: parsed.data.name,
       email,
       passwordHash,
-      role: userCount === 0 ? 'ADMIN' : 'STAFF',
+      role: userCount === 0 ? 'ADMIN' : 'USER',
     },
   });
 

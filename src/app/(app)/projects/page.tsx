@@ -12,9 +12,9 @@ export default async function ProjectsPage() {
   const projects = await prisma.project.findMany({
     where: isAdmin ? {} : { members: { some: { userId: session.user.id } } },
     include: {
-      _count: { select: { tasks: true } },
+      _count: { select: { tasks: { where: { deletedAt: null } } } },
       members: true,
-      tasks: { where: { status: { not: 'DONE' } }, select: { id: true } },
+      tasks: { where: { status: { not: 'DONE' }, deletedAt: null }, select: { id: true } },
     },
     orderBy: { createdAt: 'asc' },
   });

@@ -7,12 +7,53 @@ import { PRIORITY_STYLES, formatDueDate } from '@/lib/format';
 import { QuickAddTask } from '@/components/QuickAddTask';
 import { TaskDetailModal } from '@/components/TaskDetailModal';
 
+export interface TaskFieldValue {
+  customFieldId: string;
+  textValue: string | null;
+  numberValue: number | null;
+  dateValue: string | null;
+  boolValue: boolean | null;
+  optionId: string | null;
+}
+
+export interface CustomFieldOption {
+  id: string;
+  label: string;
+}
+
+export interface CustomFieldDef {
+  id: string;
+  name: string;
+  type: 'TEXT' | 'NUMBER' | 'DATE' | 'SELECT' | 'CHECKBOX';
+  order: number;
+  options: CustomFieldOption[];
+}
+
+export interface KanbanSubtask {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  dueDate: string | null;
+  assigneeId: string | null;
+  assigneeName: string | null;
+}
+
 export interface KanbanTask {
   id: string;
   title: string;
   priority: string;
+  status: string;
   dueDate: string | null;
+  assigneeId: string | null;
   assigneeName: string | null;
+  recurrence: string;
+  recurrenceInterval: number;
+  recurrenceEndDate: string | null;
+  locked: boolean;
+  predecessorTitle: string | null;
+  subtasks: KanbanSubtask[];
+  fieldValues: TaskFieldValue[];
 }
 
 export interface KanbanSection {
@@ -31,6 +72,8 @@ export function KanbanBoard({ projectId, sections: initialSections }: { projectI
     if (!destination) return;
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
+    const previousSections = sections;
+
     setSections((prev) => {
       const next = prev.map((s) => ({ ...s, tasks: [...s.tasks] }));
       const sourceSection = next.find((s) => s.id === source.droppableId);
@@ -42,17 +85,22 @@ export function KanbanBoard({ projectId, sections: initialSections }: { projectI
       return next;
     });
 
-    void moveTask(draggableId, destination.droppableId, destination.index);
+    void moveTask(draggableId, destination.droppableId, destination.index).then((result) => {
+      if (!result.success) {
+        setSections(previousSections);
+        alert(result.error ?? 'Could not move this task.');
+      }
+    });
   }
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <div className="flex gap-4 overflow-x-auto pb-4">
         {sections.map((section) => (
-          <div key={section.id} className="w-72 shrink-0 rounded-lg bg-slate-100 p-3">
+          <div key={section.id} className="w-72 shrink-0 rounded-lg bg-slate-100 p-3 dark:bg-slate-800">
             <div className="mb-2 flex items-center justify-between px-1">
-              <h3 className="text-sm font-semibold text-slate-700">{section.name}</h3>
-              <span className="text-xs text-slate-400">{section.tasks.length}</span>
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{section.name}</h3>
+              <span className="text-xs text-slate-400 dark:text-slate-500">{section.tasks.length}</span>
             </div>
 
             <Droppable droppableId={section.id}>
@@ -61,30 +109,43 @@ export function KanbanBoard({ projectId, sections: initialSections }: { projectI
                   {section.tasks.map((task, index) => {
                     const due = formatDueDate(task.dueDate);
                     return (
-                      <Draggable key={task.id} draggableId={task.id} index={index}>
+                      <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={task.locked}>
                         {(dragProvided, snapshot) => (
                           <div
                             ref={dragProvided.innerRef}
                             {...dragProvided.draggableProps}
                             {...dragProvided.dragHandleProps}
                             onClick={() => setOpenTaskId(task.id)}
-                            className={`cursor-pointer rounded-md border border-slate-200 bg-white p-3 shadow-sm hover:border-brand-300 ${
+                            title={task.locked ? `Locked until "${task.predecessorTitle}" is done` : undefined}
+                            className={`cursor-pointer rounded-md border border-slate-200 bg-white p-3 shadow-sm hover:border-brand-300 dark:border-slate-700 dark:bg-slate-900 ${
                               snapshot.isDragging ? 'shadow-md' : ''
-                            }`}
+                            } ${task.locked ? 'opacity-60' : ''}`}
                           >
-                            <p className="text-sm font-medium text-slate-800">{task.title}</p>
+                            <div className="flex items-center gap-1.5">
+                              {task.locked && (
+                                <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500" aria-label="Locked">
+                                  🔒
+                                </span>
+                              )}
+                              <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{task.title}</p>
+                            </div>
+                            {task.locked && (
+                              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                                Waiting on &ldquo;{task.predecessorTitle}&rdquo;
+                              </p>
+                            )}
                             <div className="mt-2 flex items-center justify-between">
                               <span
                                 className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${PRIORITY_STYLES[task.priority]}`}
                               >
                                 {task.priority}
                               </span>
-                              <span className={`text-xs ${due.overdue ? 'font-medium text-red-500' : 'text-slate-400'}`}>
+                              <span className={`text-xs ${due.overdue ? 'font-medium text-red-500 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>
                                 {due.label}
                               </span>
                             </div>
                             {task.assigneeName && (
-                              <p className="mt-2 text-xs text-slate-400">{task.assigneeName}</p>
+                              <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">{task.assigneeName}</p>
                             )}
                           </div>
                         )}

@@ -20,8 +20,8 @@ export function ProjectsListClient({ projects, isAdmin }: { projects: ProjectSum
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Projects</h1>
-          <p className="mt-1 text-sm text-slate-500">All the initiatives your team is working on.</p>
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Projects</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">All the initiatives your team is working on.</p>
         </div>
         {isAdmin && (
           <button
@@ -38,13 +38,13 @@ export function ProjectsListClient({ projects, isAdmin }: { projects: ProjectSum
           <Link
             key={project.id}
             href={`/projects/${project.id}`}
-            className="rounded-lg border border-slate-200 bg-white p-5 hover:border-brand-300 hover:shadow-sm"
+            className="rounded-lg border border-slate-200 bg-white p-5 hover:border-brand-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-900"
           >
-            <h2 className="font-semibold text-slate-900">{project.name}</h2>
+            <h2 className="font-semibold text-slate-900 dark:text-slate-100">{project.name}</h2>
             {project.description && (
-              <p className="mt-1 line-clamp-2 text-sm text-slate-500">{project.description}</p>
+              <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{project.description}</p>
             )}
-            <div className="mt-4 flex items-center gap-4 text-xs text-slate-400">
+            <div className="mt-4 flex items-center gap-4 text-xs text-slate-400 dark:text-slate-500">
               <span>{project.memberCount} members</span>
               <span>{project.openTaskCount} open tasks</span>
             </div>
@@ -52,7 +52,7 @@ export function ProjectsListClient({ projects, isAdmin }: { projects: ProjectSum
         ))}
 
         {projects.length === 0 && (
-          <div className="col-span-full rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400">
+          <div className="col-span-full rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-600 dark:text-slate-500">
             {isAdmin
               ? 'No projects yet. Create your first project to get started.'
               : "You haven't been added to any projects yet. Ask an admin to invite you."}

@@ -8,7 +8,7 @@ export default async function MyTasksPage() {
   if (!session?.user) return null;
 
   const tasksRaw = await prisma.task.findMany({
-    where: { assigneeId: session.user.id, status: { not: 'DONE' } },
+    where: { assigneeId: session.user.id, status: { not: 'DONE' }, deletedAt: null },
     include: { project: true, section: true },
   });
 
@@ -22,7 +22,7 @@ export default async function MyTasksPage() {
   });
 
   const doneCount = await prisma.task.count({
-    where: { assigneeId: session.user.id, status: 'DONE' },
+    where: { assigneeId: session.user.id, status: 'DONE', deletedAt: null },
   });
 
   return (

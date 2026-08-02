@@ -12,12 +12,26 @@ export default async function ProjectPage({ params }: { params: { projectId: str
     where: { id: params.projectId },
     include: {
       members: { include: { user: true } },
+      customFields: {
+        orderBy: { order: 'asc' },
+        include: { options: { orderBy: { order: 'asc' } } },
+      },
       sections: {
         orderBy: { order: 'asc' },
         include: {
           tasks: {
+            where: { parentTaskId: null, deletedAt: null },
             orderBy: { order: 'asc' },
-            include: { assignee: true },
+            include: {
+              assignee: true,
+              fieldValues: true,
+              predecessor: { select: { id: true, title: true, status: true } },
+              subtasks: {
+                where: { deletedAt: null },
+                orderBy: { order: 'asc' },
+                include: { assignee: true },
+              },
+            },
           },
         },
       },
@@ -38,6 +52,13 @@ export default async function ProjectPage({ params }: { params: { projectId: str
       description={project.description}
       isAdmin={session.user.role === 'ADMIN'}
       members={project.members.map((m) => ({ id: m.user.id, name: m.user.name }))}
+      customFields={project.customFields.map((f) => ({
+        id: f.id,
+        name: f.name,
+        type: f.type,
+        order: f.order,
+        options: f.options.map((o) => ({ id: o.id, label: o.label })),
+      }))}
       sections={project.sections.map((s) => ({
         id: s.id,
         name: s.name,
@@ -46,8 +67,32 @@ export default async function ProjectPage({ params }: { params: { projectId: str
           id: t.id,
           title: t.title,
           priority: t.priority,
+          status: t.status,
           dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+          assigneeId: t.assigneeId,
           assigneeName: t.assignee?.name ?? null,
+          recurrence: t.recurrence,
+          recurrenceInterval: t.recurrenceInterval,
+          recurrenceEndDate: t.recurrenceEndDate ? t.recurrenceEndDate.toISOString() : null,
+          locked: Boolean(t.predecessor && t.predecessor.status !== 'DONE'),
+          predecessorTitle: t.predecessor?.title ?? null,
+          fieldValues: t.fieldValues.map((v) => ({
+            customFieldId: v.customFieldId,
+            textValue: v.textValue,
+            numberValue: v.numberValue,
+            dateValue: v.dateValue ? v.dateValue.toISOString() : null,
+            boolValue: v.boolValue,
+            optionId: v.optionId,
+          })),
+          subtasks: t.subtasks.map((st) => ({
+            id: st.id,
+            title: st.title,
+            status: st.status,
+            priority: st.priority,
+            dueDate: st.dueDate ? st.dueDate.toISOString() : null,
+            assigneeId: st.assigneeId,
+            assigneeName: st.assignee?.name ?? null,
+          })),
         })),
       }))}
     />

@@ -18,6 +18,33 @@ export const STATUS_LABELS: Record<string, string> = {
   DONE: 'Done',
 };
 
+export const ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Administrator',
+  MANAGER: 'Manager',
+  USER: 'User',
+};
+
+export const RECURRENCE_LABELS: Record<string, string> = {
+  NONE: 'Does not repeat',
+  DAILY: 'Daily',
+  WEEKLY: 'Weekly',
+  MONTHLY: 'Monthly',
+  YEARLY: 'Yearly',
+};
+
+export const AUTOMATION_TRIGGER_LABELS: Record<string, string> = {
+  STATUS_CHANGED: 'status changes to',
+  ASSIGNEE_CHANGED: 'assignee changes',
+  DUE_DATE_APPROACHING: 'due date is approaching',
+};
+
+export const AUTOMATION_ACTION_LABELS: Record<string, string> = {
+  SET_STATUS: 'Set status',
+  SET_ASSIGNEE: 'Set assignee',
+  MOVE_SECTION: 'Move to section',
+  CREATE_TASK: 'Create a new task',
+};
+
 export function formatDueDate(dueDate: string | Date | null): { label: string; overdue: boolean } {
   if (!dueDate) return { label: 'No due date', overdue: false };
   const date = new Date(dueDate);

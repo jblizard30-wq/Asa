@@ -5,5 +5,7 @@ export const config = {
     '/my-tasks/:path*',
     '/projects/:path*',
     '/notifications/:path*',
+    '/admin/:path*',
+    '/teams/:path*',
   ],
 };

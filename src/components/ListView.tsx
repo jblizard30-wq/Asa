@@ -4,39 +4,55 @@ import { useState } from 'react';
 import { PRIORITY_LABELS, PRIORITY_STYLES, formatDueDate } from '@/lib/format';
 import { QuickAddTask } from '@/components/QuickAddTask';
 import { TaskDetailModal } from '@/components/TaskDetailModal';
-import type { KanbanSection } from '@/components/KanbanBoard';
+import type { KanbanSection, CustomFieldDef } from '@/components/KanbanBoard';
+import type { ProjectMemberInfo } from '@/components/ProjectView';
 
-export function ListView({ projectId, sections }: { projectId: string; sections: KanbanSection[] }) {
+export function ListView({
+  projectId,
+  sections,
+}: {
+  projectId: string;
+  sections: KanbanSection[];
+  members: ProjectMemberInfo[];
+  customFields: CustomFieldDef[];
+}) {
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
   return (
     <div className="space-y-6">
       {sections.map((section) => (
-        <div key={section.id} className="rounded-lg border border-slate-200 bg-white">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2">
-            <h3 className="text-sm font-semibold text-slate-700">{section.name}</h3>
-            <span className="text-xs text-slate-400">{section.tasks.length}</span>
+        <div key={section.id} className="rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 dark:border-slate-800">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{section.name}</h3>
+            <span className="text-xs text-slate-400 dark:text-slate-500">{section.tasks.length}</span>
           </div>
 
           {section.tasks.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-slate-400">No tasks yet.</p>
+            <p className="px-4 py-4 text-sm text-slate-400 dark:text-slate-500">No tasks yet.</p>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {section.tasks.map((task) => {
                 const due = formatDueDate(task.dueDate);
                 return (
                   <li key={task.id}>
                     <button
                       onClick={() => setOpenTaskId(task.id)}
-                      className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-slate-50"
+                      className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800"
                     >
-                      <span className="truncate text-sm font-medium text-slate-800">{task.title}</span>
+                      <span className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-slate-800 dark:text-slate-200">
+                        {task.locked && (
+                          <span className="shrink-0 text-xs" title={`Locked until "${task.predecessorTitle}" is done`}>
+                            🔒
+                          </span>
+                        )}
+                        <span className="truncate">{task.title}</span>
+                      </span>
                       <div className="flex shrink-0 items-center gap-3">
-                        {task.assigneeName && <span className="text-xs text-slate-400">{task.assigneeName}</span>}
+                        {task.assigneeName && <span className="text-xs text-slate-400 dark:text-slate-500">{task.assigneeName}</span>}
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[task.priority]}`}>
                           {PRIORITY_LABELS[task.priority]}
                         </span>
-                        <span className={`text-xs ${due.overdue ? 'font-medium text-red-500' : 'text-slate-400'}`}>
+                        <span className={`text-xs ${due.overdue ? 'font-medium text-red-500 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>
                           {due.label}
                         </span>
                       </div>
@@ -47,7 +63,7 @@ export function ListView({ projectId, sections }: { projectId: string; sections:
             </ul>
           )}
 
-          <div className="border-t border-slate-100 p-2">
+          <div className="border-t border-slate-100 p-2 dark:border-slate-800">
             <QuickAddTask projectId={projectId} sectionId={section.id} />
           </div>
         </div>

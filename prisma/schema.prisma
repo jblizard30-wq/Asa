@@ -9,8 +9,8 @@ datasource db {
 
 enum Role {
   ADMIN
-  STAFF
-  VOLUNTEER
+  MANAGER
+  USER
 }
 
 enum Priority {
@@ -26,10 +26,51 @@ enum TaskStatus {
   DONE
 }
 
+enum RecurrenceFrequency {
+  NONE
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
 enum NotificationType {
   TASK_ASSIGNED
   COMMENT_ADDED
   PROJECT_INVITE
+  REMINDER
+}
+
+enum AutomationTriggerType {
+  STATUS_CHANGED
+  ASSIGNEE_CHANGED
+  DUE_DATE_APPROACHING
+}
+
+enum AutomationActionType {
+  SET_STATUS
+  SET_ASSIGNEE
+  MOVE_SECTION
+  CREATE_TASK
+}
+
+enum AutomationAssigneeMode {
+  SPECIFIC_USER
+  SAME_AS_SOURCE
+}
+
+enum AutomationRunStatus {
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  CHECKBOX
 }
 
 model User {
@@ -37,16 +78,65 @@ model User {
   name         String
   email        String   @unique
   passwordHash String
-  role         Role     @default(STAFF)
+  role         Role     @default(USER)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  projectsCreated Project[]        @relation("ProjectCreator")
+  projectsCreated Project[]       @relation("ProjectCreator")
   memberships     ProjectMember[]
-  assignedTasks   Task[]           @relation("TaskAssignee")
+  assignedTasks   Task[]          @relation("TaskAssignee")
   comments        Comment[]
-  notifications   Notification[]   @relation("NotificationRecipient")
-  triggeredNotifs Notification[]   @relation("NotificationActor")
+  notifications   Notification[]  @relation("NotificationRecipient")
+  triggeredNotifs Notification[]  @relation("NotificationActor")
+  projectFolders  ProjectFolder[]
+
+  managedTeams      Team[]       @relation("TeamManager")
+  teamMemberships   TeamMember[]
+  remindersSent     Reminder[]   @relation("ReminderSender")
+  remindersReceived Reminder[]   @relation("ReminderRecipient")
+  deletedTasks      Task[]       @relation("TaskDeletedBy")
+
+  createdAutomationRules       AutomationRule[] @relation("AutomationCreatedBy")
+  automationActionAssignments  AutomationRule[] @relation("AutomationActionAssignee")
+  automationNewTaskAssignments AutomationRule[] @relation("AutomationNewTaskAssignee")
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  managerId String?
+  manager   User?    @relation("TeamManager", fields: [managerId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members TeamMember[]
+}
+
+model TeamMember {
+  id       String   @id @default(cuid())
+  teamId   String
+  userId   String
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt DateTime @default(now())
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+model Reminder {
+  id          String   @id @default(cuid())
+  taskId      String?
+  task        Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient   User     @relation("ReminderRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      User     @relation("ReminderSender", fields: [senderId], references: [id])
+  message     String
+  createdAt   DateTime @default(now())
+
+  @@index([recipientId])
+  @@index([taskId])
 }
 
 model Project {
@@ -58,9 +148,36 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members  ProjectMember[]
-  sections Section[]
-  tasks    Task[]
+  members      ProjectMember[]
+  sections     Section[]
+  tasks        Task[]
+  folderItems  ProjectFolderItem[]
+  customFields CustomField[]
+}
+
+model ProjectFolder {
+  id        String              @id @default(cuid())
+  name      String
+  order     Int                 @default(0)
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     ProjectFolderItem[]
+  createdAt DateTime            @default(now())
+
+  @@unique([userId, name])
+}
+
+model ProjectFolderItem {
+  id        String        @id @default(cuid())
+  folderId  String
+  projectId String
+  order     Int           @default(0)
+  folder    ProjectFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@unique([folderId, projectId])
+  @@index([projectId])
 }
 
 model ProjectMember {
@@ -82,12 +199,15 @@ model Section {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks     Task[]
   createdAt DateTime @default(now())
+
+  automationTargets AutomationRule[]
 }
 
 model Task {
   id          String     @id @default(cuid())
   title       String
   description String?
+  url         String?
   projectId   String
   sectionId   String
   assigneeId  String?
@@ -95,17 +215,90 @@ model Task {
   priority    Priority   @default(MEDIUM)
   status      TaskStatus @default(TODO)
   order       Int        @default(0)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
 
-  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  section  Section   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  assignee User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  comments Comment[]
+  parentTaskId String?
+
+  recurrence         RecurrenceFrequency @default(NONE)
+  recurrenceInterval Int                 @default(1)
+  recurrenceEndDate  DateTime?
+
+  predecessorId String?
+
+  deletedAt   DateTime?
+  deletedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project     Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  section     Section                @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  assignee    User?                  @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  comments    Comment[]
+  parentTask  Task?                  @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks    Task[]                 @relation("TaskSubtasks")
+  fieldValues TaskCustomFieldValue[]
+  predecessor Task?                  @relation("TaskSequence", fields: [predecessorId], references: [id], onDelete: SetNull)
+  successors  Task[]                 @relation("TaskSequence")
+  reminders   Reminder[]
+  deletedBy   User?                  @relation("TaskDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  automationsAsSource AutomationRule[] @relation("AutomationSourceTask")
+  automationsAsTarget AutomationRule[] @relation("AutomationTargetTask")
 
   @@index([projectId])
   @@index([sectionId])
   @@index([assigneeId])
+  @@index([parentTaskId])
+  @@index([predecessorId])
+  @@index([deletedAt])
+  @@index([deletedById])
+}
+
+model CustomField {
+  id        String          @id @default(cuid())
+  projectId String
+  name      String
+  type      CustomFieldType
+  order     Int             @default(0)
+  createdAt DateTime        @default(now())
+
+  project Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  options CustomFieldOption[]
+  values  TaskCustomFieldValue[]
+
+  @@index([projectId])
+}
+
+model CustomFieldOption {
+  id            String @id @default(cuid())
+  customFieldId String
+  label         String
+  order         Int    @default(0)
+
+  customField CustomField            @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+  values      TaskCustomFieldValue[]
+
+  @@index([customFieldId])
+}
+
+model TaskCustomFieldValue {
+  id            String    @id @default(cuid())
+  taskId        String
+  customFieldId String
+  textValue     String?
+  numberValue   Float?
+  dateValue     DateTime?
+  boolValue     Boolean?
+  optionId      String?
+  updatedAt     DateTime  @updatedAt
+
+  task        Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  customField CustomField        @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+  option      CustomFieldOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
+
+  @@unique([taskId, customFieldId])
+  @@index([customFieldId])
+  @@index([optionId])
 }
 
 model Comment {
@@ -133,4 +326,56 @@ model Notification {
   actor     User? @relation("NotificationActor", fields: [actorId], references: [id])
 
   @@index([recipientId])
+}
+
+model AutomationRule {
+  id          String  @id @default(cuid())
+  name        String
+  enabled     Boolean @default(true)
+  createdById String
+  createdBy   User    @relation("AutomationCreatedBy", fields: [createdById], references: [id])
+
+  sourceTaskId String
+  sourceTask   Task   @relation("AutomationSourceTask", fields: [sourceTaskId], references: [id], onDelete: Cascade)
+
+  triggerType       AutomationTriggerType
+  triggerStatus     TaskStatus?
+  triggerDaysBefore Int?
+
+  actionType AutomationActionType
+
+  targetTaskId String?
+  targetTask   Task?   @relation("AutomationTargetTask", fields: [targetTaskId], references: [id], onDelete: Cascade)
+
+  actionStatus     TaskStatus?
+  assigneeMode     AutomationAssigneeMode?
+  actionAssigneeId String?
+  actionAssignee   User?                   @relation("AutomationActionAssignee", fields: [actionAssigneeId], references: [id])
+
+  targetSectionId String?
+  targetSection   Section? @relation(fields: [targetSectionId], references: [id], onDelete: Cascade)
+
+  newTaskTitle       String?
+  newTaskDescription String?
+  newTaskPriority    Priority?
+  newTaskAssigneeId  String?
+  newTaskAssignee    User?     @relation("AutomationNewTaskAssignee", fields: [newTaskAssigneeId], references: [id])
+
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  runs      AutomationRun[]
+
+  @@index([sourceTaskId])
+  @@index([targetTaskId])
+}
+
+model AutomationRun {
+  id        String              @id @default(cuid())
+  ruleId    String
+  rule      AutomationRule      @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  status    AutomationRunStatus
+  detail    String?
+  createdAt DateTime            @default(now())
+
+  @@index([ruleId])
 }
