@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { signOut } from 'next-auth/react';
 import { NotificationBell, type NotificationItem } from '@/components/NotificationBell';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { SearchModal } from '@/components/SearchModal';
 
 interface NavbarProps {
   userName: string;
@@ -12,13 +13,14 @@ interface NavbarProps {
 
 export function Navbar({ userName, notifications }: NavbarProps) {
   return (
-    <header className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <header className="border-b border-slate-200 bg-white print:hidden dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between px-4 py-3">
         <Link href="/my-tasks" className="text-base font-semibold text-brand-700 dark:text-brand-300">
           Church Tasks
         </Link>
 
         <div className="flex items-center gap-4">
+          <SearchModal />
           <ThemeToggle />
           <NotificationBell notifications={notifications} />
           <span className="text-sm text-slate-600 dark:text-slate-300">{userName}</span>

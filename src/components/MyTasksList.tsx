@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { PRIORITY_LABELS, PRIORITY_STYLES, formatDueDate } from '@/lib/format';
 import { TaskDetailModal } from '@/components/TaskDetailModal';
+import { TagBadge, type TagInfo } from '@/components/TagPicker';
 
 export interface MyTask {
   id: string;
@@ -14,6 +15,7 @@ export interface MyTask {
   projectId: string;
   projectName: string;
   sectionName: string;
+  tags: TagInfo[];
 }
 
 export function MyTasksList({ tasks }: { tasks: MyTask[] }) {
@@ -39,7 +41,16 @@ export function MyTasksList({ tasks }: { tasks: MyTask[] }) {
                 className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">{task.title}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">{task.title}</p>
+                    {task.tags.length > 0 && (
+                      <span className="flex shrink-0 gap-1">
+                        {task.tags.map((tag) => (
+                          <TagBadge key={tag.id} tag={tag} />
+                        ))}
+                      </span>
+                    )}
+                  </div>
                   <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">
                     <Link
                       href={`/projects/${task.projectId}`}

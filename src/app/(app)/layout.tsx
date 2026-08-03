@@ -70,7 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           isAdmin={isAdmin}
           canManageTeams={isAdmin || session.user.role === 'MANAGER'}
         />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 print:max-w-none print:p-0">{children}</main>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { PRIORITY_LABELS, PRIORITY_STYLES, formatDueDate } from '@/lib/format';
 import { QuickAddTask } from '@/components/QuickAddTask';
 import { TaskDetailModal } from '@/components/TaskDetailModal';
+import { TagBadge } from '@/components/TagPicker';
 import type { KanbanSection, CustomFieldDef } from '@/components/KanbanBoard';
 import type { ProjectMemberInfo } from '@/components/ProjectView';
 
@@ -46,6 +47,13 @@ export function ListView({
                           </span>
                         )}
                         <span className="truncate">{task.title}</span>
+                        {task.tags.length > 0 && (
+                          <span className="flex shrink-0 gap-1">
+                            {task.tags.map((tag) => (
+                              <TagBadge key={tag.id} tag={tag} />
+                            ))}
+                          </span>
+                        )}
                       </span>
                       <div className="flex shrink-0 items-center gap-3">
                         {task.assigneeName && <span className="text-xs text-slate-400 dark:text-slate-500">{task.assigneeName}</span>}

@@ -16,6 +16,7 @@ export default async function ProjectPage({ params }: { params: { projectId: str
         orderBy: { order: 'asc' },
         include: { options: { orderBy: { order: 'asc' } } },
       },
+      tags: { orderBy: { order: 'asc' } },
       sections: {
         orderBy: { order: 'asc' },
         include: {
@@ -25,6 +26,7 @@ export default async function ProjectPage({ params }: { params: { projectId: str
             include: {
               assignee: true,
               fieldValues: true,
+              tags: { orderBy: { order: 'asc' } },
               predecessor: { select: { id: true, title: true, status: true } },
               subtasks: {
                 where: { deletedAt: null },
@@ -59,6 +61,7 @@ export default async function ProjectPage({ params }: { params: { projectId: str
         order: f.order,
         options: f.options.map((o) => ({ id: o.id, label: o.label })),
       }))}
+      tags={project.tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
       sections={project.sections.map((s) => ({
         id: s.id,
         name: s.name,
@@ -76,6 +79,7 @@ export default async function ProjectPage({ params }: { params: { projectId: str
           recurrenceEndDate: t.recurrenceEndDate ? t.recurrenceEndDate.toISOString() : null,
           locked: Boolean(t.predecessor && t.predecessor.status !== 'DONE'),
           predecessorTitle: t.predecessor?.title ?? null,
+          tags: t.tags.map((tag) => ({ id: tag.id, name: tag.name, color: tag.color })),
           fieldValues: t.fieldValues.map((v) => ({
             customFieldId: v.customFieldId,
             textValue: v.textValue,

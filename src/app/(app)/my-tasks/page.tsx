@@ -9,7 +9,7 @@ export default async function MyTasksPage() {
 
   const tasksRaw = await prisma.task.findMany({
     where: { assigneeId: session.user.id, status: { not: 'DONE' }, deletedAt: null },
-    include: { project: true, section: true },
+    include: { project: true, section: true, tags: { orderBy: { order: 'asc' } } },
   });
 
   // Sort by due date ascending with nulls last, then by priority.
@@ -43,6 +43,7 @@ export default async function MyTasksPage() {
             projectId: t.projectId,
             projectName: t.project.name,
             sectionName: t.section.name,
+            tags: t.tags.map((tag) => ({ id: tag.id, name: tag.name, color: tag.color })),
           }))}
         />
       </div>

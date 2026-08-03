@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { updateUserRole } from '@/lib/actions/users';
+import { deleteUser, updateUserRole } from '@/lib/actions/users';
+import { NewUserModal } from './NewUserModal';
+import { EditUserModal } from './EditUserModal';
 
 export interface ManagedUser {
   id: string;
@@ -13,12 +15,24 @@ export interface ManagedUser {
   teams: string[];
 }
 
-const ROLES = ['ADMIN', 'MANAGER', 'USER'] as const;
+export const ROLES = ['ADMIN', 'MANAGER', 'USER'] as const;
 
 export function UserManagement({ currentUserId, users }: { currentUserId: string; users: ManagedUser[] }) {
   const router = useRouter();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showNewUser, setShowNewUser] = useState(false);
+  const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
+
+  async function withErrorHandling(action: () => Promise<{ success: boolean; error?: string }>) {
+    setError(null);
+    const result = await action();
+    if (!result.success) {
+      setError(result.error ?? 'Something went wrong.');
+      return;
+    }
+    router.refresh();
+  }
 
   async function handleRoleChange(userId: string, role: string) {
     setError(null);
@@ -32,13 +46,27 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
     router.refresh();
   }
 
+  function handleDelete(user: ManagedUser) {
+    if (confirm(`Delete "${user.name}"? Their tasks, comments, and other records will be reassigned to you.`)) {
+      void withErrorHandling(() => deleteUser(user.id));
+    }
+  }
+
   return (
     <div>
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">User Management</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Manage staff accounts and their access level. Only administrators can see this page.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">User Management</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Manage staff accounts and their access level. Only administrators can see this page.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowNewUser(true)}
+          className="shrink-0 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+        >
+          + New user
+        </button>
       </div>
 
       {error && <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
@@ -58,6 +86,9 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
               </th>
               <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Role
+              </th>
+              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Actions
               </th>
             </tr>
           </thead>
@@ -90,12 +121,29 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
                     ))}
                   </select>
                 </td>
+                <td className="whitespace-nowrap px-4 py-3 text-sm">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setEditingUser(user)}
+                      className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(user)}
+                      disabled={user.id === currentUserId}
+                      className="text-xs font-medium text-red-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
 
             {users.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+                <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
                   No users found.
                 </td>
               </tr>
@@ -103,6 +151,9 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
           </tbody>
         </table>
       </div>
+
+      {showNewUser && <NewUserModal onClose={() => setShowNewUser(false)} />}
+      {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} />}
     </div>
   );
 }

@@ -321,6 +321,8 @@ export async function getTaskDetail(taskId: string) {
       parentTask: { select: { id: true, title: true } },
       predecessor: { select: { id: true, title: true, status: true } },
       successors: { select: { id: true, title: true, status: true }, orderBy: { createdAt: 'asc' } },
+      attachments: { include: { uploadedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } },
+      tags: { orderBy: { order: 'asc' } },
     },
   });
   if (!task) return null;
@@ -331,6 +333,11 @@ export async function getTaskDetail(taskId: string) {
     where: { projectId: task.projectId },
     orderBy: { order: 'asc' },
     include: { options: { orderBy: { order: 'asc' } } },
+  });
+
+  const allTags = await prisma.tag.findMany({
+    where: { projectId: task.projectId },
+    orderBy: { order: 'asc' },
   });
 
   const projectTasks = await prisma.task.findMany({
@@ -372,6 +379,16 @@ export async function getTaskDetail(taskId: string) {
       userId: c.userId,
     })),
     subtasks: task.subtasks.map((s) => ({ id: s.id, title: s.title, status: s.status })),
+    attachments: task.attachments.map((a) => ({
+      id: a.id,
+      fileName: a.fileName,
+      fileUrl: a.fileUrl,
+      fileSize: a.fileSize,
+      mimeType: a.mimeType,
+      createdAt: a.createdAt.toISOString(),
+      uploadedById: a.uploadedBy.id,
+      uploadedByName: a.uploadedBy.name,
+    })),
     customFields: customFields.map((f) => ({
       id: f.id,
       name: f.name,
@@ -386,6 +403,8 @@ export async function getTaskDetail(taskId: string) {
       boolValue: v.boolValue,
       optionId: v.optionId,
     })),
+    tags: task.tags.map((t) => ({ id: t.id, name: t.name, color: t.color })),
+    allTags: allTags.map((t) => ({ id: t.id, name: t.name, color: t.color })),
   };
 }
 

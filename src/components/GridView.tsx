@@ -4,8 +4,10 @@ import { useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { createTask, deleteTask, getTaskDetail, moveTask, updateTask } from '@/lib/actions/tasks';
+import { setTaskTags } from '@/lib/actions/tags';
 import { PRIORITY_LABELS, RECURRENCE_LABELS, STATUS_LABELS } from '@/lib/format';
 import { TaskDetailModal } from '@/components/TaskDetailModal';
+import { TagPicker, type TagInfo } from '@/components/TagPicker';
 import type { KanbanSection, KanbanTask } from '@/components/KanbanBoard';
 
 type TaskField = keyof KanbanTask;
@@ -14,10 +16,12 @@ export function GridView({
   projectId,
   sections: initialSections,
   members,
+  allTags,
 }: {
   projectId: string;
   sections: KanbanSection[];
   members: { id: string; name: string }[];
+  allTags: TagInfo[];
 }) {
   const router = useRouter();
   const [sections, setSections] = useState(initialSections);
@@ -56,6 +60,12 @@ export function GridView({
     router.refresh();
   }
 
+  async function handleTagsChange(taskId: string, tagIds: string[]) {
+    patchTask(taskId, { tags: allTags.filter((t) => tagIds.includes(t.id)) });
+    await setTaskTags(taskId, tagIds);
+    router.refresh();
+  }
+
   async function handleCreateTask(sectionId: string, title: string) {
     const formData = new FormData();
     formData.set('title', title);
@@ -78,6 +88,7 @@ export function GridView({
         predecessorTitle: null,
         subtasks: [],
         fieldValues: [],
+        tags: [],
       };
       setSections((prev) => prev.map((s) => (s.id === sectionId ? { ...s, tasks: [...s.tasks, newTask] } : s)));
     }
@@ -119,6 +130,7 @@ export function GridView({
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
               <th className="w-8 px-2 py-2"></th>
               <th className="px-3 py-2">Title</th>
+              <th className="w-44 px-3 py-2">Tags</th>
               <th className="w-40 px-3 py-2">Assignee</th>
               <th className="w-32 px-3 py-2">Priority</th>
               <th className="w-36 px-3 py-2">Status</th>
@@ -133,10 +145,12 @@ export function GridView({
               key={section.id}
               section={section}
               members={members}
+              allTags={allTags}
               addingToSectionId={addingToSectionId}
               setAddingToSectionId={setAddingToSectionId}
               onOpenTask={setOpenTaskId}
               onFieldChange={handleFieldChange}
+              onTagsChange={handleTagsChange}
               onDelete={handleDelete}
               onCreateTask={handleCreateTask}
             />
@@ -152,19 +166,23 @@ export function GridView({
 function SectionBody({
   section,
   members,
+  allTags,
   addingToSectionId,
   setAddingToSectionId,
   onOpenTask,
   onFieldChange,
+  onTagsChange,
   onDelete,
   onCreateTask,
 }: {
   section: KanbanSection;
   members: { id: string; name: string }[];
+  allTags: TagInfo[];
   addingToSectionId: string | null;
   setAddingToSectionId: (id: string | null) => void;
   onOpenTask: (id: string) => void;
   onFieldChange: (taskId: string, field: TaskField, value: string | number | null) => void;
+  onTagsChange: (taskId: string, tagIds: string[]) => void;
   onDelete: (taskId: string) => void;
   onCreateTask: (sectionId: string, title: string) => Promise<void>;
 }) {
@@ -172,7 +190,7 @@ function SectionBody({
     <>
       <tbody>
         <tr className="border-b border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-800/70">
-          <td colSpan={8} className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+          <td colSpan={9} className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
             {section.name} <span className="font-normal text-slate-400 dark:text-slate-500">({section.tasks.length})</span>
           </td>
         </tr>
@@ -198,6 +216,13 @@ function SectionBody({
                         onBlur={(e) => e.target.value !== task.title && onFieldChange(task.id, 'title', e.target.value)}
                         onClick={() => onOpenTask(task.id)}
                         className="w-full rounded border-none bg-transparent px-1 py-0.5 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-400 dark:text-slate-200"
+                      />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <TagPicker
+                        allTags={allTags}
+                        selectedIds={task.tags.map((t) => t.id)}
+                        onChange={(tagIds) => onTagsChange(task.id, tagIds)}
                       />
                     </td>
                     <td className="px-3 py-1.5">
@@ -275,7 +300,7 @@ function SectionBody({
               </Draggable>
             ))}
             <tr style={{ display: 'none' }}>
-              <td colSpan={8}>{provided.placeholder}</td>
+              <td colSpan={9}>{provided.placeholder}</td>
             </tr>
           </tbody>
         )}
@@ -283,7 +308,7 @@ function SectionBody({
 
       <tbody>
         <tr className="border-b border-slate-100 dark:border-slate-800">
-          <td colSpan={8} className="px-2 py-1">
+          <td colSpan={9} className="px-2 py-1">
             <AddRow
               isOpen={addingToSectionId === section.id}
               onOpen={() => setAddingToSectionId(section.id)}

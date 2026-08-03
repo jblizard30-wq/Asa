@@ -7,5 +7,6 @@ export const config = {
     '/notifications/:path*',
     '/admin/:path*',
     '/teams/:path*',
+    '/calendar/:path*',
   ],
 };

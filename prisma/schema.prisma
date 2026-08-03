@@ -40,6 +40,8 @@ enum NotificationType {
   COMMENT_ADDED
   PROJECT_INVITE
   REMINDER
+  MENTIONED
+  FORM_SUBMITTED
 }
 
 enum AutomationTriggerType {
@@ -74,14 +76,26 @@ enum CustomFieldType {
   CHECKBOX
 }
 
+enum IntakeFieldType {
+  TEXT
+  TEXTAREA
+  EMAIL
+  DATE
+  SELECT
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
   email        String   @unique
   passwordHash String
   role         Role     @default(USER)
+  managerId    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  manager       User?  @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  directReports User[] @relation("UserManager")
 
   projectsCreated Project[]       @relation("ProjectCreator")
   memberships     ProjectMember[]
@@ -100,6 +114,14 @@ model User {
   createdAutomationRules       AutomationRule[] @relation("AutomationCreatedBy")
   automationActionAssignments  AutomationRule[] @relation("AutomationActionAssignee")
   automationNewTaskAssignments AutomationRule[] @relation("AutomationNewTaskAssignee")
+
+  attachments                Attachment[]
+  createdIntakeForms         IntakeForm[] @relation("IntakeFormCreatedBy")
+  defaultAssigneeIntakeForms IntakeForm[] @relation("IntakeFormDefaultAssignee")
+
+  createdWorkflows Workflow[] @relation("WorkflowCreatedBy")
+
+  @@index([managerId])
 }
 
 model Team {
@@ -110,7 +132,8 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members TeamMember[]
+  members   TeamMember[]
+  workflows Workflow[]
 }
 
 model TeamMember {
@@ -141,20 +164,27 @@ model Reminder {
 }
 
 model Project {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  isPersonal  Boolean  @default(false)
-  createdById String
-  createdBy   User     @relation("ProjectCreator", fields: [createdById], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+  isPersonal      Boolean   @default(false)
+  createdById     String
+  createdBy       User      @relation("ProjectCreator", fields: [createdById], references: [id])
+  workflowId      String?
+  workflow        Workflow? @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  settingsWriteup String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   members      ProjectMember[]
   sections     Section[]
   tasks        Task[]
   folderItems  ProjectFolderItem[]
   customFields CustomField[]
+  intakeForms  IntakeForm[]
+  tags         Tag[]
+
+  @@index([workflowId])
 }
 
 model ProjectFolder {
@@ -203,6 +233,7 @@ model Section {
   createdAt DateTime @default(now())
 
   automationTargets AutomationRule[]
+  intakeForms       IntakeForm[]
 }
 
 model Task {
@@ -246,6 +277,10 @@ model Task {
 
   automationsAsSource AutomationRule[] @relation("AutomationSourceTask")
   automationsAsTarget AutomationRule[] @relation("AutomationTargetTask")
+
+  attachments       Attachment[]
+  intakeSubmissions IntakeSubmission[]
+  tags              Tag[]              @relation("TaskTags")
 
   @@index([projectId])
   @@index([sectionId])
@@ -380,4 +415,152 @@ model AutomationRun {
   createdAt DateTime            @default(now())
 
   @@index([ruleId])
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  taskId       String
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  fileName     String
+  fileUrl      String
+  filePathname String
+  fileSize     Int
+  mimeType     String
+  createdAt    DateTime @default(now())
+
+  @@index([taskId])
+}
+
+/// A public, no-login form (reachable at /forms/[slug]) whose submissions create a Task in a fixed project/section.
+model IntakeForm {
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  description       String?
+  projectId         String
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sectionId         String
+  section           Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  defaultAssigneeId String?
+  defaultAssignee   User?    @relation("IntakeFormDefaultAssignee", fields: [defaultAssigneeId], references: [id], onDelete: SetNull)
+  isActive          Boolean  @default(true)
+  createdById       String
+  createdBy         User     @relation("IntakeFormCreatedBy", fields: [createdById], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  fields      IntakeFormField[]
+  submissions IntakeSubmission[]
+
+  @@index([projectId])
+  @@index([sectionId])
+}
+
+model IntakeFormField {
+  id       String          @id @default(cuid())
+  formId   String
+  form     IntakeForm      @relation(fields: [formId], references: [id], onDelete: Cascade)
+  label    String
+  type     IntakeFieldType
+  required Boolean         @default(false)
+  order    Int             @default(0)
+
+  options IntakeFormFieldOption[]
+
+  @@index([formId])
+}
+
+model IntakeFormFieldOption {
+  id      String          @id @default(cuid())
+  fieldId String
+  field   IntakeFormField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  label   String
+  order   Int             @default(0)
+
+  @@index([fieldId])
+}
+
+/// Kept even after the created Task is deleted, so admins retain a record of who submitted what.
+model IntakeSubmission {
+  id             String     @id @default(cuid())
+  formId         String
+  form           IntakeForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  taskId         String?
+  task           Task?      @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  submitterName  String
+  submitterEmail String?
+  answers        Json
+  createdAt      DateTime   @default(now())
+
+  @@index([formId])
+  @@index([taskId])
+}
+
+/// An admin-built, optionally team-scoped blueprint of stages/tasks/subtasks. Can be flagged
+/// as a reusable template (isTemplate) and applied to a Project to instantiate its Sections/Tasks.
+model Workflow {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  teamId      String?
+  team        Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  isTemplate  Boolean  @default(false)
+  createdById String
+  createdBy   User     @relation("WorkflowCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stages   WorkflowStage[]
+  projects Project[]
+
+  @@index([teamId])
+}
+
+model WorkflowStage {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  name       String
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  taskTemplates WorkflowTaskTemplate[]
+
+  @@index([workflowId])
+}
+
+/// One level of subtask nesting via the self-relation, matching Task's own parentTaskId convention.
+model WorkflowTaskTemplate {
+  id              String                 @id @default(cuid())
+  stageId         String
+  stage           WorkflowStage          @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  parentId        String?
+  parent          WorkflowTaskTemplate?  @relation("WorkflowTaskTemplateSubtasks", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks        WorkflowTaskTemplate[] @relation("WorkflowTaskTemplateSubtasks")
+  title           String
+  description     String?
+  order           Int                    @default(0)
+  defaultPriority Priority               @default(MEDIUM)
+  createdAt       DateTime               @default(now())
+
+  @@index([stageId])
+  @@index([parentId])
+}
+
+/// A project-scoped label with a color, freely assignable to any task in that project.
+model Tag {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  color     String   @default("slate")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  tasks Task[] @relation("TaskTags")
+
+  @@unique([projectId, name])
+  @@index([projectId])
 }

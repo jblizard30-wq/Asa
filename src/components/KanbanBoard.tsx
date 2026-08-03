@@ -6,6 +6,7 @@ import { moveTask } from '@/lib/actions/tasks';
 import { PRIORITY_STYLES, formatDueDate } from '@/lib/format';
 import { QuickAddTask } from '@/components/QuickAddTask';
 import { TaskDetailModal } from '@/components/TaskDetailModal';
+import { TagBadge, type TagInfo } from '@/components/TagPicker';
 
 export interface TaskFieldValue {
   customFieldId: string;
@@ -54,6 +55,7 @@ export interface KanbanTask {
   predecessorTitle: string | null;
   subtasks: KanbanSubtask[];
   fieldValues: TaskFieldValue[];
+  tags: TagInfo[];
 }
 
 export interface KanbanSection {
@@ -133,6 +135,13 @@ export function KanbanBoard({ projectId, sections: initialSections }: { projectI
                               <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                                 Waiting on &ldquo;{task.predecessorTitle}&rdquo;
                               </p>
+                            )}
+                            {task.tags.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {task.tags.map((tag) => (
+                                  <TagBadge key={tag.id} tag={tag} />
+                                ))}
+                              </div>
                             )}
                             <div className="mt-2 flex items-center justify-between">
                               <span

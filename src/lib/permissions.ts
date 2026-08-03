@@ -29,3 +29,17 @@ export async function canManageTeam(userId: string, role: string, teamId: string
   const team = await prisma.team.findUnique({ where: { id: teamId } });
   return team?.managerId === userId;
 }
+
+/** True if `candidateId` is `userId` itself or one of their existing managers, transitively. */
+export async function isSelfOrAncestorManager(userId: string, candidateId: string): Promise<boolean> {
+  let currentId: string | null = candidateId;
+  while (currentId) {
+    if (currentId === userId) return true;
+    const current: { managerId: string | null } | null = await prisma.user.findUnique({
+      where: { id: currentId },
+      select: { managerId: true },
+    });
+    currentId = current?.managerId ?? null;
+  }
+  return false;
+}

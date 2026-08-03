@@ -168,7 +168,7 @@ export function Sidebar({ folders, ungroupedProjects, isAdmin = false, canManage
   }
 
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-3 py-6 dark:border-slate-800 dark:bg-slate-900 sm:block">
+    <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-3 py-6 print:hidden dark:border-slate-800 dark:bg-slate-900 sm:block">
       <nav className="space-y-1">
         <Link
           href="/my-tasks"
@@ -201,6 +201,16 @@ export function Sidebar({ folders, ungroupedProjects, isAdmin = false, canManage
           All Projects
         </Link>
         <Link
+          href="/calendar"
+          className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
+            isActive('/calendar')
+              ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
+              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+          }`}
+        >
+          Calendar
+        </Link>
+        <Link
           href="/trash"
           className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
             isActive('/trash')
@@ -209,6 +219,16 @@ export function Sidebar({ folders, ungroupedProjects, isAdmin = false, canManage
           }`}
         >
           Trash
+        </Link>
+        <Link
+          href="/org-chart"
+          className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
+            isActive('/org-chart')
+              ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
+              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+          }`}
+        >
+          Org Chart
         </Link>
         {canManageTeams && (
           <Link
@@ -244,6 +264,18 @@ export function Sidebar({ folders, ungroupedProjects, isAdmin = false, canManage
             }`}
           >
             All Trash
+          </Link>
+        )}
+        {isAdmin && (
+          <Link
+            href="/admin/workflows"
+            className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
+              isActive('/admin/workflows')
+                ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
+                : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            Workflows
           </Link>
         )}
       </nav>

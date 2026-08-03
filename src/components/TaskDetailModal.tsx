@@ -1,17 +1,50 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition, type ChangeEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 import { getTaskDetail, updateTask, deleteTask } from '@/lib/actions/tasks';
 import { setTaskCustomFieldValue } from '@/lib/actions/customFields';
+import { setTaskTags } from '@/lib/actions/tags';
 import { addComment } from '@/lib/actions/comments';
+import { uploadAttachment, deleteAttachment } from '@/lib/actions/attachments';
 import { PRIORITY_LABELS, STATUS_LABELS, RECURRENCE_LABELS } from '@/lib/format';
 import { QuickAddTask } from '@/components/QuickAddTask';
 import { SendReminderModal } from '@/components/SendReminderModal';
+import { MentionInput } from '@/components/MentionInput';
+import { TagPicker } from '@/components/TagPicker';
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 type TaskDetail = NonNullable<Awaited<ReturnType<typeof getTaskDetail>>>;
 type FieldValue = TaskDetail['fieldValues'][number];
+
+/** Bolds any "@FullName" substring that matches a project member, so mentions stand out in the thread. */
+function renderCommentBody(body: string, members: { id: string; name: string }[]) {
+  if (members.length === 0) return body;
+  const names = [...new Set(members.map((m) => m.name))].sort((a, b) => b.length - a.length);
+  const escaped = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const pattern = new RegExp(`@(${escaped.join('|')})\\b`, 'g');
+
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(body))) {
+    if (match.index > lastIndex) parts.push(body.slice(lastIndex, match.index));
+    parts.push(
+      <strong key={match.index} className="font-semibold text-brand-700">
+        @{match[1]}
+      </strong>,
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  parts.push(body.slice(lastIndex));
+  return parts;
+}
 
 export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: () => void }) {
   const router = useRouter();
@@ -20,7 +53,9 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
   const [isPending, startTransition] = useTransition();
   const [statusError, setStatusError] = useState<string | null>(null);
   const [showReminder, setShowReminder] = useState(false);
-  const commentFormRef = useRef<HTMLFormElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,9 +96,8 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
     });
   }
 
-  async function handleAddComment(formData: FormData) {
-    await addComment(taskId, formData);
-    commentFormRef.current?.reset();
+  async function handleAddComment(body: string, mentionedUserIds: string[]) {
+    await addComment(taskId, { body, mentionedUserIds });
     refresh();
   }
 
@@ -104,6 +138,38 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
     await deleteTask(taskId);
     router.refresh();
     onClose();
+  }
+
+  async function handleFileSelected(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    setUploading(true);
+    const formData = new FormData();
+    formData.set('file', file);
+    const result = await uploadAttachment(taskId, formData);
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (!result.success) {
+      setUploadError(result.error ?? 'Could not upload that file.');
+      return;
+    }
+    refresh();
+  }
+
+  async function handleDeleteAttachment(attachmentId: string) {
+    if (!confirm('Remove this attachment?')) return;
+    await deleteAttachment(attachmentId);
+    refresh();
+  }
+
+  function handleTagsChange(tagIds: string[]) {
+    if (!task) return;
+    setTask({ ...task, tags: task.allTags.filter((t) => tagIds.includes(t.id)) });
+    startTransition(async () => {
+      await setTaskTags(taskId, tagIds);
+      router.refresh();
+    });
   }
 
   return (
@@ -158,6 +224,17 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                   {task.url}
                 </a>
               )}
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-slate-500">Tags</label>
+              <div className="mt-1">
+                <TagPicker
+                  allTags={task.allTags}
+                  selectedIds={task.tags.map((t) => t.id)}
+                  onChange={handleTagsChange}
+                />
+              </div>
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
@@ -441,6 +518,54 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
               </div>
             </div>
 
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold text-slate-700">
+                Attachments {task.attachments.length > 0 && `(${task.attachments.length})`}
+              </h3>
+              <ul className="mt-2 space-y-1">
+                {task.attachments.map((a) => (
+                  <li
+                    key={a.id}
+                    className="flex items-center justify-between gap-2 rounded-md px-1 py-1.5 hover:bg-slate-50"
+                  >
+                    <a
+                      href={a.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="min-w-0 flex-1 truncate text-sm text-brand-600 hover:underline"
+                      title={a.fileName}
+                    >
+                      📎 {a.fileName}
+                    </a>
+                    <span className="shrink-0 text-xs text-slate-400">{formatBytes(a.fileSize)}</span>
+                    <span className="shrink-0 text-xs text-slate-400">{a.uploadedByName}</span>
+                    {(a.uploadedById === task.viewerId || task.viewerRole === 'ADMIN' || task.viewerRole === 'MANAGER') && (
+                      <button
+                        onClick={() => handleDeleteAttachment(a.id)}
+                        className="shrink-0 text-xs font-medium text-red-500 hover:text-red-600"
+                        aria-label={`Remove ${a.fileName}`}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </li>
+                ))}
+                {task.attachments.length === 0 && <p className="text-sm text-slate-400">No files yet.</p>}
+              </ul>
+              <div className="mt-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFileSelected}
+                  disabled={uploading}
+                  className="w-full text-xs text-slate-500 file:mr-2 file:rounded-md file:border file:border-slate-300 file:bg-white file:px-2 file:py-1 file:text-xs file:font-medium file:text-slate-600 hover:file:bg-slate-100"
+                />
+                {uploading && <p className="mt-1 text-xs text-slate-400">Uploading…</p>}
+                {uploadError && <p className="mt-1 text-xs text-red-600">{uploadError}</p>}
+                <p className="mt-1 text-xs text-slate-400">Up to 10MB per file.</p>
+              </div>
+            </div>
+
             {isPending && <p className="mt-2 text-xs text-slate-400">Saving…</p>}
 
             <div className="mt-6 border-t border-slate-100 pt-4">
@@ -455,25 +580,12 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                         {formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}
                       </span>
                     </div>
-                    <p className="mt-1 whitespace-pre-wrap text-slate-600">{c.body}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-slate-600">{renderCommentBody(c.body, task.members)}</p>
                   </div>
                 ))}
               </div>
 
-              <form ref={commentFormRef} action={handleAddComment} className="mt-4 flex gap-2">
-                <input
-                  name="body"
-                  placeholder="Write a comment…"
-                  required
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
-                />
-                <button
-                  type="submit"
-                  className="shrink-0 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-                >
-                  Post
-                </button>
-              </form>
+              <MentionInput members={task.members} onSubmit={handleAddComment} />
             </div>
 
             <div className="mt-6 border-t border-slate-100 pt-4">

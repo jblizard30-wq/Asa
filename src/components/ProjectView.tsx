@@ -7,6 +7,8 @@ import { ListView } from '@/components/ListView';
 import { GridView } from '@/components/GridView';
 import { InviteMemberModal } from '@/components/InviteMemberModal';
 import { CustomFieldsManager } from '@/components/CustomFieldsManager';
+import { TagsManager } from '@/components/TagsManager';
+import type { TagInfo } from '@/components/TagPicker';
 
 export interface ProjectMemberInfo {
   id: string;
@@ -20,6 +22,7 @@ export function ProjectView({
   sections,
   members,
   customFields,
+  tags,
   isAdmin,
 }: {
   projectId: string;
@@ -28,11 +31,13 @@ export function ProjectView({
   sections: KanbanSection[];
   members: ProjectMemberInfo[];
   customFields: CustomFieldDef[];
+  tags: TagInfo[];
   isAdmin: boolean;
 }) {
   const [view, setView] = useState<'list' | 'kanban' | 'grid'>('kanban');
   const [showInvite, setShowInvite] = useState(false);
   const [showFields, setShowFields] = useState(false);
+  const [showTags, setShowTags] = useState(false);
 
   return (
     <div>
@@ -51,11 +56,29 @@ export function ProjectView({
           >
             Automations
           </Link>
+          <Link
+            href={`/projects/${projectId}/forms`}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Forms
+          </Link>
+          <Link
+            href={`/projects/${projectId}/workflow`}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Workflow
+          </Link>
           <button
             onClick={() => setShowFields(true)}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Manage fields
+          </button>
+          <button
+            onClick={() => setShowTags(true)}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Manage tags
           </button>
           {isAdmin && (
             <button
@@ -100,13 +123,16 @@ export function ProjectView({
         {view === 'list' && (
           <ListView projectId={projectId} sections={sections} members={members} customFields={customFields} />
         )}
-        {view === 'grid' && <GridView projectId={projectId} sections={sections} members={members} />}
+        {view === 'grid' && (
+          <GridView projectId={projectId} sections={sections} members={members} allTags={tags} />
+        )}
       </div>
 
       {showInvite && <InviteMemberModal projectId={projectId} onClose={() => setShowInvite(false)} />}
       {showFields && (
         <CustomFieldsManager projectId={projectId} fields={customFields} onClose={() => setShowFields(false)} />
       )}
+      {showTags && <TagsManager projectId={projectId} tags={tags} onClose={() => setShowTags(false)} />}
     </div>
   );
 }

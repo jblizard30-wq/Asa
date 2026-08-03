@@ -38,6 +38,56 @@ export const AUTOMATION_TRIGGER_LABELS: Record<string, string> = {
   DUE_DATE_APPROACHING: 'due date is approaching',
 };
 
+export const TAG_COLORS = [
+  'slate',
+  'red',
+  'orange',
+  'amber',
+  'yellow',
+  'lime',
+  'green',
+  'teal',
+  'cyan',
+  'blue',
+  'indigo',
+  'violet',
+  'pink',
+] as const;
+
+export type TagColor = (typeof TAG_COLORS)[number];
+
+export const TAG_COLOR_STYLES: Record<string, string> = {
+  slate: 'bg-slate-100 text-slate-600',
+  red: 'bg-red-100 text-red-700',
+  orange: 'bg-orange-100 text-orange-700',
+  amber: 'bg-amber-100 text-amber-700',
+  yellow: 'bg-yellow-100 text-yellow-700',
+  lime: 'bg-lime-100 text-lime-700',
+  green: 'bg-green-100 text-green-700',
+  teal: 'bg-teal-100 text-teal-700',
+  cyan: 'bg-cyan-100 text-cyan-700',
+  blue: 'bg-blue-100 text-blue-700',
+  indigo: 'bg-indigo-100 text-indigo-700',
+  violet: 'bg-violet-100 text-violet-700',
+  pink: 'bg-pink-100 text-pink-700',
+};
+
+export const TAG_COLOR_DOT_STYLES: Record<string, string> = {
+  slate: 'bg-slate-400',
+  red: 'bg-red-400',
+  orange: 'bg-orange-400',
+  amber: 'bg-amber-400',
+  yellow: 'bg-yellow-400',
+  lime: 'bg-lime-400',
+  green: 'bg-green-400',
+  teal: 'bg-teal-400',
+  cyan: 'bg-cyan-400',
+  blue: 'bg-blue-400',
+  indigo: 'bg-indigo-400',
+  violet: 'bg-violet-400',
+  pink: 'bg-pink-400',
+};
+
 export const AUTOMATION_ACTION_LABELS: Record<string, string> = {
   SET_STATUS: 'Set status',
   SET_ASSIGNEE: 'Set assignee',
