@@ -181,6 +181,16 @@ export function Sidebar({ folders, ungroupedProjects, isAdmin = false, canManage
           My Tasks
         </Link>
         <Link
+          href="/personal-tasks"
+          className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
+            isActive('/personal-tasks')
+              ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
+              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+          }`}
+        >
+          Personal Tasks
+        </Link>
+        <Link
           href="/projects"
           className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
             pathname === '/projects'

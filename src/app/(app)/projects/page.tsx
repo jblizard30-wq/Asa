@@ -10,7 +10,9 @@ export default async function ProjectsPage() {
   const isAdmin = session.user.role === 'ADMIN';
 
   const projects = await prisma.project.findMany({
-    where: isAdmin ? {} : { members: { some: { userId: session.user.id } } },
+    where: isAdmin
+      ? { isPersonal: false }
+      : { isPersonal: false, members: { some: { userId: session.user.id } } },
     include: {
       _count: { select: { tasks: { where: { deletedAt: null } } } },
       members: true,

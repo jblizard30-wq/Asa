@@ -21,6 +21,31 @@ async function requireAdmin() {
   return session;
 }
 
+const PERSONAL_PROJECT_NAME = 'Personal Tasks';
+
+export async function getOrCreatePersonalProject() {
+  const session = await requireSession();
+
+  const existing = await prisma.project.findFirst({
+    where: { createdById: session.user.id, isPersonal: true },
+  });
+  if (existing) return existing.id;
+
+  const project = await prisma.project.create({
+    data: {
+      name: PERSONAL_PROJECT_NAME,
+      isPersonal: true,
+      createdById: session.user.id,
+      members: { create: [{ userId: session.user.id }] },
+      sections: {
+        create: DEFAULT_SECTIONS.map((name, order) => ({ name, order })),
+      },
+    },
+  });
+
+  return project.id;
+}
+
 const createProjectSchema = z.object({
   name: z.string().min(1, 'Project name is required').max(120),
   description: z.string().max(1000).optional(),

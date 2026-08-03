@@ -18,7 +18,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       take: 20,
     }),
     prisma.project.findMany({
-      where: isAdmin ? {} : { members: { some: { userId: session.user.id } } },
+      where: isAdmin
+        ? { isPersonal: false }
+        : { isPersonal: false, members: { some: { userId: session.user.id } } },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     }),
