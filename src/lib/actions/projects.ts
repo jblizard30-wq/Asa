@@ -127,3 +127,14 @@ export async function removeMemberFromProject(projectId: string, userId: string)
   revalidatePath(`/projects/${projectId}`);
   return { success: true };
 }
+
+/** Flags/unflags a member as this project's manager, for the project exec-summary digest. */
+export async function setProjectManager(projectId: string, userId: string, isManager: boolean) {
+  await requireAdmin();
+  await prisma.projectMember.update({
+    where: { projectId_userId: { projectId, userId } },
+    data: { isManager },
+  });
+  revalidatePath(`/projects/${projectId}`);
+  return { success: true };
+}

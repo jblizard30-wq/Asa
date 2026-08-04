@@ -8,5 +8,6 @@ export const config = {
     '/admin/:path*',
     '/teams/:path*',
     '/calendar/:path*',
+    '/dashboard/:path*',
   ],
 };

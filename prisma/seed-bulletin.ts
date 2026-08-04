@@ -242,7 +242,7 @@ async function main() {
           description: taskBlueprint.description,
           projectId: project.id,
           sectionId: section.id,
-          assigneeId,
+          assignees: assigneeId ? { connect: { id: assigneeId } } : undefined,
           order: taskOrder,
         },
       });
@@ -255,7 +255,7 @@ async function main() {
               projectId: project.id,
               sectionId: section.id,
               parentTaskId: mainTask.id,
-              assigneeId,
+              assignees: assigneeId ? { connect: { id: assigneeId } } : undefined,
               order: subOrder,
             },
           });

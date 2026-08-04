@@ -18,18 +18,30 @@ export const STATUS_LABELS: Record<string, string> = {
   DONE: 'Done',
 };
 
+export const STATUS_STYLES: Record<string, string> = {
+  TODO: 'bg-slate-100 text-slate-600',
+  IN_PROGRESS: 'bg-blue-100 text-blue-700',
+  DONE: 'bg-green-100 text-green-700',
+};
+
+/** Solid fills for bar charts — kept separate from the badge tints above (bg-100/text-700 pairs). */
+export const STATUS_BAR_COLORS: Record<string, string> = {
+  TODO: 'bg-slate-400 dark:bg-slate-500',
+  IN_PROGRESS: 'bg-blue-500',
+  DONE: 'bg-green-500',
+};
+
+export const PRIORITY_BAR_COLORS: Record<string, string> = {
+  LOW: 'bg-slate-400 dark:bg-slate-500',
+  MEDIUM: 'bg-blue-500',
+  HIGH: 'bg-amber-500',
+  URGENT: 'bg-red-500',
+};
+
 export const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'Administrator',
   MANAGER: 'Manager',
   USER: 'User',
-};
-
-export const RECURRENCE_LABELS: Record<string, string> = {
-  NONE: 'Does not repeat',
-  DAILY: 'Daily',
-  WEEKLY: 'Weekly',
-  MONTHLY: 'Monthly',
-  YEARLY: 'Yearly',
 };
 
 export const AUTOMATION_TRIGGER_LABELS: Record<string, string> = {
@@ -86,6 +98,17 @@ export const TAG_COLOR_DOT_STYLES: Record<string, string> = {
   indigo: 'bg-indigo-400',
   violet: 'bg-violet-400',
   pink: 'bg-pink-400',
+};
+
+export const ACTIVITY_ACTION_ICONS: Record<string, string> = {
+  STATUS_CHANGED: '🔄',
+  ASSIGNEES_CHANGED: '👤',
+  PRIORITY_CHANGED: '⚡',
+  DUE_DATE_CHANGED: '📅',
+  TITLE_CHANGED: '✏️',
+  TAGS_CHANGED: '🏷️',
+  MOVED: '➡️',
+  RESTORED: '♻️',
 };
 
 export const AUTOMATION_ACTION_LABELS: Record<string, string> = {

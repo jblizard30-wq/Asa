@@ -23,7 +23,7 @@ export default async function TeamsPage() {
     prisma.team.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     prisma.user.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, email: true } }),
     prisma.user.findMany({
-      where: { role: 'MANAGER' },
+      where: { role: { in: ['MANAGER', 'ADMIN'] } },
       orderBy: { name: 'asc' },
       select: { id: true, name: true },
     }),

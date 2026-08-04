@@ -2,20 +2,21 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createTask } from '@/lib/actions/tasks';
+import { createTask, addDependency } from '@/lib/actions/tasks';
 
 export function QuickAddTask({
   projectId,
   sectionId,
   parentTaskId,
-  predecessorId,
+  blockerId,
   label = '+ Add task',
   onAdded,
 }: {
   projectId: string;
   sectionId: string;
   parentTaskId?: string;
-  predecessorId?: string;
+  /** When set, the newly created task is made dependent on (blocked by) this task. */
+  blockerId?: string;
   label?: string;
   onAdded?: () => void;
 }) {
@@ -28,8 +29,10 @@ export function QuickAddTask({
     setLoading(true);
     formData.set('sectionId', sectionId);
     if (parentTaskId) formData.set('parentTaskId', parentTaskId);
-    if (predecessorId) formData.set('predecessorId', predecessorId);
-    await createTask(projectId, formData);
+    const result = await createTask(projectId, formData);
+    if (result.success && result.taskId && blockerId) {
+      await addDependency(result.taskId, blockerId);
+    }
     setLoading(false);
     formRef.current?.reset();
     setOpen(false);

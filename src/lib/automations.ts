@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { createNotification } from '@/lib/notifications';
+import { materializeAfterCompletion } from '@/lib/materializeRecurrence';
 import type { AutomationRule, TaskStatus } from '@prisma/client';
 
 const MAX_CHAIN_DEPTH = 5;
@@ -41,10 +42,17 @@ export async function applyAutomationAction(rule: AutomationRule, depth: number)
           await logRun(rule.id, 'SKIPPED', 'Missing target task or status');
           return;
         }
+        const before = await prisma.task.findUnique({ where: { id: rule.targetTaskId }, select: { status: true } });
         const target = await prisma.task.update({
           where: { id: rule.targetTaskId },
           data: { status: rule.actionStatus },
         });
+        // Same rule as updateTask: an automation that completes a recurring task must still
+        // spawn its next occurrence — this used to bypass that entirely by updating the row
+        // directly instead of going through updateTask.
+        if (target.status === 'DONE' && before?.status !== 'DONE') {
+          await materializeAfterCompletion(target.id, new Date());
+        }
         await logRun(rule.id, 'SUCCESS');
         revalidatePath(`/projects/${target.projectId}`);
         revalidatePath('/my-tasks');
@@ -56,24 +64,31 @@ export async function applyAutomationAction(rule: AutomationRule, depth: number)
           await logRun(rule.id, 'SKIPPED', 'Missing target task');
           return;
         }
-        let assigneeId: string | null = rule.actionAssigneeId ?? null;
+        let assigneeIdsToSet: string[] = rule.actionAssigneeId ? [rule.actionAssigneeId] : [];
         if (rule.assigneeMode === 'SAME_AS_SOURCE') {
-          const source = await prisma.task.findUnique({ where: { id: rule.sourceTaskId } });
-          assigneeId = source?.assigneeId ?? null;
+          const source = await prisma.task.findUnique({
+            where: { id: rule.sourceTaskId },
+            include: { assignees: { select: { id: true } } },
+          });
+          assigneeIdsToSet = source?.assignees.map((a) => a.id) ?? [];
         }
         const target = await prisma.task.update({
           where: { id: rule.targetTaskId },
-          data: { assigneeId },
+          data: { assignees: { set: assigneeIdsToSet.map((id) => ({ id })) } },
         });
-        if (assigneeId) {
+        if (assigneeIdsToSet.length > 0) {
           const project = await prisma.project.findUnique({ where: { id: target.projectId } });
-          await createNotification({
-            type: 'TASK_ASSIGNED',
-            recipientId: assigneeId,
-            message: `An automation assigned you to "${target.title}" in ${project?.name}`,
-            link: `/projects/${target.projectId}?task=${target.id}`,
-            emailSubject: `New task assigned: ${target.title}`,
-          });
+          await Promise.all(
+            assigneeIdsToSet.map((recipientId) =>
+              createNotification({
+                type: 'TASK_ASSIGNED',
+                recipientId,
+                message: `An automation assigned you to "${target.title}" in ${project?.name}`,
+                link: `/projects/${target.projectId}?task=${target.id}`,
+                emailSubject: `New task assigned: ${target.title}`,
+              }),
+            ),
+          );
         }
         await logRun(rule.id, 'SUCCESS');
         revalidatePath(`/projects/${target.projectId}`);
@@ -120,16 +135,16 @@ export async function applyAutomationAction(rule: AutomationRule, depth: number)
             description: rule.newTaskDescription,
             projectId: section.projectId,
             sectionId: section.id,
-            assigneeId: rule.newTaskAssigneeId,
+            assignees: rule.newTaskAssigneeId ? { connect: { id: rule.newTaskAssigneeId } } : undefined,
             priority: rule.newTaskPriority ?? 'MEDIUM',
             order: (lastTask?.order ?? -1) + 1,
           },
         });
-        if (created.assigneeId) {
+        if (rule.newTaskAssigneeId) {
           const project = await prisma.project.findUnique({ where: { id: created.projectId } });
           await createNotification({
             type: 'TASK_ASSIGNED',
-            recipientId: created.assigneeId,
+            recipientId: rule.newTaskAssigneeId,
             message: `An automation assigned you to "${created.title}" in ${project?.name}`,
             link: `/projects/${created.projectId}?task=${created.id}`,
             emailSubject: `New task assigned: ${created.title}`,

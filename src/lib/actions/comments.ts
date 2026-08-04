@@ -6,6 +6,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { createNotification } from '@/lib/notifications';
+import { dispatchWebhooks } from '@/lib/webhooks/dispatch';
 
 const addCommentSchema = z.object({
   body: z.string().min(1, 'Comment cannot be empty').max(4000),
@@ -21,7 +22,10 @@ export async function addComment(taskId: string, input: { body: string; mentione
     return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   }
 
-  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { assignees: { select: { id: true } } },
+  });
   if (!task) return { success: false, error: 'Task not found' };
 
   const membership = await prisma.projectMember.findUnique({
@@ -58,17 +62,27 @@ export async function addComment(taskId: string, input: { body: string; mentione
     );
   }
 
-  // Skip the generic "commented on" notification for the assignee if they were already mentioned directly.
-  if (task.assigneeId && !mentionedMemberIds.includes(task.assigneeId)) {
-    await createNotification({
-      type: 'COMMENT_ADDED',
-      recipientId: task.assigneeId,
-      actorId: session.user.id,
-      message: `${session.user.name} commented on "${task.title}"`,
-      link: `/projects/${task.projectId}?task=${task.id}`,
-      emailSubject: `New comment on: ${task.title}`,
-    });
-  }
+  // Skip the generic "commented on" notification for assignees who were already mentioned directly.
+  const assigneeIdsToNotify = task.assignees.map((a) => a.id).filter((id) => !mentionedMemberIds.includes(id));
+  await Promise.all(
+    assigneeIdsToNotify.map((recipientId) =>
+      createNotification({
+        type: 'COMMENT_ADDED',
+        recipientId,
+        actorId: session.user.id,
+        message: `${session.user.name} commented on "${task.title}"`,
+        link: `/projects/${task.projectId}?task=${task.id}`,
+        emailSubject: `New comment on: ${task.title}`,
+      }),
+    ),
+  );
+
+  void dispatchWebhooks('COMMENT_ADDED', {
+    taskId: task.id,
+    projectId: task.projectId,
+    commentId: comment.id,
+    body: comment.body,
+  });
 
   revalidatePath(`/projects/${task.projectId}`);
   return { success: true, commentId: comment.id };

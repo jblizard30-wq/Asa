@@ -1,30 +1,17 @@
 'use server';
 
 import { z } from 'zod';
-import { addDays, addMonths, addWeeks, addYears } from 'date-fns';
 import { revalidatePath } from 'next/cache';
 import { getServerSession } from 'next-auth';
+import type { ActivityAction, Prisma } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { createNotification } from '@/lib/notifications';
 import { runTaskAutomations } from '@/lib/automations';
-
-const RECURRENCE_VALUES = ['NONE', 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'] as const;
-
-function nextOccurrence(from: Date, frequency: (typeof RECURRENCE_VALUES)[number], interval: number): Date {
-  switch (frequency) {
-    case 'DAILY':
-      return addDays(from, interval);
-    case 'WEEKLY':
-      return addWeeks(from, interval);
-    case 'MONTHLY':
-      return addMonths(from, interval);
-    case 'YEARLY':
-      return addYears(from, interval);
-    default:
-      return from;
-  }
-}
+import { materializeAfterCompletion } from '@/lib/materializeRecurrence';
+import { toTaskRecurrenceInfo } from '@/lib/recurrence';
+import { PRIORITY_LABELS, STATUS_LABELS } from '@/lib/format';
+import { dispatchWebhooks } from '@/lib/webhooks/dispatch';
 
 export async function requireProjectMember(projectId: string) {
   const session = await getServerSession(authOptions);
@@ -39,6 +26,43 @@ export async function requireProjectMember(projectId: string) {
   return session;
 }
 
+async function logActivity(taskId: string, actorId: string | null, action: ActivityAction, detail: string) {
+  await prisma.taskActivity.create({ data: { taskId, actorId, action, detail } });
+}
+
+function sameIdSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const setB = new Set(b);
+  return a.every((id) => setB.has(id));
+}
+
+/** Unfinished blockers of `taskId` — the tasks it can't start/move forward until they're DONE. */
+async function getUnfinishedBlockers(taskId: string): Promise<{ id: string; title: string; status: string }[]> {
+  const rows = await prisma.taskDependency.findMany({
+    where: { blockedId: taskId },
+    include: { blocker: { select: { id: true, title: true, status: true } } },
+  });
+  return rows.map((r) => r.blocker).filter((b) => b.status !== 'DONE');
+}
+
+/**
+ * Walks backwards from `blockerId` along blockedId->blocker edges (its blockers, their blockers,
+ * etc.) to make sure `blockedId` never leads back to `taskId` (would form a cycle).
+ */
+async function wouldCreateDependencyCycle(taskId: string, blockerId: string): Promise<boolean> {
+  const visited = new Set<string>();
+  const queue: string[] = [blockerId];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (current === taskId) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    const rows = await prisma.taskDependency.findMany({ where: { blockedId: current }, select: { blockerId: true } });
+    for (const row of rows) queue.push(row.blockerId);
+  }
+  return false;
+}
+
 const urlSchema = z
   .string()
   .max(2000)
@@ -50,8 +74,7 @@ const createTaskSchema = z.object({
   url: urlSchema.optional(),
   sectionId: z.string().min(1),
   parentTaskId: z.string().optional(),
-  predecessorId: z.string().optional(),
-  assigneeId: z.string().optional(),
+  assigneeIds: z.array(z.string()).optional(),
   dueDate: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
 });
@@ -59,26 +82,22 @@ const createTaskSchema = z.object({
 export async function createTask(projectId: string, formData: FormData) {
   const session = await requireProjectMember(projectId);
 
+  const assigneeIdsRaw = formData.getAll('assigneeIds').filter((v): v is string => typeof v === 'string' && v.length > 0);
+  const singleAssigneeId = formData.get('assigneeId');
+  if (typeof singleAssigneeId === 'string' && singleAssigneeId) assigneeIdsRaw.push(singleAssigneeId);
+
   const parsed = createTaskSchema.safeParse({
     title: formData.get('title'),
     description: formData.get('description') || undefined,
     url: formData.get('url') || undefined,
     sectionId: formData.get('sectionId'),
     parentTaskId: formData.get('parentTaskId') || undefined,
-    predecessorId: formData.get('predecessorId') || undefined,
-    assigneeId: formData.get('assigneeId') || undefined,
+    assigneeIds: assigneeIdsRaw.length > 0 ? assigneeIdsRaw : undefined,
     dueDate: formData.get('dueDate') || undefined,
     priority: formData.get('priority') || undefined,
   });
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-  }
-
-  if (parsed.data.predecessorId) {
-    const predecessor = await prisma.task.findUnique({ where: { id: parsed.data.predecessorId } });
-    if (!predecessor || predecessor.projectId !== projectId) {
-      return { success: false, error: 'That predecessor task is not in this project.' };
-    }
   }
 
   const lastTask = await prisma.task.findFirst({
@@ -88,6 +107,8 @@ export async function createTask(projectId: string, formData: FormData) {
     orderBy: { order: 'desc' },
   });
 
+  const assigneeIds = parsed.data.assigneeIds ?? [];
+
   const task = await prisma.task.create({
     data: {
       title: parsed.data.title,
@@ -96,25 +117,30 @@ export async function createTask(projectId: string, formData: FormData) {
       projectId,
       sectionId: parsed.data.sectionId,
       parentTaskId: parsed.data.parentTaskId || null,
-      predecessorId: parsed.data.predecessorId || null,
-      assigneeId: parsed.data.assigneeId || null,
+      assignees: assigneeIds.length > 0 ? { connect: assigneeIds.map((id) => ({ id })) } : undefined,
       dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
       priority: parsed.data.priority ?? 'MEDIUM',
       order: (lastTask?.order ?? -1) + 1,
     },
   });
 
-  if (task.assigneeId) {
+  if (assigneeIds.length > 0) {
     const project = await prisma.project.findUnique({ where: { id: projectId } });
-    await createNotification({
-      type: 'TASK_ASSIGNED',
-      recipientId: task.assigneeId,
-      actorId: session.user.id,
-      message: `${session.user.name} assigned you to "${task.title}" in ${project?.name}`,
-      link: `/projects/${projectId}?task=${task.id}`,
-      emailSubject: `New task assigned: ${task.title}`,
-    });
+    await Promise.all(
+      assigneeIds.map((recipientId) =>
+        createNotification({
+          type: 'TASK_ASSIGNED',
+          recipientId,
+          actorId: session.user.id,
+          message: `${session.user.name} assigned you to "${task.title}" in ${project?.name}`,
+          link: `/projects/${projectId}?task=${task.id}`,
+          emailSubject: `New task assigned: ${task.title}`,
+        }),
+      ),
+    );
   }
+
+  void dispatchWebhooks('TASK_CREATED', { taskId: task.id, projectId, title: task.title, status: task.status });
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath('/my-tasks');
@@ -125,34 +151,19 @@ const updateTaskSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(4000).optional().nullable(),
   url: z.union([urlSchema, z.null()]).optional(),
-  assigneeId: z.string().optional().nullable(),
+  assigneeIds: z.array(z.string()).optional(),
   dueDate: z.string().optional().nullable(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   status: z.enum(['TODO', 'IN_PROGRESS', 'DONE']).optional(),
-  recurrence: z.enum(RECURRENCE_VALUES).optional(),
-  recurrenceInterval: z.coerce.number().int().min(1).max(365).optional(),
-  recurrenceEndDate: z.string().optional().nullable(),
-  predecessorId: z.string().optional().nullable(),
 });
 
 type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 
-/** Walks the predecessor chain to make sure `candidateId` never leads back to `taskId` (would form a cycle). */
-async function wouldCreateSequenceCycle(taskId: string, candidateId: string): Promise<boolean> {
-  let cursor: string | null = candidateId;
-  for (let i = 0; i < 200 && cursor; i++) {
-    if (cursor === taskId) return true;
-    const t: { predecessorId: string | null } | null = await prisma.task.findUnique({
-      where: { id: cursor },
-      select: { predecessorId: true },
-    });
-    cursor = t?.predecessorId ?? null;
-  }
-  return false;
-}
-
 export async function updateTask(taskId: string, input: UpdateTaskInput) {
-  const existing = await prisma.task.findUnique({ where: { id: taskId } });
+  const existing = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { assignees: { select: { id: true } } },
+  });
   if (!existing) return { success: false, error: 'Task not found' };
   if (existing.deletedAt) return { success: false, error: 'This task is in the trash. Restore it first.' };
 
@@ -163,88 +174,120 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
     return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   }
 
-  if ('predecessorId' in parsed.data && parsed.data.predecessorId) {
-    if (parsed.data.predecessorId === taskId) {
-      return { success: false, error: 'A task cannot follow itself.' };
-    }
-    const predecessor = await prisma.task.findUnique({ where: { id: parsed.data.predecessorId } });
-    if (!predecessor || predecessor.projectId !== existing.projectId) {
-      return { success: false, error: 'That predecessor task is not in this project.' };
-    }
-    if (await wouldCreateSequenceCycle(taskId, parsed.data.predecessorId)) {
-      return { success: false, error: 'That would create a circular sequence.' };
-    }
-  }
-
   const movingToActive =
     'status' in parsed.data && parsed.data.status && parsed.data.status !== 'TODO' && existing.status === 'TODO';
-  if (movingToActive && existing.predecessorId) {
-    const predecessor = await prisma.task.findUnique({ where: { id: existing.predecessorId } });
-    if (predecessor && predecessor.status !== 'DONE') {
+  if (movingToActive) {
+    const blockers = await getUnfinishedBlockers(taskId);
+    if (blockers.length > 0) {
       return {
         success: false,
-        error: `This task is locked until "${predecessor.title}" is marked done.`,
+        error: `This task is locked until ${blockers.map((b) => `"${b.title}"`).join(', ')} ${
+          blockers.length > 1 ? 'are' : 'is'
+        } marked done.`,
       };
     }
   }
 
   const data: Record<string, unknown> = { ...parsed.data };
+  delete data.assigneeIds;
   if ('url' in parsed.data) {
     data.url = parsed.data.url || null;
   }
   if ('dueDate' in parsed.data) {
     data.dueDate = parsed.data.dueDate ? new Date(parsed.data.dueDate) : null;
   }
-  if ('recurrenceEndDate' in parsed.data) {
-    data.recurrenceEndDate = parsed.data.recurrenceEndDate ? new Date(parsed.data.recurrenceEndDate) : null;
-  }
-  if ('predecessorId' in parsed.data) {
-    data.predecessorId = parsed.data.predecessorId || null;
+
+  const existingAssigneeIds = existing.assignees.map((a) => a.id);
+  const newAssigneeIds = parsed.data.assigneeIds;
+  const assigneesChanged = newAssigneeIds !== undefined && !sameIdSet(newAssigneeIds, existingAssigneeIds);
+  if (newAssigneeIds !== undefined) {
+    data.assignees = { set: newAssigneeIds.map((id) => ({ id })) };
   }
 
-  const assigneeChanged =
-    'assigneeId' in parsed.data && parsed.data.assigneeId !== existing.assigneeId && parsed.data.assigneeId;
-
-  // A repeating task that's just been marked DONE reschedules itself to the next
-  // occurrence instead of staying completed, so the series keeps going.
-  const recurrence = parsed.data.recurrence ?? existing.recurrence;
   const turningDone = parsed.data.status === 'DONE' && existing.status !== 'DONE';
-  if (turningDone && recurrence !== 'NONE') {
-    const interval = parsed.data.recurrenceInterval ?? existing.recurrenceInterval;
-    const endDate =
-      'recurrenceEndDate' in parsed.data
-        ? (data.recurrenceEndDate as Date | null)
-        : existing.recurrenceEndDate;
-    const baseDate = existing.dueDate ?? new Date();
-    const next = nextOccurrence(baseDate, recurrence, interval);
-
-    if (!endDate || next <= endDate) {
-      data.status = existing.status;
-      data.dueDate = next;
-    }
-  }
 
   const task = await prisma.task.update({ where: { id: taskId }, data });
 
-  if (assigneeChanged && task.assigneeId) {
-    const project = await prisma.project.findUnique({ where: { id: task.projectId } });
-    await createNotification({
-      type: 'TASK_ASSIGNED',
-      recipientId: task.assigneeId,
-      actorId: session.user.id,
-      message: `${session.user.name} assigned you to "${task.title}" in ${project?.name}`,
-      link: `/projects/${task.projectId}?task=${task.id}`,
-      emailSubject: `New task assigned: ${task.title}`,
-    });
+  // A repeating task that's just been marked DONE spawns its next occurrence as a new task
+  // row (store the recipe, not the meals) — this one stays DONE, with real history, instead
+  // of the old behavior of silently flipping the same row back to not-done.
+  if (turningDone) {
+    await materializeAfterCompletion(taskId, new Date());
   }
 
-  // Fire on the requested status, not the final persisted one, so automations still run when the
-  // recurrence logic above reschedules a "done" task instead of leaving it done.
+  if (assigneesChanged) {
+    const newlyAdded = newAssigneeIds!.filter((id) => !existingAssigneeIds.includes(id));
+    if (newlyAdded.length > 0) {
+      const project = await prisma.project.findUnique({ where: { id: task.projectId } });
+      await Promise.all(
+        newlyAdded.map((recipientId) =>
+          createNotification({
+            type: 'TASK_ASSIGNED',
+            recipientId,
+            actorId: session.user.id,
+            message: `${session.user.name} assigned you to "${task.title}" in ${project?.name}`,
+            link: `/projects/${task.projectId}?task=${task.id}`,
+            emailSubject: `New task assigned: ${task.title}`,
+          }),
+        ),
+      );
+    }
+
+    const newNames =
+      newAssigneeIds!.length > 0
+        ? (await prisma.user.findMany({ where: { id: { in: newAssigneeIds } }, select: { name: true } })).map(
+            (u) => u.name,
+          )
+        : [];
+    await logActivity(
+      taskId,
+      session.user.id,
+      'ASSIGNEES_CHANGED',
+      newNames.length > 0 ? `Assignees changed to ${newNames.join(', ')}` : 'Assignees cleared',
+    );
+  }
+
+  if (parsed.data.status && parsed.data.status !== existing.status) {
+    await logActivity(
+      taskId,
+      session.user.id,
+      'STATUS_CHANGED',
+      `Status changed from ${STATUS_LABELS[existing.status]} to ${STATUS_LABELS[parsed.data.status]}`,
+    );
+  }
+
+  if ('priority' in parsed.data && parsed.data.priority && parsed.data.priority !== existing.priority) {
+    await logActivity(
+      taskId,
+      session.user.id,
+      'PRIORITY_CHANGED',
+      `Priority changed from ${PRIORITY_LABELS[existing.priority]} to ${PRIORITY_LABELS[parsed.data.priority]}`,
+    );
+  }
+
+  if ('dueDate' in parsed.data) {
+    const oldDue = existing.dueDate ? existing.dueDate.toISOString() : null;
+    const newDue = parsed.data.dueDate ? new Date(parsed.data.dueDate).toISOString() : null;
+    if (oldDue !== newDue) {
+      await logActivity(
+        taskId,
+        session.user.id,
+        'DUE_DATE_CHANGED',
+        newDue ? `Due date changed to ${new Date(newDue).toLocaleDateString()}` : 'Due date cleared',
+      );
+    }
+  }
+
   if (parsed.data.status && parsed.data.status !== existing.status) {
     await runTaskAutomations(taskId, { type: 'STATUS_CHANGED', status: parsed.data.status });
   }
-  if ('assigneeId' in parsed.data && parsed.data.assigneeId !== existing.assigneeId) {
+  if (assigneesChanged) {
     await runTaskAutomations(taskId, { type: 'ASSIGNEE_CHANGED' });
+  }
+
+  void dispatchWebhooks('TASK_UPDATED', { taskId: task.id, projectId: task.projectId, title: task.title, status: task.status });
+  if (task.status === 'DONE' && existing.status !== 'DONE') {
+    void dispatchWebhooks('TASK_COMPLETED', { taskId: task.id, projectId: task.projectId, title: task.title });
   }
 
   revalidatePath(`/projects/${task.projectId}`);
@@ -256,7 +299,7 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
 export async function moveTask(taskId: string, destinationSectionId: string, destinationOrder: number) {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return { success: false, error: 'Task not found' };
-  await requireProjectMember(task.projectId);
+  const session = await requireProjectMember(task.projectId);
 
   const destinationSection = await prisma.section.findUnique({ where: { id: destinationSectionId } });
   if (!destinationSection) return { success: false, error: 'Section not found' };
@@ -269,15 +312,19 @@ export async function moveTask(taskId: string, destinationSectionId: string, des
   };
 
   const destinationStatus = statusForSection(destinationSection.name);
-  if (destinationStatus !== 'TODO' && task.status === 'TODO' && task.predecessorId) {
-    const predecessor = await prisma.task.findUnique({ where: { id: task.predecessorId } });
-    if (predecessor && predecessor.status !== 'DONE') {
+  if (destinationStatus !== 'TODO' && task.status === 'TODO') {
+    const blockers = await getUnfinishedBlockers(taskId);
+    if (blockers.length > 0) {
       return {
         success: false,
-        error: `This task is locked until "${predecessor.title}" is marked done.`,
+        error: `This task is locked until ${blockers.map((b) => `"${b.title}"`).join(', ')} ${
+          blockers.length > 1 ? 'are' : 'is'
+        } marked done.`,
       };
     }
   }
+
+  const turningDone = destinationStatus === 'DONE' && task.status !== 'DONE';
 
   await prisma.$transaction(async (tx) => {
     const siblings = await tx.task.findMany({
@@ -300,6 +347,17 @@ export async function moveTask(taskId: string, destinationSectionId: string, des
     );
   });
 
+  // Same "recipe, not the meals" spawn as updateTask's turningDone path — dragging an
+  // AFTER_COMPLETION-mode recurring task's card into a "Done" column must also spawn its
+  // next occurrence, not just plain status-change automations.
+  if (turningDone) {
+    await materializeAfterCompletion(taskId, new Date());
+  }
+
+  if (destinationSectionId !== task.sectionId) {
+    await logActivity(taskId, session.user.id, 'MOVED', `Moved to "${destinationSection.name}"`);
+  }
+
   if (destinationStatus !== task.status) {
     await runTaskAutomations(taskId, { type: 'STATUS_CHANGED', status: destinationStatus });
   }
@@ -309,20 +367,70 @@ export async function moveTask(taskId: string, destinationSectionId: string, des
   return { success: true };
 }
 
+/** Adds a "blockedId depends on blockerId" edge, rejecting self-edges, duplicates, and cycles. */
+export async function addDependency(taskId: string, blockerId: string) {
+  if (taskId === blockerId) return { success: false, error: 'A task cannot depend on itself.' };
+
+  const [blocked, blocker] = await Promise.all([
+    prisma.task.findUnique({ where: { id: taskId } }),
+    prisma.task.findUnique({ where: { id: blockerId } }),
+  ]);
+  if (!blocked) return { success: false, error: 'Task not found' };
+  if (!blocker || blocker.projectId !== blocked.projectId) {
+    return { success: false, error: 'That task is not in this project.' };
+  }
+
+  await requireProjectMember(blocked.projectId);
+
+  const existingEdge = await prisma.taskDependency.findUnique({
+    where: { blockedId_blockerId: { blockedId: taskId, blockerId } },
+  });
+  if (existingEdge) return { success: true };
+
+  if (await wouldCreateDependencyCycle(taskId, blockerId)) {
+    return { success: false, error: 'That would create a circular dependency.' };
+  }
+
+  await prisma.taskDependency.create({ data: { blockedId: taskId, blockerId } });
+
+  revalidatePath(`/projects/${blocked.projectId}`);
+  revalidatePath('/my-tasks');
+  return { success: true };
+}
+
+export async function removeDependency(taskId: string, blockerId: string) {
+  const blocked = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!blocked) return { success: false, error: 'Task not found' };
+  await requireProjectMember(blocked.projectId);
+
+  await prisma.taskDependency.deleteMany({ where: { blockedId: taskId, blockerId } });
+
+  revalidatePath(`/projects/${blocked.projectId}`);
+  revalidatePath('/my-tasks');
+  return { success: true };
+}
+
 export async function getTaskDetail(taskId: string) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     include: {
-      assignee: true,
+      assignees: { select: { id: true, name: true } },
+      taskRecurrence: true,
       comments: { include: { user: true }, orderBy: { createdAt: 'asc' } },
       project: { include: { members: { include: { user: true } } } },
       subtasks: { where: { deletedAt: null }, orderBy: { order: 'asc' } },
       fieldValues: { include: { option: true } },
       parentTask: { select: { id: true, title: true } },
-      predecessor: { select: { id: true, title: true, status: true } },
-      successors: { select: { id: true, title: true, status: true }, orderBy: { createdAt: 'asc' } },
+      blockedBy: { include: { blocker: { select: { id: true, title: true, status: true } } } },
+      blocking: { include: { blocked: { select: { id: true, title: true, status: true } } } },
       attachments: { include: { uploadedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } },
       tags: { orderBy: { order: 'asc' } },
+      timeEntries: { include: { user: { select: { id: true, name: true } } }, orderBy: { loggedAt: 'desc' } },
+      activities: {
+        include: { actor: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      },
     },
   });
   if (!task) return null;
@@ -346,7 +454,11 @@ export async function getTaskDetail(taskId: string) {
     orderBy: { title: 'asc' },
   });
 
-  const locked = Boolean(task.predecessor && task.predecessor.status !== 'DONE');
+  const blockedBy = task.blockedBy.map((d) => d.blocker);
+  const blocking = task.blocking.map((d) => d.blocked);
+  const locked = blockedBy.some((b) => b.status !== 'DONE');
+
+  const taskRecurrence = toTaskRecurrenceInfo(task.taskRecurrence);
 
   return {
     id: task.id,
@@ -356,16 +468,14 @@ export async function getTaskDetail(taskId: string) {
     status: task.status,
     priority: task.priority,
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
-    assigneeId: task.assigneeId,
-    recurrence: task.recurrence,
-    recurrenceInterval: task.recurrenceInterval,
-    recurrenceEndDate: task.recurrenceEndDate ? task.recurrenceEndDate.toISOString() : null,
+    assignees: task.assignees.map((a) => ({ id: a.id, name: a.name })),
+    taskRecurrence,
     projectId: task.projectId,
     projectName: task.project.name,
     sectionId: task.sectionId,
     parentTask: task.parentTask,
-    predecessor: task.predecessor,
-    successors: task.successors,
+    blockedBy,
+    blocking,
     locked,
     projectTasks: projectTasks.map((t) => ({ id: t.id, title: t.title })),
     viewerRole: session.user.role,
@@ -405,6 +515,21 @@ export async function getTaskDetail(taskId: string) {
     })),
     tags: task.tags.map((t) => ({ id: t.id, name: t.name, color: t.color })),
     allTags: allTags.map((t) => ({ id: t.id, name: t.name, color: t.color })),
+    timeEntries: task.timeEntries.map((te) => ({
+      id: te.id,
+      minutes: te.minutes,
+      note: te.note,
+      loggedAt: te.loggedAt.toISOString(),
+      userId: te.userId,
+      userName: te.user.name,
+    })),
+    activities: task.activities.map((a) => ({
+      id: a.id,
+      action: a.action,
+      detail: a.detail,
+      createdAt: a.createdAt.toISOString(),
+      actorName: a.actor?.name ?? null,
+    })),
   };
 }
 
@@ -423,6 +548,8 @@ export async function deleteTask(taskId: string) {
     data: { deletedAt: new Date(), deletedById: session.user.id },
   });
 
+  void dispatchWebhooks('TASK_DELETED', { taskId: task.id, projectId: task.projectId, title: task.title });
+
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath('/my-tasks');
   revalidatePath('/trash');
@@ -432,7 +559,7 @@ export async function deleteTask(taskId: string) {
 const bulkUpdateSchema = z.object({
   status: z.enum(['TODO', 'IN_PROGRESS', 'DONE']).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-  assigneeId: z.string().nullable().optional(),
+  assigneeIds: z.array(z.string()).optional(),
   sectionId: z.string().optional(),
 });
 
@@ -454,10 +581,22 @@ export async function bulkUpdateTasks(taskIds: string[], input: BulkUpdateInput)
     return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   }
 
-  await prisma.task.updateMany({
-    where: { id: { in: taskIds }, deletedAt: null },
-    data: parsed.data,
-  });
+  const { assigneeIds, ...scalarData } = parsed.data;
+
+  if (Object.keys(scalarData).length > 0) {
+    await prisma.task.updateMany({
+      where: { id: { in: taskIds }, deletedAt: null },
+      data: scalarData,
+    });
+  }
+
+  if (assigneeIds !== undefined) {
+    await Promise.all(
+      taskIds.map((id) =>
+        prisma.task.update({ where: { id }, data: { assignees: { set: assigneeIds.map((uid) => ({ id: uid })) } } }),
+      ),
+    );
+  }
 
   for (const projectId of projectIds) {
     revalidatePath(`/projects/${projectId}`);
@@ -490,4 +629,97 @@ export async function bulkDeleteTasks(taskIds: string[]) {
   revalidatePath('/my-tasks');
   revalidatePath('/trash');
   return { success: true };
+}
+
+const gridBatchEditSchema = z.object({
+  taskId: z.string(),
+  title: z.string().min(1).max(200).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+  status: z.enum(['TODO', 'IN_PROGRESS', 'DONE']).optional(),
+  dueDate: z.string().nullable().optional(),
+  assigneeIds: z.array(z.string()).optional(),
+  tagIds: z.array(z.string()).optional(),
+});
+
+export type GridBatchEdit = z.infer<typeof gridBatchEditSchema>;
+
+/**
+ * Applies many independent per-task field edits in a single transaction — the grid
+ * view's paste/fill-down write path. Unlike bulkUpdateTasks (one patch applied to
+ * every task), each task here can carry different values, so it's its own action
+ * rather than an overload of bulkUpdateTasks's shape. Mirrors bulkUpdateTasks in
+ * skipping per-field activity logging/automations/webhooks — those are single-task
+ * ceremony that would reintroduce the same N-round-trip cost this exists to avoid.
+ */
+export async function batchUpdateTaskFields(edits: GridBatchEdit[]) {
+  const parsed = z.array(gridBatchEditSchema).min(1).safeParse(edits);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  }
+
+  const taskIds = parsed.data.map((e) => e.taskId);
+  const tasks = await prisma.task.findMany({ where: { id: { in: taskIds } } });
+  if (tasks.length === 0) return { success: false, error: 'Tasks not found' };
+  const validIds = new Set(tasks.map((t) => t.id));
+
+  const projectIds = new Set(tasks.map((t) => t.projectId));
+  for (const projectId of projectIds) {
+    await requireProjectMember(projectId);
+  }
+
+  const ops = parsed.data.flatMap((edit) => {
+    if (!validIds.has(edit.taskId)) return [];
+    const data: Prisma.TaskUpdateInput = {};
+    if (edit.title !== undefined) data.title = edit.title;
+    if (edit.priority !== undefined) data.priority = edit.priority;
+    if (edit.status !== undefined) data.status = edit.status;
+    if (edit.dueDate !== undefined) data.dueDate = edit.dueDate ? new Date(edit.dueDate) : null;
+    if (edit.assigneeIds !== undefined) data.assignees = { set: edit.assigneeIds.map((id) => ({ id })) };
+    if (edit.tagIds !== undefined) data.tags = { set: edit.tagIds.map((id) => ({ id })) };
+    if (Object.keys(data).length === 0) return [];
+    return [prisma.task.update({ where: { id: edit.taskId }, data })];
+  });
+
+  if (ops.length > 0) {
+    await prisma.$transaction(ops);
+  }
+
+  for (const projectId of projectIds) revalidatePath(`/projects/${projectId}`);
+  revalidatePath('/my-tasks');
+  return { success: true };
+}
+
+const batchCreateTasksSchema = z.object({
+  sectionId: z.string(),
+  titles: z.array(z.string().min(1).max(200)).min(1),
+});
+
+/** Creates several bare (title-only) tasks in one transaction — used when a grid paste has more rows than exist. */
+export async function batchCreateTasks(sectionId: string, titles: string[]) {
+  const parsed = batchCreateTasksSchema.safeParse({ sectionId, titles });
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  }
+
+  const section = await prisma.section.findUnique({ where: { id: parsed.data.sectionId } });
+  if (!section) return { success: false, error: 'Section not found' };
+  await requireProjectMember(section.projectId);
+
+  const lastTask = await prisma.task.findFirst({
+    where: { sectionId: section.id, parentTaskId: null, deletedAt: null },
+    orderBy: { order: 'desc' },
+  });
+  let nextOrder = (lastTask?.order ?? -1) + 1;
+
+  const created = await prisma.$transaction(
+    parsed.data.titles.map((title) =>
+      prisma.task.create({
+        data: { title, projectId: section.projectId, sectionId: section.id, order: nextOrder++ },
+      }),
+    ),
+  );
+
+  revalidatePath(`/projects/${section.projectId}`);
+  revalidatePath('/my-tasks');
+  return { success: true, tasks: created.map((t) => ({ id: t.id, title: t.title })) };
 }

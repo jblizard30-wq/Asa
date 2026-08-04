@@ -66,54 +66,55 @@ async function main() {
 
     const [svcTodo, svcInProgress, svcDone] = serviceProject.sections.sort((a, b) => a.order - b.order);
 
-    await prisma.task.createMany({
-      data: [
-        {
-          title: 'Finalize worship song set for Sunday',
-          description: 'Confirm 4 songs with the worship team and share chord charts.',
-          projectId: serviceProject.id,
-          sectionId: svcTodo.id,
-          assigneeId: officeManager.id,
-          dueDate: nextDaysFromNow(3),
-          priority: Priority.HIGH,
-          status: TaskStatus.TODO,
-          order: 0,
-        },
-        {
-          title: 'Schedule greeters and ushers',
-          description: 'Fill all 6 greeter slots for the 9am and 11am services.',
-          projectId: serviceProject.id,
-          sectionId: svcTodo.id,
-          assigneeId: volunteer.id,
-          dueDate: nextDaysFromNow(2),
-          priority: Priority.MEDIUM,
-          status: TaskStatus.TODO,
-          order: 1,
-        },
-        {
-          title: 'Prepare sermon slides',
-          description: 'Build slide deck from Pastor Dan’s outline for this week’s message.',
-          projectId: serviceProject.id,
-          sectionId: svcInProgress.id,
-          assigneeId: pastor.id,
-          dueDate: nextDaysFromNow(1),
-          priority: Priority.URGENT,
-          status: TaskStatus.IN_PROGRESS,
-          order: 0,
-        },
-        {
-          title: 'Print bulletins',
-          description: 'Order 300 copies from the church printer for Sunday.',
-          projectId: serviceProject.id,
-          sectionId: svcDone.id,
-          assigneeId: officeManager.id,
-          dueDate: nextDaysFromNow(-1),
-          priority: Priority.LOW,
-          status: TaskStatus.DONE,
-          order: 0,
-        },
-      ],
-    });
+    for (const data of [
+      {
+        title: 'Finalize worship song set for Sunday',
+        description: 'Confirm 4 songs with the worship team and share chord charts.',
+        projectId: serviceProject.id,
+        sectionId: svcTodo.id,
+        assigneeId: officeManager.id,
+        dueDate: nextDaysFromNow(3),
+        priority: Priority.HIGH,
+        status: TaskStatus.TODO,
+        order: 0,
+      },
+      {
+        title: 'Schedule greeters and ushers',
+        description: 'Fill all 6 greeter slots for the 9am and 11am services.',
+        projectId: serviceProject.id,
+        sectionId: svcTodo.id,
+        assigneeId: volunteer.id,
+        dueDate: nextDaysFromNow(2),
+        priority: Priority.MEDIUM,
+        status: TaskStatus.TODO,
+        order: 1,
+      },
+      {
+        title: 'Prepare sermon slides',
+        description: 'Build slide deck from Pastor Dan’s outline for this week’s message.',
+        projectId: serviceProject.id,
+        sectionId: svcInProgress.id,
+        assigneeId: pastor.id,
+        dueDate: nextDaysFromNow(1),
+        priority: Priority.URGENT,
+        status: TaskStatus.IN_PROGRESS,
+        order: 0,
+      },
+      {
+        title: 'Print bulletins',
+        description: 'Order 300 copies from the church printer for Sunday.',
+        projectId: serviceProject.id,
+        sectionId: svcDone.id,
+        assigneeId: officeManager.id,
+        dueDate: nextDaysFromNow(-1),
+        priority: Priority.LOW,
+        status: TaskStatus.DONE,
+        order: 0,
+      },
+    ]) {
+      const { assigneeId, ...rest } = data;
+      await prisma.task.create({ data: { ...rest, assignees: { connect: { id: assigneeId } } } });
+    }
   }
 
   // ---- Project 2: Facilities & Maintenance ----
@@ -144,54 +145,55 @@ async function main() {
 
     const [facTodo, facInProgress, facDone] = facilitiesProject.sections.sort((a, b) => a.order - b.order);
 
-    await prisma.task.createMany({
-      data: [
-        {
-          title: 'Replace fellowship hall light fixtures',
-          description: 'Three fluorescent fixtures are flickering — swap to LED panels.',
-          projectId: facilitiesProject.id,
-          sectionId: facTodo.id,
-          assigneeId: facilitiesLead.id,
-          dueDate: nextDaysFromNow(7),
-          priority: Priority.MEDIUM,
-          status: TaskStatus.TODO,
-          order: 0,
-        },
-        {
-          title: 'Quarterly fire extinguisher inspection',
-          description: 'Check pressure gauges and expiration tags in all buildings.',
-          projectId: facilitiesProject.id,
-          sectionId: facTodo.id,
-          assigneeId: facilitiesLead.id,
-          dueDate: nextDaysFromNow(10),
-          priority: Priority.HIGH,
-          status: TaskStatus.TODO,
-          order: 1,
-        },
-        {
-          title: 'Repair leaking sink in kids’ wing restroom',
-          description: 'Plumber scheduled — confirm access with facilities lead.',
-          projectId: facilitiesProject.id,
-          sectionId: facInProgress.id,
-          assigneeId: facilitiesLead.id,
-          dueDate: nextDaysFromNow(2),
-          priority: Priority.URGENT,
-          status: TaskStatus.IN_PROGRESS,
-          order: 0,
-        },
-        {
-          title: 'Mow and edge front lawn',
-          description: 'Weekly groundskeeping before Sunday service.',
-          projectId: facilitiesProject.id,
-          sectionId: facDone.id,
-          assigneeId: volunteer.id,
-          dueDate: nextDaysFromNow(-2),
-          priority: Priority.LOW,
-          status: TaskStatus.DONE,
-          order: 0,
-        },
-      ],
-    });
+    for (const data of [
+      {
+        title: 'Replace fellowship hall light fixtures',
+        description: 'Three fluorescent fixtures are flickering — swap to LED panels.',
+        projectId: facilitiesProject.id,
+        sectionId: facTodo.id,
+        assigneeId: facilitiesLead.id,
+        dueDate: nextDaysFromNow(7),
+        priority: Priority.MEDIUM,
+        status: TaskStatus.TODO,
+        order: 0,
+      },
+      {
+        title: 'Quarterly fire extinguisher inspection',
+        description: 'Check pressure gauges and expiration tags in all buildings.',
+        projectId: facilitiesProject.id,
+        sectionId: facTodo.id,
+        assigneeId: facilitiesLead.id,
+        dueDate: nextDaysFromNow(10),
+        priority: Priority.HIGH,
+        status: TaskStatus.TODO,
+        order: 1,
+      },
+      {
+        title: 'Repair leaking sink in kids’ wing restroom',
+        description: 'Plumber scheduled — confirm access with facilities lead.',
+        projectId: facilitiesProject.id,
+        sectionId: facInProgress.id,
+        assigneeId: facilitiesLead.id,
+        dueDate: nextDaysFromNow(2),
+        priority: Priority.URGENT,
+        status: TaskStatus.IN_PROGRESS,
+        order: 0,
+      },
+      {
+        title: 'Mow and edge front lawn',
+        description: 'Weekly groundskeeping before Sunday service.',
+        projectId: facilitiesProject.id,
+        sectionId: facDone.id,
+        assigneeId: volunteer.id,
+        dueDate: nextDaysFromNow(-2),
+        priority: Priority.LOW,
+        status: TaskStatus.DONE,
+        order: 0,
+      },
+    ]) {
+      const { assigneeId, ...rest } = data;
+      await prisma.task.create({ data: { ...rest, assignees: { connect: { id: assigneeId } } } });
+    }
   }
 
   // ---- Project 3: Youth Ministry Events ----
@@ -222,43 +224,44 @@ async function main() {
 
     const [youthTodo, youthInProgress, youthDone] = youthProject.sections.sort((a, b) => a.order - b.order);
 
-    await prisma.task.createMany({
-      data: [
-        {
-          title: 'Recruit adult chaperones',
-          description: 'Need 4 background-checked volunteers for the retreat.',
-          projectId: youthProject.id,
-          sectionId: youthTodo.id,
-          assigneeId: volunteer.id,
-          dueDate: nextDaysFromNow(9),
-          priority: Priority.MEDIUM,
-          status: TaskStatus.TODO,
-          order: 4,
-        },
-        {
-          title: 'Design flyer for game night',
-          description: 'Promote Friday game night on social media and bulletin board.',
-          projectId: youthProject.id,
-          sectionId: youthInProgress.id,
-          assigneeId: volunteer.id,
-          dueDate: nextDaysFromNow(4),
-          priority: Priority.LOW,
-          status: TaskStatus.IN_PROGRESS,
-          order: 0,
-        },
-        {
-          title: 'Order pizza for last game night',
-          description: 'Vendor confirmed, order picked up on time.',
-          projectId: youthProject.id,
-          sectionId: youthDone.id,
-          assigneeId: youthPastor.id,
-          dueDate: nextDaysFromNow(-5),
-          priority: Priority.LOW,
-          status: TaskStatus.DONE,
-          order: 0,
-        },
-      ],
-    });
+    for (const data of [
+      {
+        title: 'Recruit adult chaperones',
+        description: 'Need 4 background-checked volunteers for the retreat.',
+        projectId: youthProject.id,
+        sectionId: youthTodo.id,
+        assigneeId: volunteer.id,
+        dueDate: nextDaysFromNow(9),
+        priority: Priority.MEDIUM,
+        status: TaskStatus.TODO,
+        order: 4,
+      },
+      {
+        title: 'Design flyer for game night',
+        description: 'Promote Friday game night on social media and bulletin board.',
+        projectId: youthProject.id,
+        sectionId: youthInProgress.id,
+        assigneeId: volunteer.id,
+        dueDate: nextDaysFromNow(4),
+        priority: Priority.LOW,
+        status: TaskStatus.IN_PROGRESS,
+        order: 0,
+      },
+      {
+        title: 'Order pizza for last game night',
+        description: 'Vendor confirmed, order picked up on time.',
+        projectId: youthProject.id,
+        sectionId: youthDone.id,
+        assigneeId: youthPastor.id,
+        dueDate: nextDaysFromNow(-5),
+        priority: Priority.LOW,
+        status: TaskStatus.DONE,
+        order: 0,
+      },
+    ]) {
+      const { assigneeId, ...rest } = data;
+      await prisma.task.create({ data: { ...rest, assignees: { connect: { id: assigneeId } } } });
+    }
   }
 
   // ---- Sequential branching demo (independent of whether the project above was just created) ----
@@ -277,7 +280,7 @@ async function main() {
         description: 'Confirm dates and deposit for Camp Wildwood, Oct 17–19.',
         projectId: youthProject.id,
         sectionId: youthTodoSection.id,
-        assigneeId: youthPastor.id,
+        assignees: { connect: { id: youthPastor.id } },
         dueDate: nextDaysFromNow(14),
         priority: Priority.HIGH,
         status: TaskStatus.TODO,
@@ -286,51 +289,51 @@ async function main() {
     });
 
     // The deposit can't be confirmed until the venue is booked, and once it's
-    // confirmed, chairs and tables can be ordered in parallel — one predecessor,
-    // two branching successors.
+    // confirmed, chairs and tables can be ordered in parallel — one blocker,
+    // two branching dependents.
     const confirmDeposit = await prisma.task.create({
       data: {
         title: 'Confirm retreat deposit paid',
         description: 'Verify the venue deposit cleared before ordering any rentals.',
         projectId: youthProject.id,
         sectionId: youthTodoSection.id,
-        assigneeId: youthPastor.id,
-        predecessorId: bookVenue.id,
+        assignees: { connect: { id: youthPastor.id } },
         dueDate: nextDaysFromNow(16),
         priority: Priority.HIGH,
         status: TaskStatus.TODO,
         order: 11,
       },
     });
+    await prisma.taskDependency.create({ data: { blockedId: confirmDeposit.id, blockerId: bookVenue.id } });
 
-    await prisma.task.createMany({
-      data: [
-        {
-          title: 'Order chairs for retreat hall',
-          description: 'Rent 120 folding chairs — only after the deposit is confirmed.',
-          projectId: youthProject.id,
-          sectionId: youthTodoSection.id,
-          assigneeId: volunteer.id,
-          predecessorId: confirmDeposit.id,
-          dueDate: nextDaysFromNow(18),
-          priority: Priority.MEDIUM,
-          status: TaskStatus.TODO,
-          order: 12,
-        },
-        {
-          title: 'Order tables for retreat hall',
-          description: 'Rent 15 folding tables — only after the deposit is confirmed.',
-          projectId: youthProject.id,
-          sectionId: youthTodoSection.id,
-          assigneeId: volunteer.id,
-          predecessorId: confirmDeposit.id,
-          dueDate: nextDaysFromNow(18),
-          priority: Priority.MEDIUM,
-          status: TaskStatus.TODO,
-          order: 13,
-        },
-      ],
-    });
+    for (const data of [
+      {
+        title: 'Order chairs for retreat hall',
+        description: 'Rent 120 folding chairs — only after the deposit is confirmed.',
+        projectId: youthProject.id,
+        sectionId: youthTodoSection.id,
+        assigneeId: volunteer.id,
+        dueDate: nextDaysFromNow(18),
+        priority: Priority.MEDIUM,
+        status: TaskStatus.TODO,
+        order: 12,
+      },
+      {
+        title: 'Order tables for retreat hall',
+        description: 'Rent 15 folding tables — only after the deposit is confirmed.',
+        projectId: youthProject.id,
+        sectionId: youthTodoSection.id,
+        assigneeId: volunteer.id,
+        dueDate: nextDaysFromNow(18),
+        priority: Priority.MEDIUM,
+        status: TaskStatus.TODO,
+        order: 13,
+      },
+    ]) {
+      const { assigneeId, ...rest } = data;
+      const created = await prisma.task.create({ data: { ...rest, assignees: { connect: { id: assigneeId } } } });
+      await prisma.taskDependency.create({ data: { blockedId: created.id, blockerId: confirmDeposit.id } });
+    }
 
     console.log('Created sequential task chain demo in Youth Ministry Events.');
   }

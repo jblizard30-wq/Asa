@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createFolder, deleteFolder, moveProjectToFolder, renameFolder } from '@/lib/actions/folders';
+import { SETTINGS_NAV_ITEM } from '@/lib/navItems';
 
 export interface SidebarProject {
   id: string;
@@ -16,16 +17,21 @@ export interface SidebarFolder {
   projects: SidebarProject[];
 }
 
+export interface SidebarNavItem {
+  key: string;
+  label: string;
+  href: string;
+}
+
 interface SidebarProps {
   folders: SidebarFolder[];
   ungroupedProjects: SidebarProject[];
-  isAdmin?: boolean;
-  canManageTeams?: boolean;
+  navItems: SidebarNavItem[];
 }
 
 const COLLAPSED_KEY = 'sidebar-collapsed-folders';
 
-export function Sidebar({ folders, ungroupedProjects, isAdmin = false, canManageTeams = false }: SidebarProps) {
+export function Sidebar({ folders, ungroupedProjects, navItems }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -108,6 +114,7 @@ export function Sidebar({ folders, ungroupedProjects, isAdmin = false, canManage
   }
 
   function isActive(href: string) {
+    if (href === '/projects') return pathname === '/projects';
     return pathname === href || pathname?.startsWith(`${href}/`);
   }
 
@@ -170,114 +177,19 @@ export function Sidebar({ folders, ungroupedProjects, isAdmin = false, canManage
   return (
     <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-3 py-6 print:hidden dark:border-slate-800 dark:bg-slate-900 sm:block">
       <nav className="space-y-1">
-        <Link
-          href="/my-tasks"
-          className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
-            isActive('/my-tasks')
-              ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
-              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-          }`}
-        >
-          My Tasks
-        </Link>
-        <Link
-          href="/personal-tasks"
-          className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
-            isActive('/personal-tasks')
-              ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
-              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-          }`}
-        >
-          Personal Tasks
-        </Link>
-        <Link
-          href="/projects"
-          className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
-            pathname === '/projects'
-              ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
-              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-          }`}
-        >
-          All Projects
-        </Link>
-        <Link
-          href="/calendar"
-          className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
-            isActive('/calendar')
-              ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
-              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-          }`}
-        >
-          Calendar
-        </Link>
-        <Link
-          href="/trash"
-          className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
-            isActive('/trash')
-              ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
-              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-          }`}
-        >
-          Trash
-        </Link>
-        <Link
-          href="/org-chart"
-          className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
-            isActive('/org-chart')
-              ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
-              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-          }`}
-        >
-          Org Chart
-        </Link>
-        {canManageTeams && (
+        {navItems.map((item) => (
           <Link
-            href="/teams"
+            key={item.key}
+            href={item.href}
             className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
-              isActive('/teams')
+              isActive(item.href)
                 ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
                 : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
             }`}
           >
-            Teams
+            {item.label}
           </Link>
-        )}
-        {isAdmin && (
-          <Link
-            href="/admin/users"
-            className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
-              isActive('/admin/users')
-                ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
-                : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-            }`}
-          >
-            User Management
-          </Link>
-        )}
-        {isAdmin && (
-          <Link
-            href="/admin/trash"
-            className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
-              isActive('/admin/trash')
-                ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
-                : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-            }`}
-          >
-            All Trash
-          </Link>
-        )}
-        {isAdmin && (
-          <Link
-            href="/admin/workflows"
-            className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
-              isActive('/admin/workflows')
-                ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
-                : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-            }`}
-          >
-            Workflows
-          </Link>
-        )}
+        ))}
       </nav>
 
       <div className="mt-6">
@@ -393,6 +305,19 @@ export function Sidebar({ folders, ungroupedProjects, isAdmin = false, canManage
             <p className="px-2 py-1 text-xs text-slate-400 dark:text-slate-500">No projects yet.</p>
           )}
         </div>
+      </div>
+
+      <div className="mt-6 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <Link
+          href={SETTINGS_NAV_ITEM.href}
+          className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
+            isActive(SETTINGS_NAV_ITEM.href)
+              ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
+              : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          {SETTINGS_NAV_ITEM.label}
+        </Link>
       </div>
     </aside>
   );

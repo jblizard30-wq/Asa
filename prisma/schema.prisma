@@ -27,12 +27,12 @@ enum TaskStatus {
   DONE
 }
 
-enum RecurrenceFrequency {
-  NONE
-  DAILY
-  WEEKLY
-  MONTHLY
-  YEARLY
+// 'PERIODIC' — recur on schedule regardless of completion ("every Sunday").
+// 'AFTER_COMPLETION' — the next occurrence is created only once the current one is
+// marked done, dated relative to that completion.
+enum RecurrenceMode {
+  PERIODIC
+  AFTER_COMPLETION
 }
 
 enum NotificationType {
@@ -84,22 +84,61 @@ enum IntakeFieldType {
   SELECT
 }
 
+enum ActivityAction {
+  STATUS_CHANGED
+  ASSIGNEES_CHANGED
+  PRIORITY_CHANGED
+  DUE_DATE_CHANGED
+  TITLE_CHANGED
+  TAGS_CHANGED
+  MOVED
+  RESTORED
+}
+
+enum DigestFrequency {
+  OFF
+  DAILY
+  WEEKLY
+}
+
+enum CalendarProvider {
+  GOOGLE
+  OUTLOOK
+}
+
+enum WebhookEvent {
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_COMPLETED
+  TASK_DELETED
+  COMMENT_ADDED
+}
+
+enum ReminderChannel {
+  EMAIL
+}
+
 model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  passwordHash String
-  role         Role     @default(USER)
-  managerId    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                  String          @id @default(cuid())
+  name                String
+  email               String          @unique
+  passwordHash        String
+  role                Role            @default(USER)
+  managerId           String?
+  digestFrequency     DigestFrequency @default(OFF)
+  lastDigestSentAt    DateTime?
+  // Wall-clock hour (0-23) the daily/weekly digest should fire at, in the org's single
+  // fixed America/Chicago timezone (this app is one church, not multi-timezone — see
+  // src/lib/actions/taskRecurrences.ts's APP_TIMEZONE constant for the same convention).
+  preferredDigestHour Int             @default(7)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   manager       User?  @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
   directReports User[] @relation("UserManager")
 
   projectsCreated Project[]       @relation("ProjectCreator")
   memberships     ProjectMember[]
-  assignedTasks   Task[]          @relation("TaskAssignee")
   comments        Comment[]
   notifications   Notification[]  @relation("NotificationRecipient")
   triggeredNotifs Notification[]  @relation("NotificationActor")
@@ -111,6 +150,9 @@ model User {
   remindersReceived Reminder[]   @relation("ReminderRecipient")
   deletedTasks      Task[]       @relation("TaskDeletedBy")
 
+  scheduledRemindersCreated  ScheduledReminder[] @relation("ScheduledReminderCreatedBy")
+  scheduledRemindersReceived ScheduledReminder[] @relation("ScheduledReminderRecipient")
+
   createdAutomationRules       AutomationRule[] @relation("AutomationCreatedBy")
   automationActionAssignments  AutomationRule[] @relation("AutomationActionAssignee")
   automationNewTaskAssignments AutomationRule[] @relation("AutomationNewTaskAssignee")
@@ -121,7 +163,34 @@ model User {
 
   createdWorkflows Workflow[] @relation("WorkflowCreatedBy")
 
+  navPreferences NavPreference[]
+
+  assignedTasks             Task[]                   @relation("TaskAssignees")
+  timeEntries               TimeEntry[]
+  loggedActivities          TaskActivity[]           @relation("TaskActivityActor")
+  notificationPreferences   NotificationPreference[]
+  savedFilters              SavedFilter[]
+  createdGuestLinks         TaskGuestLink[]
+  calendarConnections       CalendarConnection[]
+  apiKeys                   ApiKey[]
+  createdWebhooks           Webhook[]
+  taskRecurrenceAssignments TaskRecurrence[]         @relation("TaskRecurrenceAssignees")
+
   @@index([managerId])
+}
+
+/// Per-user customization of the sidebar navigation: display order and show/hide per item key.
+model NavPreference {
+  id      String  @id @default(cuid())
+  userId  String
+  itemKey String
+  order   Int     @default(0)
+  hidden  Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemKey])
+  @@index([userId])
 }
 
 model Team {
@@ -163,6 +232,31 @@ model Reminder {
   @@index([taskId])
 }
 
+/// A future-dated, opt-in reminder for a specific task — distinct from Reminder (which fires
+/// immediately). A cron polls for deliverAt <= now() && sentAt == null, sends, and stamps
+/// sentAt; the (deliverAt, sentAt) index keeps that poll cheap as the table grows. Vercel Cron
+/// can duplicate an invocation, so the send path must atomically claim a row (update it to a
+/// non-null sentAt conditioned on sentAt still being null) before delivering — never send first
+/// and stamp after.
+model ScheduledReminder {
+  id          String          @id @default(cuid())
+  taskId      String?
+  task        Task?           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient   User            @relation("ScheduledReminderRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User            @relation("ScheduledReminderCreatedBy", fields: [createdById], references: [id])
+  message     String
+  channel     ReminderChannel @default(EMAIL)
+  deliverAt   DateTime
+  sentAt      DateTime?
+  createdAt   DateTime        @default(now())
+
+  @@index([deliverAt, sentAt])
+  @@index([recipientId])
+  @@index([taskId])
+}
+
 model Project {
   id              String    @id @default(cuid())
   name            String
@@ -176,13 +270,15 @@ model Project {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  members      ProjectMember[]
-  sections     Section[]
-  tasks        Task[]
-  folderItems  ProjectFolderItem[]
-  customFields CustomField[]
-  intakeForms  IntakeForm[]
-  tags         Tag[]
+  members         ProjectMember[]
+  sections        Section[]
+  tasks           Task[]
+  taskRecurrences TaskRecurrence[]
+  folderItems     ProjectFolderItem[]
+  customFields    CustomField[]
+  intakeForms     IntakeForm[]
+  tags            Tag[]
+  savedFilters    SavedFilter[]
 
   @@index([workflowId])
 }
@@ -219,6 +315,10 @@ model ProjectMember {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   joinedAt  DateTime @default(now())
+  // Marks this member as the project's manager for the purposes of the project
+  // exec-summary digest — distinct from the global MANAGER Role, which just grants
+  // the capability; this flag says which specific project(s) they manage.
+  isManager Boolean  @default(false)
 
   @@unique([projectId, userId])
 }
@@ -234,6 +334,7 @@ model Section {
 
   automationTargets AutomationRule[]
   intakeForms       IntakeForm[]
+  taskRecurrences   TaskRecurrence[]
 }
 
 model Task {
@@ -243,7 +344,6 @@ model Task {
   url         String?
   projectId   String
   sectionId   String
-  assigneeId  String?
   dueDate     DateTime?
   priority    Priority   @default(MEDIUM)
   status      TaskStatus @default(TODO)
@@ -251,11 +351,10 @@ model Task {
 
   parentTaskId String?
 
-  recurrence         RecurrenceFrequency @default(NONE)
-  recurrenceInterval Int                 @default(1)
-  recurrenceEndDate  DateTime?
-
-  predecessorId String?
+  // Set on every task materialized from a TaskRecurrence (both periodic and
+  // after-completion occurrences) — never on a plain, non-recurring task.
+  recurrenceId   String?
+  occurrenceDate DateTime?
 
   deletedAt   DateTime?
   deletedById String?
@@ -263,17 +362,16 @@ model Task {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  project     Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  section     Section                @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  assignee    User?                  @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  comments    Comment[]
-  parentTask  Task?                  @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
-  subtasks    Task[]                 @relation("TaskSubtasks")
-  fieldValues TaskCustomFieldValue[]
-  predecessor Task?                  @relation("TaskSequence", fields: [predecessorId], references: [id], onDelete: SetNull)
-  successors  Task[]                 @relation("TaskSequence")
-  reminders   Reminder[]
-  deletedBy   User?                  @relation("TaskDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  project            Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  section            Section                @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  comments           Comment[]
+  parentTask         Task?                  @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks           Task[]                 @relation("TaskSubtasks")
+  fieldValues        TaskCustomFieldValue[]
+  reminders          Reminder[]
+  scheduledReminders ScheduledReminder[]
+  deletedBy          User?                  @relation("TaskDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  taskRecurrence     TaskRecurrence?        @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
 
   automationsAsSource AutomationRule[] @relation("AutomationSourceTask")
   automationsAsTarget AutomationRule[] @relation("AutomationTargetTask")
@@ -282,13 +380,49 @@ model Task {
   intakeSubmissions IntakeSubmission[]
   tags              Tag[]              @relation("TaskTags")
 
+  assignees     User[]           @relation("TaskAssignees")
+  blockedBy     TaskDependency[] @relation("TaskBlockedTask")
+  blocking      TaskDependency[] @relation("TaskBlockerTask")
+  timeEntries   TimeEntry[]
+  activities    TaskActivity[]
+  guestLinks    TaskGuestLink[]
+  guestComments GuestComment[]
+
+  @@unique([recurrenceId, occurrenceDate])
   @@index([projectId])
   @@index([sectionId])
-  @@index([assigneeId])
   @@index([parentTaskId])
-  @@index([predecessorId])
   @@index([deletedAt])
   @@index([deletedById])
+}
+
+/// The recipe, not the meals: one row per recurring task definition. A nightly job
+/// materializes 'PERIODIC' occurrences on schedule (see RecurrenceMode); 'AFTER_COMPLETION'
+/// occurrences are materialized inline, in the same request that marks the current one done.
+/// The (recurrenceId, occurrenceDate) unique index on Task makes both paths idempotent —
+/// Postgres treats every recurrenceId = NULL as distinct, so plain (non-recurring) tasks
+/// never collide with each other under this constraint.
+model TaskRecurrence {
+  id          String  @id @default(cuid())
+  title       String
+  description String?
+  projectId   String
+  sectionId   String
+
+  rrule     String
+  timezone  String         @default("America/Chicago")
+  mode      RecurrenceMode
+  nextRunAt DateTime
+  endsAt    DateTime?
+  createdAt DateTime       @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  section   Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  assignees User[]  @relation("TaskRecurrenceAssignees")
+  tasks     Task[]
+
+  @@index([projectId])
+  @@index([nextRunAt])
 }
 
 model CustomField {
@@ -563,4 +697,158 @@ model Tag {
 
   @@unique([projectId, name])
   @@index([projectId])
+}
+
+model TimeEntry {
+  id       String   @id @default(cuid())
+  taskId   String
+  task     Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  minutes  Int
+  note     String?
+  loggedAt DateTime @default(now())
+
+  @@index([taskId])
+  @@index([userId])
+}
+
+/// A directed edge in the task dependency graph: `blocked` cannot start until `blocker` is DONE.
+/// Replaces the single-predecessor chain (Task.predecessorId) with a real many-to-many graph.
+model TaskDependency {
+  id        String   @id @default(cuid())
+  blockedId String
+  blockerId String
+  blocked   Task     @relation("TaskBlockedTask", fields: [blockedId], references: [id], onDelete: Cascade)
+  blocker   Task     @relation("TaskBlockerTask", fields: [blockerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blockedId, blockerId])
+  @@index([blockedId])
+  @@index([blockerId])
+}
+
+model NotificationPreference {
+  id           String           @id @default(cuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         NotificationType
+  emailEnabled Boolean          @default(true)
+
+  @@unique([userId, type])
+  @@index([userId])
+}
+
+/// A general "who changed what, when" record per task, distinct from AutomationRun (which only
+/// logs automation executions). Written alongside existing mutations in lib/actions/tasks.ts etc.
+model TaskActivity {
+  id        String         @id @default(cuid())
+  taskId    String
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actorId   String?
+  actor     User?          @relation("TaskActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action    ActivityAction
+  detail    String
+  createdAt DateTime       @default(now())
+
+  @@index([taskId])
+}
+
+/// A named, persisted TaskFilters payload (see src/lib/taskFilters.ts) a user can re-apply later.
+model SavedFilter {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  scope     String
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  filters   Json
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([projectId])
+}
+
+/// A shareable, token-based link granting no-login view/comment access to a single task —
+/// same public-access shape as IntakeForm's slug, but scoped to one task instead of a form.
+model TaskGuestLink {
+  id          String    @id @default(cuid())
+  taskId      String
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  token       String    @unique
+  canComment  Boolean   @default(true)
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  guestComments GuestComment[]
+
+  @@index([taskId])
+}
+
+/// A comment left by an unauthenticated guest through a TaskGuestLink — kept separate from
+/// Comment (whose userId is a required real User) rather than making that field nullable.
+model GuestComment {
+  id          String        @id @default(cuid())
+  guestLinkId String
+  guestLink   TaskGuestLink @relation(fields: [guestLinkId], references: [id], onDelete: Cascade)
+  taskId      String
+  task        Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  guestName   String
+  body        String
+  createdAt   DateTime      @default(now())
+
+  @@index([taskId])
+  @@index([guestLinkId])
+}
+
+/// OAuth connection state for external calendar sync. Deliberately infrastructure-only: no cron
+/// or code path calls syncEnabled connections yet (see lib/integrations/*), only Connect/Disconnect.
+model CalendarConnection {
+  id                 String           @id @default(cuid())
+  userId             String
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider           CalendarProvider
+  externalCalendarId String?
+  accessToken        String?
+  refreshToken       String?
+  tokenExpiresAt     DateTime?
+  syncEnabled        Boolean          @default(false)
+  lastSyncedAt       DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  keyHash    String    @unique
+  keyPrefix  String
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Webhook {
+  id          String         @id @default(cuid())
+  createdById String
+  createdBy   User           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  url         String
+  secret      String
+  events      WebhookEvent[]
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+
+  @@index([createdById])
 }

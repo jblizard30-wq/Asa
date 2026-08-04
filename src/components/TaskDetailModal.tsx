@@ -1,18 +1,23 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useTransition, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
-import { getTaskDetail, updateTask, deleteTask } from '@/lib/actions/tasks';
+import { getTaskDetail, updateTask, deleteTask, addDependency, removeDependency } from '@/lib/actions/tasks';
+import { setTaskRecurrence, type SetTaskRecurrenceInput } from '@/lib/actions/taskRecurrences';
 import { setTaskCustomFieldValue } from '@/lib/actions/customFields';
 import { setTaskTags } from '@/lib/actions/tags';
 import { addComment } from '@/lib/actions/comments';
 import { uploadAttachment, deleteAttachment } from '@/lib/actions/attachments';
-import { PRIORITY_LABELS, STATUS_LABELS, RECURRENCE_LABELS } from '@/lib/format';
+import { logTime, deleteTimeEntry } from '@/lib/actions/timeEntries';
+import { createGuestLink, listGuestLinks, revokeGuestLink } from '@/lib/actions/guestAccess';
+import { PRIORITY_LABELS, STATUS_LABELS, ACTIVITY_ACTION_ICONS } from '@/lib/format';
 import { QuickAddTask } from '@/components/QuickAddTask';
 import { SendReminderModal } from '@/components/SendReminderModal';
+import { RemindMeModal } from '@/components/RemindMeModal';
 import { MentionInput } from '@/components/MentionInput';
 import { TagPicker } from '@/components/TagPicker';
+import { AssigneePicker } from '@/components/AssigneePicker';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -20,8 +25,182 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatMinutes(total: number): string {
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
+
 type TaskDetail = NonNullable<Awaited<ReturnType<typeof getTaskDetail>>>;
 type FieldValue = TaskDetail['fieldValues'][number];
+type GuestLink = Awaited<ReturnType<typeof listGuestLinks>>[number];
+type TaskRecurrenceDetail = NonNullable<TaskDetail['taskRecurrence']>;
+
+/**
+ * Frequency/interval/mode/end-date form for an active recurrence. The mode radio buttons are
+ * worded in plain language on purpose (per the two real examples below) rather than a bare
+ * "periodic vs after_completion" toggle — mixing these up is the most common recurring-task
+ * complaint in tools that get this wrong.
+ */
+function RecurrenceEditor({
+  recurrence,
+  onChange,
+}: {
+  recurrence: TaskRecurrenceDetail;
+  onChange: (input: SetTaskRecurrenceInput) => void;
+}) {
+  function update(patch: Partial<SetTaskRecurrenceInput>) {
+    onChange({
+      frequency: recurrence.frequency,
+      interval: recurrence.interval,
+      mode: recurrence.mode,
+      endsAt: recurrence.endsAt,
+      ...patch,
+    });
+  }
+
+  return (
+    <>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span className="text-sm text-slate-500">Every</span>
+        <input
+          type="number"
+          min={1}
+          max={365}
+          value={recurrence.interval}
+          onChange={(e) => update({ interval: Number(e.target.value) || 1 })}
+          className="w-16 rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+        />
+        <select
+          value={recurrence.frequency}
+          onChange={(e) => update({ frequency: e.target.value as SetTaskRecurrenceInput['frequency'] })}
+          className="rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+        >
+          <option value="DAILY">day(s)</option>
+          <option value="WEEKLY">week(s)</option>
+          <option value="MONTHLY">month(s)</option>
+          <option value="YEARLY">year(s)</option>
+        </select>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <label className="flex items-start gap-2">
+          <input
+            type="radio"
+            name="recurrence-mode"
+            checked={recurrence.mode === 'PERIODIC'}
+            onChange={() => update({ mode: 'PERIODIC' })}
+            className="mt-0.5 h-4 w-4"
+          />
+          <span className="text-sm text-slate-700">
+            Repeat on schedule, whether or not the last one got done
+            <span className="block text-xs text-slate-400">
+              e.g. &ldquo;Set up chairs&rdquo; — happens on schedule regardless of last time
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2">
+          <input
+            type="radio"
+            name="recurrence-mode"
+            checked={recurrence.mode === 'AFTER_COMPLETION'}
+            onChange={() => update({ mode: 'AFTER_COMPLETION' })}
+            className="mt-0.5 h-4 w-4"
+          />
+          <span className="text-sm text-slate-700">
+            Only create the next one after this one is done
+            <span className="block text-xs text-slate-400">
+              e.g. &ldquo;Replace HVAC filter&rdquo; — the next one is dated from whenever you finish this one
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        <label className="text-xs font-medium text-slate-500">Ends on</label>
+        <input
+          type="date"
+          value={recurrence.endsAt ? recurrence.endsAt.slice(0, 10) : ''}
+          onChange={(e) => update({ endsAt: e.target.value || null })}
+          className="rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+        />
+        <span className="text-xs text-slate-400">(optional)</span>
+      </div>
+
+      <p className="mt-2 text-xs text-slate-400">
+        {recurrence.mode === 'PERIODIC'
+          ? 'A new occurrence is created on schedule automatically, whether or not this one is marked done.'
+          : 'Marking this task done creates the next occurrence, dated from today.'}
+      </p>
+    </>
+  );
+}
+
+/** Checkbox dropdown for picking which other project tasks this task is blocked by. */
+function DependencyPicker({
+  options,
+  selectedIds,
+  onToggle,
+}: {
+  options: { id: string; title: string }[];
+  selectedIds: string[];
+  onToggle: (id: string, checked: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const selected = options.filter((o) => selectedIds.includes(o.id));
+
+  return (
+    <div className="relative mt-1" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full truncate rounded-md border border-slate-200 px-2 py-1.5 text-left text-sm dark:border-slate-600 dark:bg-slate-900"
+      >
+        {selected.length === 0 ? (
+          <span className="text-slate-400 dark:text-slate-500">No blockers — can start anytime</span>
+        ) : (
+          <span className="text-slate-700 dark:text-slate-200">{selected.map((s) => s.title).join(', ')}</span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+          {options.length === 0 ? (
+            <p className="px-2 py-1.5 text-xs text-slate-400 dark:text-slate-500">No other tasks in this project yet.</p>
+          ) : (
+            options.map((o) => (
+              <label
+                key={o.id}
+                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(o.id)}
+                  onChange={(e) => onToggle(o.id, e.target.checked)}
+                  className="h-3.5 w-3.5 shrink-0"
+                />
+                <span className="truncate text-slate-700 dark:text-slate-200">{o.title}</span>
+              </label>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Bolds any "@FullName" substring that matches a project member, so mentions stand out in the thread. */
 function renderCommentBody(body: string, members: { id: string; name: string }[]) {
@@ -53,9 +232,16 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
   const [isPending, startTransition] = useTransition();
   const [statusError, setStatusError] = useState<string | null>(null);
   const [showReminder, setShowReminder] = useState(false);
+  const [showRemindMe, setShowRemindMe] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [timeMinutes, setTimeMinutes] = useState('');
+  const [timeNote, setTimeNote] = useState('');
+  const [timeSubmitting, setTimeSubmitting] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [guestLinks, setGuestLinks] = useState<GuestLink[] | null>(null);
+  const [creatingGuestLink, setCreatingGuestLink] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +264,36 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
 
   function handleFieldChange(field: string, value: string | number | null) {
     handleFieldsChange({ [field]: value });
+  }
+
+  function handleRecurrenceChange(input: SetTaskRecurrenceInput | null) {
+    if (!task) return;
+    const previous = task;
+    // Optimistic update, same pattern as handleFieldsChange — without it, this checkbox/radio
+    // group flickers back to its old value on every click until the round trip resolves, since
+    // their `checked` props are controlled by server state.
+    setTask({
+      ...task,
+      taskRecurrence: input
+        ? {
+            id: task.taskRecurrence?.id ?? 'pending',
+            mode: input.mode,
+            frequency: input.frequency,
+            interval: input.interval,
+            endsAt: input.endsAt ?? null,
+          }
+        : null,
+    });
+    setStatusError(null);
+    startTransition(async () => {
+      const result = await setTaskRecurrence(taskId, input);
+      if (!result.success) {
+        setTask(previous);
+        setStatusError(result.error ?? 'Could not save recurrence settings.');
+        return;
+      }
+      refresh();
+    });
   }
 
   function handleFieldsChange(fields: Record<string, string | number | null>) {
@@ -172,6 +388,86 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
     });
   }
 
+  function handleAssigneesChange(assigneeIds: string[]) {
+    if (!task) return;
+    const previous = task;
+    setTask({ ...task, assignees: task.members.filter((m) => assigneeIds.includes(m.id)) });
+    setStatusError(null);
+    startTransition(async () => {
+      const result = await updateTask(taskId, { assigneeIds } as never);
+      if (!result.success) {
+        setTask(previous);
+        setStatusError(result.error ?? 'Could not save that change.');
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  async function handleToggleBlocker(blockerId: string, checked: boolean) {
+    if (!task) return;
+    if (checked) {
+      const result = await addDependency(task.id, blockerId);
+      if (!result.success) {
+        setStatusError(result.error ?? 'Could not add that dependency.');
+        return;
+      }
+    } else {
+      await removeDependency(task.id, blockerId);
+    }
+    setStatusError(null);
+    refresh();
+  }
+
+  async function handleLogTime(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const minutes = Number(timeMinutes);
+    if (!minutes || minutes <= 0) return;
+    setTimeSubmitting(true);
+    await logTime(taskId, minutes, timeNote.trim() || undefined);
+    setTimeMinutes('');
+    setTimeNote('');
+    setTimeSubmitting(false);
+    refresh();
+  }
+
+  async function handleDeleteTimeEntry(entryId: string) {
+    await deleteTimeEntry(entryId);
+    refresh();
+  }
+
+  function handleToggleShare() {
+    const next = !showShare;
+    setShowShare(next);
+    if (next && guestLinks === null) {
+      listGuestLinks(taskId).then(setGuestLinks);
+    }
+  }
+
+  async function handleCreateGuestLink() {
+    setCreatingGuestLink(true);
+    const result = await createGuestLink(taskId);
+    setCreatingGuestLink(false);
+    if (result.success) {
+      listGuestLinks(taskId).then(setGuestLinks);
+    } else {
+      setStatusError(result.error ?? 'Could not create a guest link.');
+    }
+  }
+
+  async function handleRevokeGuestLink(id: string) {
+    await revokeGuestLink(id);
+    listGuestLinks(taskId).then(setGuestLinks);
+  }
+
+  async function handleCopyGuestLink(path: string) {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}${path}`);
+    } catch {
+      // clipboard access denied — the link is still visible in the panel to copy manually
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-30 flex items-start justify-center bg-slate-900/40 p-4 pt-16 sm:pt-24"
@@ -240,8 +536,8 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-slate-500">Assignee</label>
-                  {(task.viewerRole === 'ADMIN' || task.viewerRole === 'MANAGER') && task.assigneeId && (
+                  <label className="block text-xs font-medium text-slate-500">Assignees</label>
+                  {(task.viewerRole === 'ADMIN' || task.viewerRole === 'MANAGER') && task.assignees.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setShowReminder(true)}
@@ -251,21 +547,25 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                     </button>
                   )}
                 </div>
-                <select
-                  defaultValue={task.assigneeId ?? ''}
-                  onChange={(e) => handleFieldChange('assigneeId', e.target.value || null)}
-                  className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5"
-                >
-                  <option value="">Unassigned</option>
-                  {task.members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
+                <AssigneePicker
+                  members={task.members}
+                  selectedIds={task.assignees.map((a) => a.id)}
+                  onChange={handleAssigneesChange}
+                />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-500">Due date</label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-slate-500">Due date</label>
+                  {task.assignees.some((a) => a.id === task.viewerId) && (
+                    <button
+                      type="button"
+                      onClick={() => setShowRemindMe(true)}
+                      className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                    >
+                      ⏰ Remind me
+                    </button>
+                  )}
+                </div>
                 <input
                   type="date"
                   defaultValue={task.dueDate ? task.dueDate.slice(0, 10) : ''}
@@ -307,38 +607,33 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
             {statusError && <p className="mt-2 text-xs text-red-600">{statusError}</p>}
 
             <div className="mt-4 border-t border-slate-100 pt-4">
-              <h3 className="text-sm font-semibold text-slate-700">Sequence</h3>
+              <h3 className="text-sm font-semibold text-slate-700">Dependencies</h3>
 
-              {task.locked && task.predecessor && (
-                <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                  🔒 Locked until &ldquo;{task.predecessor.title}&rdquo; is marked done.
+              {task.locked && (
+                <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                  🔒 Locked until{' '}
+                  {task.blockedBy
+                    .filter((b) => b.status !== 'DONE')
+                    .map((b) => `"${b.title}"`)
+                    .join(', ')}{' '}
+                  {task.blockedBy.filter((b) => b.status !== 'DONE').length > 1 ? 'are' : 'is'} marked done.
                 </p>
               )}
 
               <div className="mt-2">
-                <label className="block text-xs font-medium text-slate-500">Comes after</label>
-                <select
-                  key={task.predecessor?.id ?? 'none'}
-                  defaultValue={task.predecessor?.id ?? ''}
-                  onChange={(e) => handleFieldChange('predecessorId', e.target.value || null)}
-                  className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm"
-                >
-                  <option value="">No predecessor — can start anytime</option>
-                  {task.projectTasks.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.title}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-xs font-medium text-slate-500">Blocked by</label>
+                <DependencyPicker
+                  options={task.projectTasks}
+                  selectedIds={task.blockedBy.map((b) => b.id)}
+                  onToggle={handleToggleBlocker}
+                />
               </div>
 
-              {task.successors.length > 0 && (
+              {task.blocking.length > 0 && (
                 <div className="mt-3">
-                  <label className="block text-xs font-medium text-slate-500">
-                    Then ({task.successors.length})
-                  </label>
+                  <label className="block text-xs font-medium text-slate-500">Blocks ({task.blocking.length})</label>
                   <ul className="mt-1 space-y-1">
-                    {task.successors.map((s) => (
+                    {task.blocking.map((s) => (
                       <li key={s.id} className="flex items-center justify-between text-sm text-slate-700">
                         <span className="truncate">{s.title}</span>
                         <span className="ml-2 shrink-0 text-xs text-slate-400">{STATUS_LABELS[s.status]}</span>
@@ -352,7 +647,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                 <QuickAddTask
                   projectId={task.projectId}
                   sectionId={task.sectionId}
-                  predecessorId={task.id}
+                  blockerId={task.id}
                   label="+ Add task after this one"
                   onAdded={refresh}
                 />
@@ -361,62 +656,23 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
 
             <div className="mt-4 border-t border-slate-100 pt-4">
               <label className="block text-xs font-medium text-slate-500">Repeat</label>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <select
-                  value={task.recurrence}
-                  onChange={(e) => handleFieldChange('recurrence', e.target.value)}
-                  className="rounded-md border border-slate-200 px-2 py-1.5 text-sm"
-                >
-                  {Object.entries(RECURRENCE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
 
-                {task.recurrence !== 'NONE' && (
-                  <>
-                    <span className="text-sm text-slate-500">every</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={365}
-                      value={task.recurrenceInterval}
-                      onChange={(e) => handleFieldChange('recurrenceInterval', Number(e.target.value) || 1)}
-                      className="w-16 rounded-md border border-slate-200 px-2 py-1.5 text-sm"
-                    />
-                    <span className="text-sm text-slate-500">
-                      {
-                        {
-                          DAILY: 'day(s)',
-                          WEEKLY: 'week(s)',
-                          MONTHLY: 'month(s)',
-                          YEARLY: 'year(s)',
-                        }[task.recurrence]
-                      }
-                    </span>
-                  </>
-                )}
-              </div>
+              <label className="mt-1 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={task.taskRecurrence !== null}
+                  onChange={(e) =>
+                    handleRecurrenceChange(
+                      e.target.checked ? { frequency: 'WEEKLY', interval: 1, mode: 'PERIODIC', endsAt: null } : null,
+                    )
+                  }
+                  className="h-4 w-4"
+                />
+                <span className="text-sm text-slate-700">This task repeats</span>
+              </label>
 
-              {task.recurrence !== 'NONE' && (
-                <div className="mt-2 flex items-center gap-2">
-                  <label className="text-xs font-medium text-slate-500">Ends on</label>
-                  <input
-                    type="date"
-                    value={task.recurrenceEndDate ? task.recurrenceEndDate.slice(0, 10) : ''}
-                    onChange={(e) => handleFieldChange('recurrenceEndDate', e.target.value || null)}
-                    className="rounded-md border border-slate-200 px-2 py-1.5 text-sm"
-                  />
-                  <span className="text-xs text-slate-400">(optional)</span>
-                </div>
-              )}
-
-              {task.recurrence !== 'NONE' && (
-                <p className="mt-2 text-xs text-slate-400">
-                  Completing this task will automatically reschedule it to the next occurrence instead of marking it
-                  done for good.
-                </p>
+              {task.taskRecurrence && (
+                <RecurrenceEditor recurrence={task.taskRecurrence} onChange={handleRecurrenceChange} />
               )}
             </div>
 
@@ -566,6 +822,83 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
               </div>
             </div>
 
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold text-slate-700">
+                Time logged
+                {task.timeEntries.length > 0 &&
+                  ` (${formatMinutes(task.timeEntries.reduce((sum, e) => sum + e.minutes, 0))})`}
+              </h3>
+              <ul className="mt-2 space-y-1">
+                {task.timeEntries.length === 0 && <p className="text-sm text-slate-400">No time logged yet.</p>}
+                {task.timeEntries.slice(0, 5).map((entry) => (
+                  <li key={entry.id} className="flex items-center justify-between gap-2 text-sm text-slate-600">
+                    <span className="min-w-0 truncate">
+                      <span className="font-medium text-slate-700">{entry.userName}</span> logged{' '}
+                      {formatMinutes(entry.minutes)}
+                      {entry.note && <span className="text-slate-400"> — {entry.note}</span>}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2 text-xs text-slate-400">
+                      {formatDistanceToNow(new Date(entry.loggedAt), { addSuffix: true })}
+                      {(entry.userId === task.viewerId ||
+                        task.viewerRole === 'ADMIN' ||
+                        task.viewerRole === 'MANAGER') && (
+                        <button
+                          onClick={() => handleDeleteTimeEntry(entry.id)}
+                          className="font-medium text-red-500 hover:text-red-600"
+                          aria-label="Remove time entry"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <form onSubmit={handleLogTime} className="mt-2 flex flex-wrap items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="Minutes"
+                  value={timeMinutes}
+                  onChange={(e) => setTimeMinutes(e.target.value)}
+                  className="w-24 rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                />
+                <input
+                  type="text"
+                  placeholder="Note (optional)"
+                  value={timeNote}
+                  onChange={(e) => setTimeNote(e.target.value)}
+                  className="min-w-[8rem] flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                />
+                <button
+                  type="submit"
+                  disabled={timeSubmitting || !timeMinutes}
+                  className="shrink-0 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+                >
+                  {timeSubmitting ? 'Logging…' : 'Log time'}
+                </button>
+              </form>
+            </div>
+
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold text-slate-700">Activity</h3>
+              <ul className="mt-2 space-y-2">
+                {task.activities.length === 0 && <p className="text-sm text-slate-400">No activity yet.</p>}
+                {task.activities.map((a) => (
+                  <li key={a.id} className="flex items-start gap-2 text-xs text-slate-500">
+                    <span className="shrink-0">{ACTIVITY_ACTION_ICONS[a.action] ?? '•'}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {a.detail}
+                      {a.actorName && <span className="text-slate-400"> — {a.actorName}</span>}
+                    </span>
+                    <span className="shrink-0 text-slate-400">
+                      {formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
             {isPending && <p className="mt-2 text-xs text-slate-400">Saving…</p>}
 
             <div className="mt-6 border-t border-slate-100 pt-4">
@@ -589,6 +922,64 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
             </div>
 
             <div className="mt-6 border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={handleToggleShare}
+                className="text-xs font-medium text-brand-600 hover:text-brand-700"
+              >
+                🔗 Share with guest
+              </button>
+
+              {showShare && (
+                <div className="mt-2 space-y-2">
+                  {guestLinks === null ? (
+                    <p className="text-xs text-slate-400">Loading…</p>
+                  ) : (
+                    <>
+                      {guestLinks
+                        .filter((link) => !link.revokedAt)
+                        .map((link) => (
+                          <div
+                            key={link.id}
+                            className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-2 py-1.5 text-xs dark:border-slate-600"
+                          >
+                            <span className="min-w-0 truncate text-slate-600 dark:text-slate-300">{link.path}</span>
+                            <span className="flex shrink-0 items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleCopyGuestLink(link.path)}
+                                className="font-medium text-brand-600 hover:text-brand-700"
+                              >
+                                Copy
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRevokeGuestLink(link.id)}
+                                className="font-medium text-red-500 hover:text-red-600"
+                              >
+                                Revoke
+                              </button>
+                            </span>
+                          </div>
+                        ))}
+                      {guestLinks.filter((link) => !link.revokedAt).length === 0 && (
+                        <p className="text-xs text-slate-400">No active guest links.</p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleCreateGuestLink}
+                        disabled={creatingGuestLink}
+                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        {creatingGuestLink ? 'Creating…' : '+ New guest link'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 border-t border-slate-100 pt-4">
               <button onClick={handleDelete} className="text-xs font-medium text-red-500 hover:text-red-600">
                 Delete task
               </button>
@@ -597,12 +988,21 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
         )}
       </div>
 
-      {showReminder && task && task.assigneeId && (
+      {showReminder && task && task.assignees.length > 0 && (
         <SendReminderModal
-          recipientId={task.assigneeId}
-          recipientName={task.members.find((m) => m.id === task.assigneeId)?.name ?? 'this user'}
+          recipientId={task.assignees[0].id}
+          recipientName={task.assignees[0].name}
           taskId={task.id}
           onClose={() => setShowReminder(false)}
+        />
+      )}
+
+      {showRemindMe && task && (
+        <RemindMeModal
+          taskId={task.id}
+          taskTitle={task.title}
+          dueDate={task.dueDate}
+          onClose={() => setShowRemindMe(false)}
         />
       )}
     </div>

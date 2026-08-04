@@ -4,14 +4,16 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { Navbar } from '@/components/Navbar';
 import { Sidebar } from '@/components/Sidebar';
+import { applyNavPreferences, getVisibleNavDefs } from '@/lib/navItems';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect('/sign-in');
 
   const isAdmin = session.user.role === 'ADMIN';
+  const canManageTeams = isAdmin || session.user.role === 'MANAGER';
 
-  const [notifications, projects, folders] = await Promise.all([
+  const [notifications, projects, folders, navPreferences] = await Promise.all([
     prisma.notification.findMany({
       where: { recipientId: session.user.id },
       orderBy: { createdAt: 'desc' },
@@ -34,7 +36,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         },
       },
     }),
+    prisma.navPreference.findMany({ where: { userId: session.user.id } }),
   ]);
+
+  const navItems = applyNavPreferences(getVisibleNavDefs({ isAdmin, canManageTeams }), navPreferences).filter(
+    (item) => !item.hidden
+  );
 
   const accessibleProjectIds = new Set(projects.map((p) => p.id));
   const groupedProjectIds = new Set<string>();
@@ -64,12 +71,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         }))}
       />
       <div className="flex flex-1">
-        <Sidebar
-          folders={sidebarFolders}
-          ungroupedProjects={ungroupedProjects}
-          isAdmin={isAdmin}
-          canManageTeams={isAdmin || session.user.role === 'MANAGER'}
-        />
+        <Sidebar folders={sidebarFolders} ungroupedProjects={ungroupedProjects} navItems={navItems} />
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 print:max-w-none print:p-0">{children}</main>
       </div>
     </div>

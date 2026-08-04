@@ -28,7 +28,14 @@ export async function createNotification({
 
   const recipient = await prisma.user.findUnique({ where: { id: recipientId } });
   if (recipient && emailSubject) {
-    void sendNotificationEmail(recipient.email, emailSubject, message);
+    const preference = await prisma.notificationPreference.findUnique({
+      where: { userId_type: { userId: recipientId, type } },
+    });
+    // No row means the user never touched this preference — schema default is emailEnabled=true.
+    const emailEnabled = preference?.emailEnabled ?? true;
+    if (emailEnabled) {
+      void sendNotificationEmail(recipient.email, emailSubject, message);
+    }
   }
 
   return notification;

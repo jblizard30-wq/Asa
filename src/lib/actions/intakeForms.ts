@@ -253,7 +253,7 @@ export async function submitIntakeForm(slug: string, input: unknown) {
       description,
       projectId: form.projectId,
       sectionId: form.sectionId,
-      assigneeId: form.defaultAssigneeId,
+      assignees: form.defaultAssigneeId ? { connect: { id: form.defaultAssigneeId } } : undefined,
       order: (lastTask?.order ?? -1) + 1,
     },
   });

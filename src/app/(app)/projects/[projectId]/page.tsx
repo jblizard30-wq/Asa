@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { toTaskRecurrenceInfo } from '@/lib/recurrence';
 import { ProjectView } from '@/components/ProjectView';
 
 export default async function ProjectPage({ params }: { params: { projectId: string } }) {
@@ -24,14 +25,15 @@ export default async function ProjectPage({ params }: { params: { projectId: str
             where: { parentTaskId: null, deletedAt: null },
             orderBy: { order: 'asc' },
             include: {
-              assignee: true,
+              assignees: { select: { id: true, name: true } },
+              taskRecurrence: true,
               fieldValues: true,
               tags: { orderBy: { order: 'asc' } },
-              predecessor: { select: { id: true, title: true, status: true } },
+              blockedBy: { include: { blocker: { select: { id: true, title: true, status: true } } } },
               subtasks: {
                 where: { deletedAt: null },
                 orderBy: { order: 'asc' },
-                include: { assignee: true },
+                include: { assignees: { select: { id: true, name: true } } },
               },
             },
           },
@@ -47,13 +49,33 @@ export default async function ProjectPage({ params }: { params: { projectId: str
     redirect('/projects');
   }
 
+  const memberIds = project.members.map((m) => m.userId);
+  const teamMemberships = memberIds.length
+    ? await prisma.teamMember.findMany({
+        where: { userId: { in: memberIds } },
+        include: { team: { select: { id: true, name: true } } },
+      })
+    : [];
+
+  const teamsById = new Map<string, string>();
+  const memberTeamIds: Record<string, string[]> = {};
+  for (const membership of teamMemberships) {
+    teamsById.set(membership.team.id, membership.team.name);
+    (memberTeamIds[membership.userId] ??= []).push(membership.team.id);
+  }
+  const teams = [...teamsById.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <ProjectView
       projectId={project.id}
       projectName={project.name}
       description={project.description}
       isAdmin={session.user.role === 'ADMIN'}
-      members={project.members.map((m) => ({ id: m.user.id, name: m.user.name }))}
+      members={project.members.map((m) => ({ id: m.user.id, name: m.user.name, isManager: m.isManager, role: m.user.role }))}
+      teams={teams}
+      memberTeamIds={memberTeamIds}
       customFields={project.customFields.map((f) => ({
         id: f.id,
         name: f.name,
@@ -69,16 +91,15 @@ export default async function ProjectPage({ params }: { params: { projectId: str
         tasks: s.tasks.map((t) => ({
           id: t.id,
           title: t.title,
+          description: t.description,
           priority: t.priority,
           status: t.status,
           dueDate: t.dueDate ? t.dueDate.toISOString() : null,
-          assigneeId: t.assigneeId,
-          assigneeName: t.assignee?.name ?? null,
-          recurrence: t.recurrence,
-          recurrenceInterval: t.recurrenceInterval,
-          recurrenceEndDate: t.recurrenceEndDate ? t.recurrenceEndDate.toISOString() : null,
-          locked: Boolean(t.predecessor && t.predecessor.status !== 'DONE'),
-          predecessorTitle: t.predecessor?.title ?? null,
+          assigneeIds: t.assignees.map((a) => a.id),
+          assigneeNames: t.assignees.map((a) => a.name),
+          taskRecurrence: toTaskRecurrenceInfo(t.taskRecurrence),
+          locked: t.blockedBy.some((d) => d.blocker.status !== 'DONE'),
+          blockedByTitles: t.blockedBy.filter((d) => d.blocker.status !== 'DONE').map((d) => d.blocker.title),
           tags: t.tags.map((tag) => ({ id: tag.id, name: tag.name, color: tag.color })),
           fieldValues: t.fieldValues.map((v) => ({
             customFieldId: v.customFieldId,
@@ -94,8 +115,8 @@ export default async function ProjectPage({ params }: { params: { projectId: str
             status: st.status,
             priority: st.priority,
             dueDate: st.dueDate ? st.dueDate.toISOString() : null,
-            assigneeId: st.assigneeId,
-            assigneeName: st.assignee?.name ?? null,
+            assigneeIds: st.assignees.map((a) => a.id),
+            assigneeNames: st.assignees.map((a) => a.name),
           })),
         })),
       }))}

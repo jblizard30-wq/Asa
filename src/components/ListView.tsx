@@ -11,11 +11,13 @@ import type { ProjectMemberInfo } from '@/components/ProjectView';
 export function ListView({
   projectId,
   sections,
+  filtersActive = false,
 }: {
   projectId: string;
   sections: KanbanSection[];
   members: ProjectMemberInfo[];
   customFields: CustomFieldDef[];
+  filtersActive?: boolean;
 }) {
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
@@ -29,7 +31,9 @@ export function ListView({
           </div>
 
           {section.tasks.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-slate-400 dark:text-slate-500">No tasks yet.</p>
+            <p className="px-4 py-4 text-sm text-slate-400 dark:text-slate-500">
+              {filtersActive ? 'No tasks match your filters.' : 'No tasks yet.'}
+            </p>
           ) : (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {section.tasks.map((task) => {
@@ -42,7 +46,10 @@ export function ListView({
                     >
                       <span className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-slate-800 dark:text-slate-200">
                         {task.locked && (
-                          <span className="shrink-0 text-xs" title={`Locked until "${task.predecessorTitle}" is done`}>
+                          <span
+                            className="shrink-0 text-xs"
+                            title={`Locked until ${task.blockedByTitles.map((t) => `"${t}"`).join(', ')} done`}
+                          >
                             🔒
                           </span>
                         )}
@@ -56,7 +63,9 @@ export function ListView({
                         )}
                       </span>
                       <div className="flex shrink-0 items-center gap-3">
-                        {task.assigneeName && <span className="text-xs text-slate-400 dark:text-slate-500">{task.assigneeName}</span>}
+                        {task.assigneeNames.length > 0 && (
+                          <span className="text-xs text-slate-400 dark:text-slate-500">{task.assigneeNames.join(', ')}</span>
+                        )}
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[task.priority]}`}>
                           {PRIORITY_LABELS[task.priority]}
                         </span>

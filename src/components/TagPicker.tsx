@@ -35,12 +35,14 @@ export function TagPicker({
   allTags,
   selectedIds,
   onChange,
+  autoOpen = false,
 }: {
   allTags: TagInfo[];
   selectedIds: string[];
   onChange: (tagIds: string[]) => void;
+  autoOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

@@ -8,8 +8,13 @@ export default async function MyTasksPage() {
   if (!session?.user) return null;
 
   const tasksRaw = await prisma.task.findMany({
-    where: { assigneeId: session.user.id, status: { not: 'DONE' }, deletedAt: null },
-    include: { project: true, section: true, tags: { orderBy: { order: 'asc' } } },
+    where: { assignees: { some: { id: session.user.id } }, deletedAt: null },
+    include: {
+      project: true,
+      section: true,
+      tags: { orderBy: { order: 'asc' } },
+      assignees: { select: { id: true, name: true } },
+    },
   });
 
   // Sort by due date ascending with nulls last, then by priority.
@@ -19,10 +24,6 @@ export default async function MyTasksPage() {
     if (a.dueDate) return -1;
     if (b.dueDate) return 1;
     return priorityRank[a.priority] - priorityRank[b.priority];
-  });
-
-  const doneCount = await prisma.task.count({
-    where: { assigneeId: session.user.id, status: 'DONE', deletedAt: null },
   });
 
   return (
@@ -37,22 +38,19 @@ export default async function MyTasksPage() {
           tasks={tasks.map((t) => ({
             id: t.id,
             title: t.title,
+            description: t.description,
             priority: t.priority,
             status: t.status,
             dueDate: t.dueDate ? t.dueDate.toISOString() : null,
             projectId: t.projectId,
             projectName: t.project.name,
             sectionName: t.section.name,
+            assigneeIds: t.assignees.map((a) => a.id),
+            assigneeNames: t.assignees.map((a) => a.name),
             tags: t.tags.map((tag) => ({ id: tag.id, name: tag.name, color: tag.color })),
           }))}
         />
       </div>
-
-      {doneCount > 0 && (
-        <p className="mt-6 text-xs text-slate-400">
-          {doneCount} completed {doneCount === 1 ? 'task is' : 'tasks are'} hidden from this view.
-        </p>
-      )}
     </div>
   );
 }

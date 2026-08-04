@@ -6,7 +6,7 @@ import { searchAll, type SearchResults } from '@/lib/actions/search';
 import { STATUS_LABELS } from '@/lib/format';
 import { TaskDetailModal } from '@/components/TaskDetailModal';
 
-const EMPTY: SearchResults = { tasks: [], projects: [], comments: [] };
+const EMPTY: SearchResults = { tasks: [], projects: [], comments: [], pages: [] };
 
 export function SearchModal() {
   const router = useRouter();
@@ -53,7 +53,8 @@ export function SearchModal() {
     return () => clearTimeout(handle);
   }, [query]);
 
-  const hasResults = results.tasks.length > 0 || results.projects.length > 0 || results.comments.length > 0;
+  const hasResults =
+    results.tasks.length > 0 || results.projects.length > 0 || results.comments.length > 0 || results.pages.length > 0;
 
   function openTask(taskId: string) {
     setOpen(false);
@@ -63,6 +64,11 @@ export function SearchModal() {
   function goToProject(projectId: string) {
     setOpen(false);
     router.push(`/projects/${projectId}`);
+  }
+
+  function goToPage(href: string) {
+    setOpen(false);
+    router.push(href);
   }
 
   return (
@@ -94,7 +100,7 @@ export function SearchModal() {
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search tasks, projects, comments…"
+                placeholder="Search tasks, projects, comments, pages…"
                 className="w-full border-none bg-transparent text-sm text-slate-800 focus:outline-none dark:text-slate-100"
               />
               {loading && <span className="text-xs text-slate-400">Searching…</span>}
@@ -112,8 +118,25 @@ export function SearchModal() {
                 </p>
               )}
 
-              {results.tasks.length > 0 && (
+              {results.pages.length > 0 && (
                 <div className="py-2">
+                  <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    Pages
+                  </p>
+                  {results.pages.map((p) => (
+                    <button
+                      key={p.key}
+                      onClick={() => goToPage(p.href)}
+                      className="block w-full truncate px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {results.tasks.length > 0 && (
+                <div className="border-t border-slate-100 py-2 dark:border-slate-800">
                   <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                     Tasks
                   </p>

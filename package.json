@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
     "postinstall": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -29,11 +30,13 @@
     "@vercel/blob": "^2.6.1",
     "bcryptjs": "^2.4.3",
     "date-fns": "^3.6.0",
+    "date-fns-tz": "^3.2.0",
     "next": "14.2.35",
     "next-auth": "^4.24.7",
     "nodemailer": "^9.0.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "rrule": "^2.8.1",
     "ws": "^8.21.1",
     "zod": "^3.23.8"
   },
@@ -50,6 +53,7 @@
     "prisma": "^5.22.0",
     "tailwindcss": "3.4.14",
     "tsx": "^4.19.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.10"
   }
 }

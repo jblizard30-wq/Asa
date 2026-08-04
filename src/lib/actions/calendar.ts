@@ -12,13 +12,22 @@ export interface CalendarTask {
   status: string;
   projectId: string;
   projectName: string;
-  assigneeName: string | null;
+  assigneeIds: string[];
+  assigneeNames: string[];
+  teamIds: string[];
+  tags: { id: string; name: string; color: string }[];
+}
+
+export interface CalendarTasksResult {
+  tasks: CalendarTask[];
+  teams: { id: string; name: string }[];
+  teamIdsByUserId: Record<string, string[]>;
 }
 
 /** Tasks due within [startISO, endISO], across every project the current user can access. */
-export async function getTasksInRange(startISO: string, endISO: string): Promise<CalendarTask[]> {
+export async function getTasksInRange(startISO: string, endISO: string): Promise<CalendarTasksResult> {
   const session = await getServerSession(authOptions);
-  if (!session?.user) return [];
+  if (!session?.user) return { tasks: [], teams: [], teamIdsByUserId: {} };
 
   const isAdmin = session.user.role === 'ADMIN';
   const accessibleProjects = await prisma.project.findMany({
@@ -26,7 +35,7 @@ export async function getTasksInRange(startISO: string, endISO: string): Promise
     select: { id: true },
   });
   const projectIds = accessibleProjects.map((p) => p.id);
-  if (projectIds.length === 0) return [];
+  if (projectIds.length === 0) return { tasks: [], teams: [], teamIdsByUserId: {} };
 
   const tasks = await prisma.task.findMany({
     where: {
@@ -42,21 +51,51 @@ export async function getTasksInRange(startISO: string, endISO: string): Promise
       status: true,
       projectId: true,
       project: { select: { name: true } },
-      assignee: { select: { name: true } },
+      assignees: { select: { id: true, name: true } },
+      tags: { select: { id: true, name: true, color: true }, orderBy: { order: 'asc' } },
     },
     orderBy: { dueDate: 'asc' },
   });
 
-  return tasks
+  const allAssigneeIds = [...new Set(tasks.flatMap((t) => t.assignees.map((a) => a.id)))];
+  const teamMemberships = allAssigneeIds.length
+    ? await prisma.teamMember.findMany({
+        where: { userId: { in: allAssigneeIds } },
+        select: { userId: true, team: { select: { id: true, name: true } } },
+      })
+    : [];
+  const teamIdsByUserId = new Map<string, string[]>();
+  const teamsById = new Map<string, string>();
+  for (const membership of teamMemberships) {
+    const list = teamIdsByUserId.get(membership.userId) ?? [];
+    list.push(membership.team.id);
+    teamIdsByUserId.set(membership.userId, list);
+    teamsById.set(membership.team.id, membership.team.name);
+  }
+
+  const resultTasks = tasks
     .filter((t) => t.dueDate)
-    .map((t) => ({
-      id: t.id,
-      title: t.title,
-      dueDate: t.dueDate!.toISOString(),
-      priority: t.priority,
-      status: t.status,
-      projectId: t.projectId,
-      projectName: t.project.name,
-      assigneeName: t.assignee?.name ?? null,
-    }));
+    .map((t) => {
+      const assigneeIds = t.assignees.map((a) => a.id);
+      const teamIds = [...new Set(assigneeIds.flatMap((id) => teamIdsByUserId.get(id) ?? []))];
+      return {
+        id: t.id,
+        title: t.title,
+        dueDate: t.dueDate!.toISOString(),
+        priority: t.priority,
+        status: t.status,
+        projectId: t.projectId,
+        projectName: t.project.name,
+        assigneeIds,
+        assigneeNames: t.assignees.map((a) => a.name),
+        teamIds,
+        tags: t.tags,
+      };
+    });
+
+  const teams = [...teamsById.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return { tasks: resultTasks, teams, teamIdsByUserId: Object.fromEntries(teamIdsByUserId) };
 }
