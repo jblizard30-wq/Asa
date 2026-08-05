@@ -47,7 +47,7 @@ export function NewIntakeFormModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
+        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -65,7 +65,7 @@ export function NewIntakeFormModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Facility Request"
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
             />
           </div>
           <div>
@@ -76,7 +76,7 @@ export function NewIntakeFormModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
             />
           </div>
           <div>
@@ -84,7 +84,7 @@ export function NewIntakeFormModal({
             <select
               value={sectionId}
               onChange={(e) => setSectionId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
             >
               {sections.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -98,7 +98,7 @@ export function NewIntakeFormModal({
             <select
               value={defaultAssigneeId}
               onChange={(e) => setDefaultAssigneeId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
             >
               <option value="">Unassigned</option>
               {members.map((m) => (

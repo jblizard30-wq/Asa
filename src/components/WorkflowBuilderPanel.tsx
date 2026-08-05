@@ -88,14 +88,14 @@ export function WorkflowBuilderPanel({
 
   if (!detail) {
     return (
-      <div className="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-900">
+      <div className="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-400 dark:border-slate-600 dark:bg-slate-800">
         Loading workflow…
       </div>
     );
   }
 
   return (
-    <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+    <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-600 dark:bg-slate-800">
       <div className="flex items-start justify-between gap-4">
         <input
           defaultValue={detail.name}
@@ -103,7 +103,7 @@ export function WorkflowBuilderPanel({
             const value = e.target.value.trim();
             if (value && value !== detail.name) void withErrorHandling(() => updateWorkflow(detail.id, { name: value }));
           }}
-          className="w-full max-w-sm rounded border border-transparent bg-transparent text-lg font-semibold text-slate-900 hover:border-slate-200 focus:border-slate-300 focus:outline-none dark:text-slate-100 dark:hover:border-slate-700"
+          className="w-full max-w-sm rounded border border-transparent bg-transparent text-lg font-semibold text-slate-900 hover:border-slate-200 focus:border-slate-300 focus:outline-none dark:text-slate-100 dark:hover:border-slate-600"
         />
         <div className="flex shrink-0 items-center gap-2">
           <button
@@ -111,7 +111,7 @@ export function WorkflowBuilderPanel({
               const name = prompt('Name for the duplicate workflow?', `${detail.name} (copy)`);
               if (name) void withErrorHandling(() => duplicateWorkflow(detail.id, name));
             }}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-500 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             Duplicate
           </button>
@@ -146,7 +146,7 @@ export function WorkflowBuilderPanel({
         }}
         placeholder="Description (optional)"
         rows={2}
-        className="mt-2 w-full rounded border border-transparent bg-transparent text-sm text-slate-500 hover:border-slate-200 focus:border-slate-300 focus:outline-none dark:text-slate-400 dark:hover:border-slate-700"
+        className="mt-2 w-full rounded border border-transparent bg-transparent text-sm text-slate-500 hover:border-slate-200 focus:border-slate-300 focus:outline-none dark:text-slate-400 dark:hover:border-slate-600"
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-4">
@@ -155,7 +155,7 @@ export function WorkflowBuilderPanel({
           <select
             defaultValue={detail.teamId ?? ''}
             onChange={(e) => void withErrorHandling(() => updateWorkflow(detail.id, { teamId: e.target.value }))}
-            className="rounded-md border border-slate-200 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-800"
+            className="rounded-md border border-slate-200 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-700"
           >
             <option value="">No team</option>
             {teams.map((t) => (
@@ -179,7 +179,7 @@ export function WorkflowBuilderPanel({
 
       <div className="mt-5 space-y-4">
         {detail.stages.map((stage, stageIndex) => (
-          <div key={stage.id} className="rounded-md border border-slate-200 p-3 dark:border-slate-700">
+          <div key={stage.id} className="rounded-md border border-slate-200 p-3 dark:border-slate-600">
             <div className="flex items-center gap-2">
               <div className="flex shrink-0 flex-col">
                 <button
@@ -205,7 +205,7 @@ export function WorkflowBuilderPanel({
                   const value = e.target.value.trim();
                   if (value && value !== stage.name) void withErrorHandling(() => renameStage(stage.id, value));
                 }}
-                className="w-full max-w-xs rounded border border-transparent bg-transparent font-medium text-slate-800 hover:border-slate-200 focus:border-slate-300 focus:outline-none dark:text-slate-200 dark:hover:border-slate-700"
+                className="w-full max-w-xs rounded border border-transparent bg-transparent font-medium text-slate-800 hover:border-slate-200 focus:border-slate-300 focus:outline-none dark:text-slate-200 dark:hover:border-slate-600"
               />
               <span className="text-xs text-slate-400">Stage</span>
               <button
@@ -220,7 +220,7 @@ export function WorkflowBuilderPanel({
               </button>
             </div>
 
-            <div className="ml-6 mt-3 space-y-2 border-l border-slate-100 pl-4 dark:border-slate-800">
+            <div className="ml-6 mt-3 space-y-2 border-l border-slate-100 pl-4 dark:border-slate-700">
               {stage.taskTemplates.map((task, taskIndex) => (
                 <div key={task.id}>
                   <div className="flex items-center gap-2">
@@ -248,7 +248,7 @@ export function WorkflowBuilderPanel({
                         const value = e.target.value.trim();
                         if (value && value !== task.title) void withErrorHandling(() => updateTaskTemplate(task.id, { title: value }));
                       }}
-                      className="w-full max-w-xs rounded border border-transparent bg-transparent text-sm text-slate-700 hover:border-slate-200 focus:border-slate-300 focus:outline-none dark:text-slate-300 dark:hover:border-slate-700"
+                      className="w-full max-w-xs rounded border border-transparent bg-transparent text-sm text-slate-700 hover:border-slate-200 focus:border-slate-300 focus:outline-none dark:text-slate-300 dark:hover:border-slate-600"
                     />
                     <select
                       defaultValue={task.defaultPriority}
@@ -257,7 +257,7 @@ export function WorkflowBuilderPanel({
                           updateTaskTemplate(task.id, { defaultPriority: e.target.value as (typeof PRIORITIES)[number] }),
                         )
                       }
-                      className="rounded-md border border-slate-200 px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-800"
+                      className="rounded-md border border-slate-200 px-1.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-700"
                     >
                       {PRIORITIES.map((p) => (
                         <option key={p} value={p}>
@@ -273,7 +273,7 @@ export function WorkflowBuilderPanel({
                     </button>
                   </div>
 
-                  <div className="ml-6 mt-1 space-y-1 border-l border-slate-100 pl-4 dark:border-slate-800">
+                  <div className="ml-6 mt-1 space-y-1 border-l border-slate-100 pl-4 dark:border-slate-700">
                     {task.subtasks.map((sub, subIndex) => (
                       <div key={sub.id} className="flex items-center gap-2">
                         <div className="flex shrink-0 flex-col">
@@ -300,7 +300,7 @@ export function WorkflowBuilderPanel({
                             const value = e.target.value.trim();
                             if (value && value !== sub.title) void withErrorHandling(() => updateTaskTemplate(sub.id, { title: value }));
                           }}
-                          className="w-full max-w-xs rounded border border-transparent bg-transparent text-sm text-slate-600 hover:border-slate-200 focus:border-slate-300 focus:outline-none dark:text-slate-400 dark:hover:border-slate-700"
+                          className="w-full max-w-xs rounded border border-transparent bg-transparent text-sm text-slate-600 hover:border-slate-200 focus:border-slate-300 focus:outline-none dark:text-slate-400 dark:hover:border-slate-600"
                         />
                         <select
                           defaultValue={sub.defaultPriority}
@@ -309,7 +309,7 @@ export function WorkflowBuilderPanel({
                               updateTaskTemplate(sub.id, { defaultPriority: e.target.value as (typeof PRIORITIES)[number] }),
                             )
                           }
-                          className="rounded-md border border-slate-200 px-1.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-800"
+                          className="rounded-md border border-slate-200 px-1.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-700"
                         >
                           {PRIORITIES.map((p) => (
                             <option key={p} value={p}>
@@ -338,7 +338,7 @@ export function WorkflowBuilderPanel({
                           );
                         }}
                         placeholder="+ Add subtask, press Enter"
-                        className="w-full max-w-xs rounded-md border border-dashed border-slate-200 px-2 py-1 text-xs text-slate-500 focus:border-solid focus:border-brand-400 focus:outline-none dark:border-slate-700"
+                        className="w-full max-w-xs rounded-md border border-dashed border-slate-200 px-2 py-1 text-xs text-slate-500 focus:border-solid focus:border-brand-400 focus:outline-none dark:border-slate-600"
                       />
                     </div>
                   </div>
@@ -357,7 +357,7 @@ export function WorkflowBuilderPanel({
                   );
                 }}
                 placeholder="+ Add task, press Enter"
-                className="w-full max-w-xs rounded-md border border-dashed border-slate-300 px-2 py-1.5 text-sm text-slate-500 focus:border-solid focus:border-brand-400 focus:outline-none dark:border-slate-600"
+                className="w-full max-w-xs rounded-md border border-dashed border-slate-300 px-2 py-1.5 text-sm text-slate-500 focus:border-solid focus:border-brand-400 focus:outline-none dark:border-slate-500"
               />
             </div>
           </div>
@@ -373,7 +373,7 @@ export function WorkflowBuilderPanel({
             void withErrorHandling(() => addStage(detail.id, name)).then(() => setNewStageName(''));
           }}
           placeholder="+ Add stage, press Enter"
-          className="w-full max-w-sm rounded-md border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 focus:border-solid focus:border-brand-400 focus:outline-none dark:border-slate-600"
+          className="w-full max-w-sm rounded-md border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 focus:border-solid focus:border-brand-400 focus:outline-none dark:border-slate-500"
         />
       </div>
     </div>

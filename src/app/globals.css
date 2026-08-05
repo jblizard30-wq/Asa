@@ -16,7 +16,7 @@ html.dark {
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+  @apply bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100;
 }
 
 /* Pure-CSS connector lines for the org chart tree (src/components/OrgChart.tsx). */
@@ -104,5 +104,5 @@ body {
 .dark .org-tree li::after,
 .dark .org-tree li:last-child::before,
 .dark .org-tree ul::before {
-  border-color: theme('colors.slate.700');
+  border-color: theme('colors.slate.600');
 }

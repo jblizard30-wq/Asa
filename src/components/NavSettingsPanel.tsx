@@ -73,7 +73,7 @@ export function NavSettingsPanel({ initialItems }: { initialItems: NavSettingsIt
                     <div
                       ref={dragProvided.innerRef}
                       {...dragProvided.draggableProps}
-                      className={`flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900 ${
+                      className={`flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-600 dark:bg-slate-800 ${
                         snapshot.isDragging ? 'shadow-md' : ''
                       } ${item.hidden ? 'opacity-50' : ''}`}
                     >
@@ -91,7 +91,7 @@ export function NavSettingsPanel({ initialItems }: { initialItems: NavSettingsIt
                         onClick={() => handleToggleHidden(item.key)}
                         className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                           item.hidden
-                            ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                            ? 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
                             : 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
                         }`}
                       >

@@ -59,7 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const ungroupedProjects = projects.filter((p) => !groupedProjectIds.has(p.id));
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950">
+    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-900">
       <Navbar
         userName={session.user.name ?? session.user.email ?? 'User'}
         notifications={notifications.map((n) => ({

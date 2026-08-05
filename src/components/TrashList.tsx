@@ -42,15 +42,15 @@ export function TrashList({ entries }: { entries: TrashEntry[] }) {
 
   if (items.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-600 dark:text-slate-500">
+      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-500 dark:text-slate-500">
         Your trash is empty.
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800">
+      <ul className="divide-y divide-slate-100 dark:divide-slate-700">
         {items.map((task) => (
           <li key={task.id} className="flex items-center justify-between gap-4 px-4 py-3">
             <div className="min-w-0">
@@ -76,7 +76,7 @@ export function TrashList({ entries }: { entries: TrashEntry[] }) {
               <button
                 onClick={() => handleRestore(task.id)}
                 disabled={isPending && pendingId === task.id}
-                className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 Restore
               </button>

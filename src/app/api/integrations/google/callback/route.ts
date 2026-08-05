@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { encryptToken, encryptTokenOrNull } from '@/lib/tokenCrypto';
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -56,14 +57,14 @@ export async function GET(request: NextRequest) {
       create: {
         userId: session.user.id,
         provider: 'GOOGLE',
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token ?? null,
+        accessToken: encryptToken(tokens.access_token),
+        refreshToken: encryptTokenOrNull(tokens.refresh_token) ?? null,
         tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
       },
       update: {
-        accessToken: tokens.access_token,
+        accessToken: encryptToken(tokens.access_token),
         // Google only returns a refresh_token on the first consent; keep the existing one otherwise.
-        refreshToken: tokens.refresh_token ?? undefined,
+        refreshToken: encryptTokenOrNull(tokens.refresh_token),
         tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
       },
     });

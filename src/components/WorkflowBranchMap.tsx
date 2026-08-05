@@ -49,7 +49,7 @@ function TaskNode({ task }: { task: BranchSubtaskInfo & { subtasks?: BranchSubta
     <li className="mt-2">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-medium text-slate-800 dark:text-slate-200">{task.title}</span>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">
           {STATUS_LABELS[task.status] ?? task.status}
         </span>
         <span className={`rounded-full px-2 py-0.5 text-xs ${PRIORITY_STYLES[task.priority] ?? ''}`}>
@@ -58,7 +58,7 @@ function TaskNode({ task }: { task: BranchSubtaskInfo & { subtasks?: BranchSubta
         {task.assigneeName && <span className="text-xs text-slate-400">{task.assigneeName}</span>}
       </div>
       {subtasks.length > 0 && (
-        <ul className="ml-3 mt-1 border-l border-slate-200 pl-4 dark:border-slate-700">
+        <ul className="ml-3 mt-1 border-l border-slate-200 pl-4 dark:border-slate-600">
           {subtasks.map((sub) => (
             <TaskNode key={sub.id} task={sub} />
           ))}
@@ -152,7 +152,7 @@ export function WorkflowBranchMap({
       </div>
 
       {!data.workflow && (
-        <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-4 print:hidden dark:border-slate-700">
+        <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-4 print:hidden dark:border-slate-600">
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
             Apply a workflow to this project
           </label>
@@ -160,7 +160,7 @@ export function WorkflowBranchMap({
             <select
               value={selectedWorkflowId}
               onChange={(e) => setSelectedWorkflowId(e.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700"
             >
               <option value="">Choose a workflow…</option>
               {workflowOptions.map((w) => (
@@ -201,7 +201,7 @@ export function WorkflowBranchMap({
           {data.sections.map((section) => (
             <div key={section.id}>
               <h3 className="font-semibold text-slate-800 dark:text-slate-200">{section.name}</h3>
-              <ul className="ml-3 mt-1 border-l border-slate-200 pl-4 dark:border-slate-700">
+              <ul className="ml-3 mt-1 border-l border-slate-200 pl-4 dark:border-slate-600">
                 {section.tasks.map((task) => (
                   <TaskNode key={task.id} task={task} />
                 ))}
@@ -213,7 +213,7 @@ export function WorkflowBranchMap({
         </div>
       </div>
 
-      <div className="mt-8 border-t border-slate-200 pt-4 print:hidden dark:border-slate-700">
+      <div className="mt-8 border-t border-slate-200 pt-4 print:hidden dark:border-slate-600">
         <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
           <input type="checkbox" checked={includeWriteup} onChange={(e) => setIncludeWriteup(e.target.checked)} />
           Include settings write-up in printout
@@ -223,13 +223,13 @@ export function WorkflowBranchMap({
           onChange={(e) => setWriteupText(e.target.value)}
           rows={8}
           placeholder="Write up the details behind this project's settings, or insert an auto-generated summary below."
-          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
         />
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             onClick={handleGenerateSummary}
             disabled={generating}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-500 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             {generating ? 'Generating…' : 'Insert auto-summary'}
           </button>

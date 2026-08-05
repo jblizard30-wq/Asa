@@ -71,14 +71,14 @@ export function TagPicker({
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="rounded-full border border-dashed border-slate-300 px-2 py-0.5 text-xs text-slate-400 hover:border-slate-400 hover:text-slate-600 dark:border-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+          className="rounded-full border border-dashed border-slate-300 px-2 py-0.5 text-xs text-slate-400 hover:border-slate-400 hover:text-slate-600 dark:border-slate-500 dark:text-slate-500 dark:hover:text-slate-300"
         >
           + Tag
         </button>
       </div>
 
       {open && (
-        <div className="absolute z-20 mt-1 w-48 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+        <div className="absolute z-20 mt-1 w-48 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-600 dark:bg-slate-700">
           {allTags.length === 0 ? (
             <p className="px-2 py-1.5 text-xs text-slate-400 dark:text-slate-500">
               No tags yet. Create some in &ldquo;Manage tags&rdquo;.
@@ -87,7 +87,7 @@ export function TagPicker({
             allTags.map((tag) => (
               <label
                 key={tag.id}
-                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-600"
               >
                 <input
                   type="checkbox"

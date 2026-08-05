@@ -2,11 +2,27 @@
 
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { createNotification } from '@/lib/notifications';
 import { requireProjectMember } from '@/lib/actions/tasks';
 
 const INTAKE_FIELD_TYPES = ['TEXT', 'TEXTAREA', 'EMAIL', 'DATE', 'SELECT'] as const;
+
+const SUBMISSION_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const SUBMISSION_RATE_LIMIT_MAX = 5;
+
+/**
+ * Best-effort client IP for rate-limiting the public, unauthenticated intake form endpoint.
+ * Trustworthy here specifically because this app runs on Vercel, which sets x-forwarded-for
+ * itself from the real client connection — it isn't a client-controlled passthrough header.
+ */
+function getClientIp(): string | null {
+  const h = headers();
+  const forwardedFor = h.get('x-forwarded-for');
+  if (forwardedFor) return forwardedFor.split(',')[0].trim();
+  return h.get('x-real-ip');
+}
 
 function slugify(name: string): string {
   const base = name
@@ -225,6 +241,20 @@ export async function submitIntakeForm(slug: string, input: unknown) {
     return { success: false, error: 'This form is not accepting submissions right now.' };
   }
 
+  const ip = getClientIp();
+  if (ip) {
+    const recentCount = await prisma.intakeSubmission.count({
+      where: {
+        formId: form.id,
+        ipAddress: ip,
+        createdAt: { gte: new Date(Date.now() - SUBMISSION_RATE_LIMIT_WINDOW_MS) },
+      },
+    });
+    if (recentCount >= SUBMISSION_RATE_LIMIT_MAX) {
+      return { success: false, error: 'Too many submissions from this connection. Please try again later.' };
+    }
+  }
+
   const answers = parsed.data.answers ?? {};
   for (const field of form.fields) {
     if (field.required && !answers[field.id]?.trim()) {
@@ -271,6 +301,7 @@ export async function submitIntakeForm(slug: string, input: unknown) {
       submitterName: parsed.data.submitterName,
       submitterEmail: parsed.data.submitterEmail || null,
       answers: answersByLabel,
+      ipAddress: ip,
     },
   });
 

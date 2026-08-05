@@ -1,6 +1,7 @@
 import { subDays, isSameDay } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { applyAutomationAction } from '@/lib/automations';
+import { isAuthorizedCronRequest } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,8 +10,7 @@ export const dynamic = 'force-dynamic';
  * authenticated since it's invoked externally — guarded by a shared secret instead.
  */
 export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isAuthorizedCronRequest(request)) {
     return new Response('Unauthorized', { status: 401 });
   }
 
@@ -29,11 +29,14 @@ export async function GET(request: Request) {
     const triggerDate = subDays(rule.sourceTask.dueDate, rule.triggerDaysBefore);
     if (!isSameDay(triggerDate, today)) continue;
 
-    // Idempotency guard: only fire once per calendar day even if the cron is invoked more than once.
-    const alreadyRanToday = await prisma.automationRun.findFirst({
-      where: { ruleId: rule.id, createdAt: { gte: midnight } },
+    // Atomic claim before acting: only fire once per calendar day even if Vercel Cron invokes
+    // this route more than once for the same trigger. The where clause requires the row to still
+    // be unclaimed for today, so of two concurrent invocations only one update can match.
+    const claim = await prisma.automationRule.updateMany({
+      where: { id: rule.id, OR: [{ lastDueDateFiredAt: null }, { lastDueDateFiredAt: { lt: midnight } }] },
+      data: { lastDueDateFiredAt: midnight },
     });
-    if (alreadyRanToday) continue;
+    if (claim.count === 0) continue;
 
     await applyAutomationAction(rule, 0);
     firedCount++;

@@ -7,6 +7,27 @@ import { requireProjectMember } from '@/lib/actions/tasks';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+// Attachments are stored on public Vercel Blob URLs, so anything a browser would render/execute
+// rather than just download is blocked — Vercel Blob infers Content-Type from the pathname's
+// extension, so the extension check matters at least as much as the declared MIME type.
+const BLOCKED_EXTENSIONS = new Set([
+  'html', 'htm', 'xhtml', 'svg', 'svgz', 'xml',
+  'exe', 'dll', 'msi', 'bat', 'cmd', 'sh', 'ps1', 'com', 'scr', 'apk', 'jar', 'app',
+]);
+const BLOCKED_MIME_TYPES = new Set([
+  'text/html',
+  'application/xhtml+xml',
+  'image/svg+xml',
+  'application/x-msdownload',
+  'application/x-sh',
+  'application/java-archive',
+]);
+
+function isBlockedFileType(fileName: string, mimeType: string): boolean {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+  return BLOCKED_EXTENSIONS.has(ext) || BLOCKED_MIME_TYPES.has(mimeType.toLowerCase());
+}
+
 export async function uploadAttachment(taskId: string, formData: FormData) {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return { success: false, error: 'Task not found' };
@@ -20,6 +41,9 @@ export async function uploadAttachment(taskId: string, formData: FormData) {
   }
   if (file.size > MAX_FILE_SIZE) {
     return { success: false, error: 'Files must be 10MB or smaller' };
+  }
+  if (isBlockedFileType(file.name, file.type)) {
+    return { success: false, error: 'This file type is not allowed.' };
   }
 
   const pathname = `tasks/${taskId}/${Date.now()}-${file.name}`;

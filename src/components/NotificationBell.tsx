@@ -21,7 +21,7 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="relative rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        className="relative rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
         aria-label="Notifications"
       >
         <BellIcon />
@@ -35,8 +35,8 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:shadow-slate-950/50">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 dark:border-slate-800">
+          <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-600 dark:bg-slate-800 dark:shadow-slate-900/50">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 dark:border-slate-700">
               <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Notifications</span>
               {unreadCount > 0 && (
                 <button
@@ -59,7 +59,7 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
                     if (!n.read) markNotificationRead(n.id);
                     setOpen(false);
                   }}
-                  className={`block border-b border-slate-50 px-4 py-3 text-sm hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800 ${
+                  className={`block border-b border-slate-50 px-4 py-3 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700 ${
                     n.read ? 'text-slate-500 dark:text-slate-400' : 'bg-brand-50/50 font-medium text-slate-800 dark:bg-brand-950/50 dark:text-slate-200'
                   }`}
                 >

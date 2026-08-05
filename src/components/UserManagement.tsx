@@ -71,9 +71,9 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
 
       {error && <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-      <div className="mt-6 overflow-hidden overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-          <thead className="bg-slate-50 dark:bg-slate-900/60">
+      <div className="mt-6 overflow-hidden overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
+        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
+          <thead className="bg-slate-50 dark:bg-slate-800/60">
             <tr>
               <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Name
@@ -92,13 +92,13 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
+          <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800">
             {users.map((user) => (
               <tr key={user.id}>
                 <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900 dark:text-slate-100">
                   {user.name}
                   {user.id === currentUserId && (
-                    <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500 dark:bg-slate-700 dark:text-slate-400">
                       You
                     </span>
                   )}
@@ -112,7 +112,7 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
                     value={user.role}
                     disabled={user.id === currentUserId || pendingId === user.id}
                     onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                    className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                    className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-60 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200"
                   >
                     {ROLES.map((role) => (
                       <option key={role} value={role}>

@@ -38,7 +38,7 @@ export function ProjectsListClient({ projects, isAdmin }: { projects: ProjectSum
           <Link
             key={project.id}
             href={`/projects/${project.id}`}
-            className="rounded-lg border border-slate-200 bg-white p-5 hover:border-brand-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-900"
+            className="rounded-lg border border-slate-200 bg-white p-5 hover:border-brand-300 hover:shadow-sm dark:border-slate-600 dark:bg-slate-800"
           >
             <h2 className="font-semibold text-slate-900 dark:text-slate-100">{project.name}</h2>
             {project.description && (
@@ -52,7 +52,7 @@ export function ProjectsListClient({ projects, isAdmin }: { projects: ProjectSum
         ))}
 
         {projects.length === 0 && (
-          <div className="col-span-full rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-600 dark:text-slate-500">
+          <div className="col-span-full rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-500 dark:text-slate-500">
             {isAdmin
               ? 'No projects yet. Create your first project to get started.'
               : "You haven't been added to any projects yet. Ask an admin to invite you."}

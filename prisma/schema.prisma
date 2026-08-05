@@ -394,6 +394,9 @@ model Task {
   @@index([parentTaskId])
   @@index([deletedAt])
   @@index([deletedById])
+  // Covers the dashboard/digest/calendar shape of `deletedAt: null` + a dueDate range or sort,
+  // which otherwise falls back to a full scan of every non-deleted task as the table grows.
+  @@index([deletedAt, dueDate])
 }
 
 /// The recipe, not the meals: one row per recurring task definition. A nightly job
@@ -532,6 +535,13 @@ model AutomationRule {
   newTaskAssigneeId  String?
   newTaskAssignee    User?     @relation("AutomationNewTaskAssignee", fields: [newTaskAssigneeId], references: [id])
 
+  // Idempotency claim for the DUE_DATE_APPROACHING cron only (see /api/cron/automations): the day
+  // (midnight, local server date) this rule last fired via that cron, claimed atomically so a
+  // duplicate Vercel Cron invocation can't fire the same rule twice in one day. Event-triggered
+  // rules (STATUS_CHANGED/ASSIGNEE_CHANGED, via runTaskAutomations) don't use this field — those
+  // are legitimately allowed to fire more than once a day.
+  lastDueDateFiredAt DateTime?
+
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   runs      AutomationRun[]
@@ -626,10 +636,14 @@ model IntakeSubmission {
   submitterName  String
   submitterEmail String?
   answers        Json
+  // Client IP at submission time, used only to rate-limit a single public/unauthenticated form
+  // (see submitIntakeForm) — never displayed.
+  ipAddress      String?
   createdAt      DateTime   @default(now())
 
   @@index([formId])
   @@index([taskId])
+  @@index([formId, ipAddress, createdAt])
 }
 
 /// An admin-built, optionally team-scoped blueprint of stages/tasks/subtasks. Can be flagged

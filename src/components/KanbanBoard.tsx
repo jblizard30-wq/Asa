@@ -118,7 +118,7 @@ export function KanbanBoard({
     <DragDropContext onDragEnd={handleDragEnd}>
       <div className="flex gap-4 overflow-x-auto pb-4">
         {sections.map((section) => (
-          <div key={section.id} className="w-72 shrink-0 rounded-lg bg-slate-100 p-3 dark:bg-slate-800">
+          <div key={section.id} className="w-72 shrink-0 rounded-lg bg-slate-100 p-3 dark:bg-slate-700">
             <div className="mb-2 flex items-center justify-between px-1">
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{section.name}</h3>
               <span className="text-xs text-slate-400 dark:text-slate-500">{section.tasks.length}</span>
@@ -146,7 +146,7 @@ export function KanbanBoard({
                             {...dragProvided.dragHandleProps}
                             onClick={() => setOpenTaskId(task.id)}
                             title={task.locked ? `Locked until ${task.blockedByTitles.map((t) => `"${t}"`).join(', ')} done` : undefined}
-                            className={`cursor-pointer rounded-md border border-slate-200 bg-white p-3 shadow-sm hover:border-brand-300 dark:border-slate-700 dark:bg-slate-900 ${
+                            className={`cursor-pointer rounded-md border border-slate-200 bg-white p-3 shadow-sm hover:border-brand-300 dark:border-slate-600 dark:bg-slate-800 ${
                               snapshot.isDragging ? 'shadow-md' : ''
                             } ${task.locked ? 'opacity-60' : ''}`}
                           >

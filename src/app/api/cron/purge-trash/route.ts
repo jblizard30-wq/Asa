@@ -1,4 +1,5 @@
 import { purgeExpiredTrash } from '@/lib/actions/trash';
+import { isAuthorizedCronRequest } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,8 +8,7 @@ export const dynamic = 'force-dynamic';
  * user-session authenticated since it's invoked externally — guarded by a shared secret instead.
  */
 export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isAuthorizedCronRequest(request)) {
     return new Response('Unauthorized', { status: 401 });
   }
 

@@ -78,7 +78,7 @@ export function NotificationPreferencesForm({
           {types.map((type) => (
             <label
               key={type}
-              className="flex items-center justify-between gap-4 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"
+              className="flex items-center justify-between gap-4 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-600"
             >
               <span className="text-slate-700 dark:text-slate-300">{TYPE_LABELS[type] ?? type}</span>
               <input
@@ -113,7 +113,7 @@ export function NotificationPreferencesForm({
         <label className="mt-4 flex items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300">
           <span>Send around</span>
           <select
-            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
             value={preferredDigestHour}
             disabled={digestFrequency === 'OFF'}
             onChange={(e) => handlePreferredHourChange(Number(e.target.value))}

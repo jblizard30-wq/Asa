@@ -160,7 +160,7 @@ export function StatTile({
         ? 'text-green-600 dark:text-green-400'
         : 'text-slate-900 dark:text-slate-100';
   return (
-    <div className={`rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 ${compact ? 'p-3' : 'p-4'}`}>
+    <div className={`rounded-lg border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800 ${compact ? 'p-3' : 'p-4'}`}>
       <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">{label}</p>
       <p className={`mt-1 font-semibold ${toneClass} ${compact ? 'text-lg' : 'text-2xl'}`}>{value}</p>
     </div>
@@ -180,7 +180,7 @@ export function BreakdownCard({
 }) {
   const total = items.reduce((sum, item) => sum + item.count, 0);
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+    <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-slate-800">
       <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</h3>
       {total === 0 ? (
         <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">No tasks in scope yet.</p>
@@ -196,7 +196,7 @@ export function BreakdownCard({
                   <span className="text-slate-400 dark:text-slate-500">{item.count}</span>
                 </div>
                 <div
-                  className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
+                  className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700"
                   title={`${label}: ${item.count} (${pct}%)`}
                 >
                   <div className={`h-full rounded-full ${colors[item.key] ?? 'bg-slate-400'}`} style={{ width: `${pct}%` }} />
@@ -214,7 +214,7 @@ function CompletionBar({ rate }: { rate: number }) {
   const pct = Math.round(rate * 100);
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
         <div className="h-full rounded-full bg-brand-500" style={{ width: `${pct}%` }} />
       </div>
       <span className="w-9 text-right text-xs tabular-nums text-slate-500 dark:text-slate-400">{pct}%</span>
@@ -227,16 +227,16 @@ const MEMBER_TABLE_HEADERS = ['Name', 'Open', 'Overdue', 'Due Soon', 'Completed 
 function MemberTable({ members }: { members: MemberStats[] }) {
   if (members.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-600 dark:text-slate-500">
+      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-500 dark:text-slate-500">
         No team members in scope yet.
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-        <thead className="bg-slate-50 dark:bg-slate-900/60">
+    <div className="overflow-hidden overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
+      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
+        <thead className="bg-slate-50 dark:bg-slate-800/60">
           <tr>
             {MEMBER_TABLE_HEADERS.map((header) => (
               <th
@@ -248,7 +248,7 @@ function MemberTable({ members }: { members: MemberStats[] }) {
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
+        <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800">
           {members.map((member) => (
             <tr key={member.userId}>
               <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -294,16 +294,16 @@ interface GroupStatsRow {
 function GroupStatsTable({ rows, emptyMessage }: { rows: GroupStatsRow[]; emptyMessage: string }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-600 dark:text-slate-500">
+      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-500 dark:text-slate-500">
         {emptyMessage}
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-        <thead className="bg-slate-50 dark:bg-slate-900/60">
+    <div className="overflow-hidden overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
+      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-600">
+        <thead className="bg-slate-50 dark:bg-slate-800/60">
           <tr>
             {['Name', 'Open', 'Overdue', 'Done', 'Completion'].map((header) => (
               <th
@@ -315,7 +315,7 @@ function GroupStatsTable({ rows, emptyMessage }: { rows: GroupStatsRow[]; emptyM
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
+        <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800">
           {rows.map((row) => (
             <tr key={row.id}>
               <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -389,16 +389,16 @@ export function TaskListCard({
         : 'text-slate-400 dark:text-slate-500';
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+    <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800">
       {!hideHeader && (
-        <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+        <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</h3>
         </div>
       )}
       {entries.length === 0 ? (
         <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">{emptyMessage}</p>
       ) : (
-        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+        <ul className="divide-y divide-slate-100 dark:divide-slate-700">
           {entries.map((entry) => (
             <li key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">

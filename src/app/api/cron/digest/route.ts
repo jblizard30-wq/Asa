@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { sendNotificationEmail } from '@/lib/email';
 import { nextLocalClockInstant, startOfLocalDay } from '@/lib/digestSchedule';
+import { isAuthorizedCronRequest } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,8 +94,7 @@ async function loadProjectSummaries(projectIds: string[], now: Date) {
  * /api/cron/automations rather than a user session.
  */
 export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isAuthorizedCronRequest(request)) {
     return new Response('Unauthorized', { status: 401 });
   }
 
@@ -182,13 +182,20 @@ export async function GET(request: Request) {
     if (projectSummaries.length > 0) subjectParts.push(`${projectSummaries.length} project summar${projectSummaries.length === 1 ? 'y' : 'ies'}`);
     if (notifications.length > 0) subjectParts.push(`${notifications.length} update${notifications.length === 1 ? '' : 's'}`);
 
+    // Atomic compare-and-swap claim before sending — never "send then stamp". If a concurrent
+    // cron invocation already advanced lastDigestSentAt off the value we read it as, this update
+    // matches zero rows and we skip, instead of mailing the same digest twice.
+    const claim = await prisma.user.updateMany({
+      where: { id: user.id, lastDigestSentAt: user.lastDigestSentAt },
+      data: { lastDigestSentAt: now },
+    });
+    if (claim.count === 0) continue;
+
     await sendNotificationEmail(
       user.email,
       `${frequencyLabel} digest: ${subjectParts.join(', ')}`,
       sections.join('\n')
     );
-
-    await prisma.user.update({ where: { id: user.id }, data: { lastDigestSentAt: now } });
     sent++;
   }
 

@@ -26,7 +26,7 @@ export function InviteMemberModal({ projectId, onClose }: { projectId: string; o
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900 dark:shadow-slate-950/50" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800 dark:shadow-slate-900/50" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Invite a member</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Enter the email of a staff member who already has an account.
@@ -37,7 +37,7 @@ export function InviteMemberModal({ projectId, onClose }: { projectId: string; o
             type="email"
             required
             placeholder="name@example.org"
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200"
           />
           <button
             type="submit"

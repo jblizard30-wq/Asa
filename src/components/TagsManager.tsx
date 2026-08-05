@@ -62,10 +62,10 @@ export function TagsManager({
   return (
     <div className="fixed inset-0 z-30 flex items-start justify-center bg-slate-900/40 p-4 pt-16 sm:pt-24" onClick={onClose}>
       <div
-        className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-900"
+        className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-700">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Tags</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Close">
             ✕
@@ -81,7 +81,7 @@ export function TagsManager({
           <div className="mt-4 space-y-2">
             {tags.length === 0 && <p className="text-sm text-slate-400">No tags yet.</p>}
             {tags.map((tag) => (
-              <div key={tag.id} className="flex items-center gap-2 rounded-md border border-slate-200 p-2 dark:border-slate-700">
+              <div key={tag.id} className="flex items-center gap-2 rounded-md border border-slate-200 p-2 dark:border-slate-600">
                 <div className="flex shrink-0 gap-1">
                   {TAG_COLORS.map((c) => (
                     <button
@@ -90,7 +90,7 @@ export function TagsManager({
                       onClick={() => handleColorChange(tag.id, c)}
                       aria-label={`Set color to ${c}`}
                       className={`h-4 w-4 rounded-full ${TAG_COLOR_DOT_STYLES[c]} ${
-                        tag.color === c ? 'ring-2 ring-offset-1 ring-slate-400 dark:ring-offset-slate-900' : ''
+                        tag.color === c ? 'ring-2 ring-offset-1 ring-slate-400 dark:ring-offset-slate-800' : ''
                       }`}
                     />
                   ))}
@@ -99,7 +99,7 @@ export function TagsManager({
                   defaultValue={tag.name}
                   onChange={(e) => setRenameById((prev) => ({ ...prev, [tag.id]: e.target.value }))}
                   onBlur={() => handleRename(tag.id, tag.name)}
-                  className="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm text-slate-800 hover:border-slate-200 focus:border-slate-300 focus:outline-none dark:text-slate-200 dark:hover:border-slate-700"
+                  className="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm text-slate-800 hover:border-slate-200 focus:border-slate-300 focus:outline-none dark:text-slate-200 dark:hover:border-slate-600"
                 />
                 <button
                   onClick={() => handleDelete(tag.id)}
@@ -111,14 +111,14 @@ export function TagsManager({
             ))}
           </div>
 
-          <div className="mt-6 border-t border-slate-100 pt-4 dark:border-slate-800">
+          <div className="mt-6 border-t border-slate-100 pt-4 dark:border-slate-700">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Add a tag</h3>
             <div className="mt-2 flex flex-col gap-2">
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Tag name"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
               />
               <div className="flex flex-wrap gap-1.5">
                 {TAG_COLORS.map((c) => (
@@ -128,7 +128,7 @@ export function TagsManager({
                     onClick={() => setColor(c)}
                     aria-label={`Choose ${c}`}
                     className={`h-6 w-6 rounded-full ${TAG_COLOR_DOT_STYLES[c]} ${
-                      color === c ? 'ring-2 ring-offset-1 ring-slate-400 dark:ring-offset-slate-900' : ''
+                      color === c ? 'ring-2 ring-offset-1 ring-slate-400 dark:ring-offset-slate-800' : ''
                     }`}
                   />
                 ))}

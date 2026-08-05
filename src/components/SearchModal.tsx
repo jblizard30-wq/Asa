@@ -75,12 +75,12 @@ export function SearchModal() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-400 hover:border-slate-300 hover:text-slate-600 dark:border-slate-700 dark:text-slate-500 dark:hover:border-slate-600 dark:hover:text-slate-300"
+        className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-400 hover:border-slate-300 hover:text-slate-600 dark:border-slate-600 dark:text-slate-500 dark:hover:border-slate-500 dark:hover:text-slate-300"
         aria-label="Search"
       >
         <SearchIcon />
         <span className="hidden sm:inline">Search…</span>
-        <kbd className="hidden rounded border border-slate-200 px-1 text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500 sm:inline">
+        <kbd className="hidden rounded border border-slate-200 px-1 text-xs text-slate-400 dark:border-slate-600 dark:text-slate-500 sm:inline">
           ⌘K
         </kbd>
       </button>
@@ -91,10 +91,10 @@ export function SearchModal() {
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-xl dark:bg-slate-900"
+            className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-xl dark:bg-slate-800"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+            <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-700">
               <SearchIcon />
               <input
                 ref={inputRef}
@@ -127,7 +127,7 @@ export function SearchModal() {
                     <button
                       key={p.key}
                       onClick={() => goToPage(p.href)}
-                      className="block w-full truncate px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className="block w-full truncate px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
                     >
                       {p.label}
                     </button>
@@ -136,7 +136,7 @@ export function SearchModal() {
               )}
 
               {results.tasks.length > 0 && (
-                <div className="border-t border-slate-100 py-2 dark:border-slate-800">
+                <div className="border-t border-slate-100 py-2 dark:border-slate-700">
                   <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                     Tasks
                   </p>
@@ -144,7 +144,7 @@ export function SearchModal() {
                     <button
                       key={t.id}
                       onClick={() => openTask(t.id)}
-                      className="flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+                      className="flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
                     >
                       <span className="truncate text-slate-700 dark:text-slate-200">{t.title}</span>
                       <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
@@ -156,7 +156,7 @@ export function SearchModal() {
               )}
 
               {results.projects.length > 0 && (
-                <div className="border-t border-slate-100 py-2 dark:border-slate-800">
+                <div className="border-t border-slate-100 py-2 dark:border-slate-700">
                   <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                     Projects
                   </p>
@@ -164,7 +164,7 @@ export function SearchModal() {
                     <button
                       key={p.id}
                       onClick={() => goToProject(p.id)}
-                      className="block w-full truncate px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className="block w-full truncate px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
                     >
                       {p.name}
                     </button>
@@ -173,7 +173,7 @@ export function SearchModal() {
               )}
 
               {results.comments.length > 0 && (
-                <div className="border-t border-slate-100 py-2 dark:border-slate-800">
+                <div className="border-t border-slate-100 py-2 dark:border-slate-700">
                   <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                     Comments
                   </p>
@@ -181,7 +181,7 @@ export function SearchModal() {
                     <button
                       key={c.id}
                       onClick={() => openTask(c.taskId)}
-                      className="block w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+                      className="block w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
                     >
                       <p className="truncate text-slate-700 dark:text-slate-200">{c.body}</p>
                       <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">

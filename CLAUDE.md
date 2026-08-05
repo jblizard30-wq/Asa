@@ -28,5 +28,4 @@ These hold across the grid view, recurring tasks, and reminders features. Preser
 
 ## Known gaps (as of 2026-08-04)
 
-- The digest cron (`src/app/api/cron/digest/route.ts`) batches unread app *notifications*, not a scan of tasks due-today/overdue. A task with no fresh notification event won't appear in the digest even if it's due today.
 - Push/SMS reminder channels aren't implemented (`ReminderChannel` is EMAIL-only) — deferred intentionally, not an oversight.

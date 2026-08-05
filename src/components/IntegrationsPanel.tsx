@@ -42,7 +42,7 @@ export function IntegrationsPanel({
         return (
           <div
             key={provider.provider}
-            className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"
+            className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-slate-800"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -61,7 +61,7 @@ export function IntegrationsPanel({
                   <button
                     onClick={() => handleDisconnect(connection.id)}
                     disabled={isPending}
-                    className="shrink-0 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                    className="shrink-0 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-500 dark:text-slate-300 dark:hover:bg-slate-700"
                   >
                     Disconnect
                   </button>
@@ -76,7 +76,7 @@ export function IntegrationsPanel({
             </div>
 
             {connection && (
-              <p className="mt-3 rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+              <p className="mt-3 rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
                 Sync is not yet active. Connecting stores access for a future sync feature, but no events are
                 imported or exported today.
               </p>

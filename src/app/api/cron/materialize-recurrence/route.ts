@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { materializePeriodicOccurrence } from '@/lib/materializeRecurrence';
+import { isAuthorizedCronRequest } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,8 +17,7 @@ const MAX_CATCHUP_PER_RECURRENCE = 366;
  * from a retried run a no-op rather than a double-created task.
  */
 export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isAuthorizedCronRequest(request)) {
     return new Response('Unauthorized', { status: 401 });
   }
 

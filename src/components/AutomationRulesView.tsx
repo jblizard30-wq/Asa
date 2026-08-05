@@ -115,14 +115,14 @@ export function AutomationRulesView({
 
       <div className="mt-6 space-y-3">
         {rules.length === 0 && (
-          <p className="rounded-md border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          <p className="rounded-md border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-600 dark:text-slate-400">
             No automation rules yet for this project.
           </p>
         )}
         {rules.map((rule) => (
           <div
             key={rule.id}
-            className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"
+            className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-slate-800"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -163,7 +163,7 @@ export function AutomationRulesView({
             </div>
 
             {expandedId === rule.id && (
-              <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+              <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-700">
                 {rule.runs.length === 0 ? (
                   <p className="text-xs text-slate-400 dark:text-slate-500">No runs yet.</p>
                 ) : (

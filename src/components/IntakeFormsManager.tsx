@@ -142,7 +142,7 @@ export function IntakeFormsManager({
 
       <div className="mt-6 space-y-4">
         {forms.length === 0 && (
-          <p className="rounded-md border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          <p className="rounded-md border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-600 dark:text-slate-400">
             No intake forms yet for this project.
           </p>
         )}
@@ -152,7 +152,7 @@ export function IntakeFormsManager({
           return (
             <div
               key={form.id}
-              className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"
+              className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-slate-800"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -184,19 +184,19 @@ export function IntakeFormsManager({
                 </div>
               </div>
 
-              <div className="mt-3 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 dark:bg-slate-800">
+              <div className="mt-3 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 dark:bg-slate-700">
                 <code className="min-w-0 flex-1 truncate text-xs text-slate-600 dark:text-slate-300">
                   /forms/{form.slug}
                 </code>
                 <button
                   onClick={() => handleCopyLink(form)}
-                  className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-white dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                  className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-white dark:border-slate-500 dark:text-slate-300 dark:hover:bg-slate-600"
                 >
                   {copiedId === form.id ? 'Copied!' : 'Copy link'}
                 </button>
               </div>
 
-              <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+              <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-700">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                   Fields
                 </h3>
@@ -204,7 +204,7 @@ export function IntakeFormsManager({
                   {form.fields.map((field) => (
                     <div
                       key={field.id}
-                      className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-1.5 text-sm dark:border-slate-700"
+                      className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-1.5 text-sm dark:border-slate-600"
                     >
                       <span className="text-slate-700 dark:text-slate-200">
                         {field.label}{' '}
@@ -233,12 +233,12 @@ export function IntakeFormsManager({
                     value={draft.label}
                     onChange={(e) => setFieldDraft(form.id, { label: e.target.value })}
                     placeholder="Question label"
-                    className="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800"
+                    className="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-700"
                   />
                   <select
                     value={draft.type}
                     onChange={(e) => setFieldDraft(form.id, { type: e.target.value })}
-                    className="rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800"
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-700"
                   >
                     {Object.entries(FIELD_TYPE_LABELS).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -251,7 +251,7 @@ export function IntakeFormsManager({
                       value={draft.optionsText}
                       onChange={(e) => setFieldDraft(form.id, { optionsText: e.target.value })}
                       placeholder="Options, comma separated"
-                      className="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800"
+                      className="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-700"
                     />
                   )}
                   <label className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
@@ -265,7 +265,7 @@ export function IntakeFormsManager({
                   <button
                     onClick={() => handleAddField(form.id)}
                     disabled={!draft.label.trim()}
-                    className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-500 dark:text-slate-300 dark:hover:bg-slate-700"
                   >
                     Add field
                   </button>
@@ -273,7 +273,7 @@ export function IntakeFormsManager({
               </div>
 
               {form.recentSubmissions.length > 0 && (
-                <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-700">
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                     Recent submissions
                   </h3>

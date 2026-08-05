@@ -4,8 +4,9 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { WebhookEvent } from '@prisma/client';
-import { requireSession } from '@/lib/permissions';
+import { requireAdmin } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
+import { assertPublicHttpUrl } from '@/lib/urlSafety';
 
 const createWebhookSchema = z.object({
   url: z.string().url('Enter a valid URL'),
@@ -13,11 +14,19 @@ const createWebhookSchema = z.object({
   secret: z.string().min(1).optional(),
 });
 
+// Webhooks fire on every matching event across the whole org (not scoped to the creator's own
+// projects), so creating one is an admin-level action, not a per-user convenience.
 export async function createWebhook(url: string, events: WebhookEvent[], secret?: string) {
-  const session = await requireSession();
+  const session = await requireAdmin();
   const parsed = createWebhookSchema.safeParse({ url, events, secret });
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  }
+
+  try {
+    await assertPublicHttpUrl(parsed.data.url);
+  } catch (err) {
+    return { success: false as const, error: err instanceof Error ? err.message : 'Invalid URL' };
   }
 
   const resolvedSecret = parsed.data.secret ?? crypto.randomBytes(24).toString('hex');
@@ -35,10 +44,11 @@ export async function createWebhook(url: string, events: WebhookEvent[], secret?
   return { success: true as const, id: webhook.id, secret: resolvedSecret };
 }
 
+// Webhooks are org-wide, not per-creator, so listing/toggling/deleting them is admin-level just
+// like creating one — matches the requireAdmin() gate in createWebhook above.
 export async function listWebhooks() {
-  const session = await requireSession();
+  await requireAdmin();
   const webhooks = await prisma.webhook.findMany({
-    where: { createdById: session.user.id },
     orderBy: { createdAt: 'desc' },
     select: { id: true, url: true, events: true, isActive: true, createdAt: true },
   });
@@ -52,9 +62,9 @@ export async function listWebhooks() {
 }
 
 export async function toggleWebhook(id: string) {
-  const session = await requireSession();
+  await requireAdmin();
   const webhook = await prisma.webhook.findUnique({ where: { id } });
-  if (!webhook || webhook.createdById !== session.user.id) {
+  if (!webhook) {
     return { success: false, error: 'Webhook not found.' };
   }
 
@@ -64,9 +74,9 @@ export async function toggleWebhook(id: string) {
 }
 
 export async function deleteWebhook(id: string) {
-  const session = await requireSession();
+  await requireAdmin();
   const webhook = await prisma.webhook.findUnique({ where: { id } });
-  if (!webhook || webhook.createdById !== session.user.id) {
+  if (!webhook) {
     return { success: false, error: 'Webhook not found.' };
   }
 

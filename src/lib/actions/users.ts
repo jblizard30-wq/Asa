@@ -141,6 +141,14 @@ export async function deleteUser(userId: string) {
       data: { createdById: session.user.id },
     }),
     prisma.workflow.updateMany({ where: { createdById: parsed.data.userId }, data: { createdById: session.user.id } }),
+    prisma.taskGuestLink.updateMany({
+      where: { createdById: parsed.data.userId },
+      data: { createdById: session.user.id },
+    }),
+    prisma.scheduledReminder.updateMany({
+      where: { createdById: parsed.data.userId },
+      data: { createdById: session.user.id },
+    }),
     prisma.user.delete({ where: { id: parsed.data.userId } }),
   ]);
 

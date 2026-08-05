@@ -47,8 +47,8 @@ export function WorkflowsManager({ workflows, teams }: { workflows: WorkflowSumm
             className={`rounded-lg border p-4 text-left transition ${
               selectedId === workflow.id
                 ? 'border-brand-400 ring-1 ring-brand-400'
-                : 'border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600'
-            } bg-white dark:bg-slate-900`}
+                : 'border-slate-200 hover:border-slate-300 dark:border-slate-600 dark:hover:border-slate-500'
+            } bg-white dark:bg-slate-800`}
           >
             <div className="flex items-start justify-between gap-2">
               <h2 className="font-semibold text-slate-900 dark:text-slate-100">{workflow.name}</h2>
@@ -70,7 +70,7 @@ export function WorkflowsManager({ workflows, teams }: { workflows: WorkflowSumm
         ))}
 
         {workflows.length === 0 && (
-          <div className="col-span-full rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-700">
+          <div className="col-span-full rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-600">
             No workflows yet. Create one to get started.
           </div>
         )}

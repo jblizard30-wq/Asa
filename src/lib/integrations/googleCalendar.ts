@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { decryptToken, encryptToken } from '@/lib/tokenCrypto';
 
 interface GoogleCalendarEvent {
   id: string;
@@ -40,18 +41,18 @@ export async function syncCalendarEvents(connectionId: string): Promise<{ synced
     return { synced: 0 };
   }
 
-  let accessToken = connection.accessToken;
+  let accessToken = decryptToken(connection.accessToken);
 
   const tokenExpired = connection.tokenExpiresAt ? connection.tokenExpiresAt.getTime() <= Date.now() : false;
   if (tokenExpired && connection.refreshToken) {
-    const refreshed = await refreshAccessToken(connection.refreshToken);
+    const refreshed = await refreshAccessToken(decryptToken(connection.refreshToken));
     if (!refreshed) return { synced: 0 };
 
     accessToken = refreshed.accessToken;
     await prisma.calendarConnection.update({
       where: { id: connection.id },
       data: {
-        accessToken: refreshed.accessToken,
+        accessToken: encryptToken(refreshed.accessToken),
         tokenExpiresAt: new Date(Date.now() + refreshed.expiresIn * 1000),
       },
     });

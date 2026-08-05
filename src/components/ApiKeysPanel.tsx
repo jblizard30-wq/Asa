@@ -49,7 +49,7 @@ export function ApiKeysPanel({ initialKeys }: { initialKeys: ApiKeySummary[] }) 
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Key name (e.g. Zapier integration)"
-          className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-100"
         />
         <button
           onClick={handleCreate}
@@ -67,12 +67,12 @@ export function ApiKeysPanel({ initialKeys }: { initialKeys: ApiKeySummary[] }) 
             Copy this key now &mdash; it won&apos;t be shown again.
           </p>
           <div className="mt-2 flex items-center gap-2">
-            <code className="flex-1 overflow-x-auto rounded-md bg-white px-2 py-1.5 text-xs text-slate-800 dark:bg-slate-900 dark:text-slate-200">
+            <code className="flex-1 overflow-x-auto rounded-md bg-white px-2 py-1.5 text-xs text-slate-800 dark:bg-slate-800 dark:text-slate-200">
               {revealedKey}
             </code>
             <button
               onClick={() => navigator.clipboard.writeText(revealedKey)}
-              className="shrink-0 rounded-md border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-white dark:border-slate-600 dark:text-slate-300"
+              className="shrink-0 rounded-md border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-white dark:border-slate-500 dark:text-slate-300"
             >
               Copy
             </button>
@@ -87,7 +87,7 @@ export function ApiKeysPanel({ initialKeys }: { initialKeys: ApiKeySummary[] }) 
         {initialKeys.map((key) => (
           <div
             key={key.id}
-            className="flex items-center justify-between gap-4 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"
+            className="flex items-center justify-between gap-4 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-600"
           >
             <div>
               <p className="font-medium text-slate-700 dark:text-slate-300">

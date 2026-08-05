@@ -13,7 +13,7 @@ interface NavbarProps {
 
 export function Navbar({ userName, notifications }: NavbarProps) {
   return (
-    <header className="border-b border-slate-200 bg-white print:hidden dark:border-slate-800 dark:bg-slate-900">
+    <header className="border-b border-slate-200 bg-white print:hidden dark:border-slate-700 dark:bg-slate-800">
       <div className="flex items-center justify-between px-4 py-3">
         <Link href="/my-tasks" className="text-base font-semibold text-brand-700 dark:text-brand-300">
           Church Tasks

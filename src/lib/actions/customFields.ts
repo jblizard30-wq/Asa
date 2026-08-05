@@ -83,6 +83,12 @@ export async function deleteCustomField(fieldId: string) {
 export async function reorderCustomFields(projectId: string, orderedFieldIds: string[]) {
   await requireProjectMember(projectId);
 
+  const fields = await prisma.customField.findMany({ where: { projectId }, select: { id: true } });
+  const validIds = new Set(fields.map((f) => f.id));
+  if (orderedFieldIds.length === 0 || !orderedFieldIds.every((id) => validIds.has(id))) {
+    return { success: false, error: 'Field not found' };
+  }
+
   await prisma.$transaction(
     orderedFieldIds.map((id, index) =>
       prisma.customField.update({ where: { id }, data: { order: index } }),

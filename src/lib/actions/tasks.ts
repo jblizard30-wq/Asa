@@ -303,6 +303,9 @@ export async function moveTask(taskId: string, destinationSectionId: string, des
 
   const destinationSection = await prisma.section.findUnique({ where: { id: destinationSectionId } });
   if (!destinationSection) return { success: false, error: 'Section not found' };
+  if (destinationSection.projectId !== task.projectId) {
+    return { success: false, error: 'That section belongs to a different project' };
+  }
 
   const statusForSection = (name: string) => {
     const normalized = name.trim().toLowerCase();
@@ -591,11 +594,14 @@ export async function bulkUpdateTasks(taskIds: string[], input: BulkUpdateInput)
   }
 
   if (assigneeIds !== undefined) {
-    await Promise.all(
-      taskIds.map((id) =>
-        prisma.task.update({ where: { id }, data: { assignees: { set: assigneeIds.map((uid) => ({ id: uid })) } } }),
-      ),
-    );
+    const activeTaskIds = tasks.filter((t) => !t.deletedAt).map((t) => t.id);
+    if (activeTaskIds.length > 0) {
+      await prisma.$transaction(
+        activeTaskIds.map((id) =>
+          prisma.task.update({ where: { id }, data: { assignees: { set: assigneeIds.map((uid) => ({ id: uid })) } } }),
+        ),
+      );
+    }
   }
 
   for (const projectId of projectIds) {
@@ -660,7 +666,9 @@ export async function batchUpdateTaskFields(edits: GridBatchEdit[]) {
   const taskIds = parsed.data.map((e) => e.taskId);
   const tasks = await prisma.task.findMany({ where: { id: { in: taskIds } } });
   if (tasks.length === 0) return { success: false, error: 'Tasks not found' };
-  const validIds = new Set(tasks.map((t) => t.id));
+  // Trashed tasks are silently dropped from the batch, same as any other taskId that doesn't
+  // resolve to a live task — trash is meant to be a safe holding area, not still-editable.
+  const validIds = new Set(tasks.filter((t) => !t.deletedAt).map((t) => t.id));
 
   const projectIds = new Set(tasks.map((t) => t.projectId));
   for (const projectId of projectIds) {

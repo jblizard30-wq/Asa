@@ -26,7 +26,7 @@ export function NewUserModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
+        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">New user</h2>
@@ -40,7 +40,7 @@ export function NewUserModal({ onClose }: { onClose: () => void }) {
               name="name"
               required
               placeholder="e.g. Jane Smith"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200"
             />
           </div>
           <div>
@@ -53,7 +53,7 @@ export function NewUserModal({ onClose }: { onClose: () => void }) {
               type="email"
               required
               placeholder="jane@example.org"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200"
             />
           </div>
           <div>
@@ -67,7 +67,7 @@ export function NewUserModal({ onClose }: { onClose: () => void }) {
               required
               minLength={8}
               placeholder="At least 8 characters"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200"
             />
           </div>
           <div>
@@ -78,7 +78,7 @@ export function NewUserModal({ onClose }: { onClose: () => void }) {
               id="role"
               name="role"
               defaultValue="USER"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200"
             >
               {ROLES.map((role) => (
                 <option key={role} value={role}>
@@ -94,7 +94,7 @@ export function NewUserModal({ onClose }: { onClose: () => void }) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
             >
               Cancel
             </button>

@@ -11,7 +11,14 @@ import {
   type ReactNode,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DraggableProvided,
+  type DraggableStateSnapshot,
+  type DropResult,
+} from '@hello-pangea/dnd';
 import {
   batchCreateTasks,
   batchUpdateTaskFields,
@@ -45,6 +52,15 @@ type GridSelectionState = {
   focus: CellPos | null;
   editing: CellPos | null;
 };
+
+/**
+ * Excel-style fill handle: dragging the handle at the bottom-right corner of the
+ * current selection extends `endRow` downward. `minCol`/`maxCol` and the source row
+ * (`startRow`) are pinned from the selection at drag-start and don't change mid-drag —
+ * only how far down the drag has reached does. Lives outside `GridSelectionState`
+ * since it tracks a separate, transient in-progress gesture, not the committed selection.
+ */
+type FillDragState = { startRow: number; endRow: number; minCol: number; maxCol: number };
 
 const COL = {
   TITLE: 0,
@@ -186,14 +202,28 @@ function mergeEdit(map: Map<string, GridBatchEdit>, taskId: string, key: ColumnE
 export function GridView({
   projectId,
   sections: initialSections,
-  members,
-  allTags,
+  members = [],
+  allTags = [],
+  membersByProjectId,
+  tagsByProjectId,
+  mode = 'project',
   filtersActive = false,
 }: {
-  projectId: string;
+  projectId?: string;
   sections: KanbanSection[];
-  members: { id: string; name: string }[];
-  allTags: TagInfo[];
+  members?: { id: string; name: string }[];
+  allTags?: TagInfo[];
+  /** Cross-project mode only: each "section" is really one project (id = projectId), so its own members/tags come from these maps instead of the flat `members`/`allTags` lists. */
+  membersByProjectId?: Record<string, { id: string; name: string }[]>;
+  tagsByProjectId?: Record<string, TagInfo[]>;
+  /**
+   * 'cross-project' powers the unified My Tasks grid: rows span many projects, so row
+   * drag-to-reorder (which reassigns a project-scoped sectionId) and paste-creates-new-rows
+   * (which needs a single target sectionId) both have no coherent meaning and are disabled.
+   * Everything else — cell selection, keyboard nav, copy, fill-down, paste-to-edit-existing-cells,
+   * undo — works unchanged since it already just operates on `sections` generically.
+   */
+  mode?: 'project' | 'cross-project';
   filtersActive?: boolean;
 }) {
   const router = useRouter();
@@ -204,6 +234,10 @@ export function GridView({
   const [selection, setSelection] = useState<GridSelectionState>({ anchor: null, focus: null, editing: null });
   const [editSeed, setEditSeed] = useState<string | null>(null);
   const [cellErrors, setCellErrors] = useState<Map<string, CellError>>(new Map());
+  const [fillDrag, setFillDragState] = useState<FillDragState | null>(null);
+  // Mirrors `fillDrag` so the window-level mouseup listener (added once, below) always
+  // reads the current drag state without needing to re-subscribe on every update.
+  const fillDragRef = useRef<FillDragState | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   // Returning focus to the grid container after a commit/cancel fires a synchronous
   // blur on the still-mounted editor — this flag tells that blur handler to no-op
@@ -480,7 +514,10 @@ export function GridView({
 
     let newlyCreatedIds: string[] = [];
     const rowsNeeded = endRowExclusive - flatRows.length;
-    if (rowsNeeded > 0) {
+    // Cross-project mode has no single coherent section to create new rows in — a pasted
+    // block that overflows past the last row is silently clipped to the rows that already
+    // exist (the `if (!row) continue` guard below no-ops any row past `flatRows.length`).
+    if (rowsNeeded > 0 && mode !== 'cross-project') {
       // New rows always extend the section containing the grid's current last row —
       // not "the row before wherever this paste happened to start" — regardless of
       // how far into the existing grid the paste's top-left cell was.
@@ -619,22 +656,27 @@ export function GridView({
     await applyPastedText(text);
   }
 
-  async function fillDown() {
-    const bounds = computeSelectionBounds(selection);
-    if (!bounds || bounds.minRow === bounds.maxRow) return;
+  /**
+   * Copies row `minRow`'s value in each fillable column across to rows below it, down
+   * through `maxRow`. Shared by the Cmd/Ctrl+D shortcut (fillDown, below, source =
+   * current selection) and the mouse fill-handle drag (which extends `maxRow` live as
+   * the drag continues) — one batched write path for both.
+   */
+  async function fillRangeDown(minRow: number, maxRow: number, minCol: number, maxCol: number) {
+    if (maxRow <= minRow) return;
 
-    const source = taskAt(bounds.minRow);
+    const source = taskAt(minRow);
     if (!source) return;
 
     const editsById = new Map<string, GridBatchEdit>();
     const beforeById = new Map<string, GridBatchEdit>();
 
-    for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+    for (let c = minCol; c <= maxCol; c++) {
       const key = COLUMN_EDIT_KEY[c];
       if (!key) continue; // Repeat isn't fillable yet, same as paste
 
       const sourceValue = readTaskField(source.task, key);
-      for (let r = bounds.minRow + 1; r <= bounds.maxRow; r++) {
+      for (let r = minRow + 1; r <= maxRow; r++) {
         const entry = taskAt(r);
         if (!entry) continue;
         mergeEdit(editsById, entry.task.id, key, sourceValue);
@@ -653,6 +695,53 @@ export function GridView({
     if (!result.success) applyEditsLocally(before);
     router.refresh();
   }
+
+  async function fillDown() {
+    const bounds = computeSelectionBounds(selection);
+    if (!bounds || bounds.minRow === bounds.maxRow) return;
+    await fillRangeDown(bounds.minRow, bounds.maxRow, bounds.minCol, bounds.maxCol);
+  }
+
+  function setFillDrag(next: FillDragState | null) {
+    fillDragRef.current = next;
+    setFillDragState(next);
+  }
+
+  /** Mousedown on the fill handle — pins the source row and column range for the drag. */
+  function startFillDrag() {
+    const bounds = computeSelectionBounds(selection);
+    if (!bounds) return;
+    setFillDrag({ startRow: bounds.minRow, endRow: bounds.maxRow, minCol: bounds.minCol, maxCol: bounds.maxCol });
+  }
+
+  /** Mouseenter on a row while a fill drag is active — extends the drag downward only, never above its source row. */
+  function fillDragEnterRow(row: number) {
+    if (!fillDragRef.current) return;
+    setFillDrag({ ...fillDragRef.current, endRow: Math.max(row, fillDragRef.current.startRow) });
+  }
+
+  // Window-level (not grid-level) mouseup: the drag should finish wherever the button is
+  // released, even if the cursor has left the grid. Added once; reads the live drag state
+  // through fillDragRef rather than depending on `fillDrag`, so this effect never re-subscribes.
+  useEffect(() => {
+    function onWindowMouseUp() {
+      const drag = fillDragRef.current;
+      if (!drag) return;
+      setFillDrag(null);
+      void fillRangeDown(drag.startRow, drag.endRow, drag.minCol, drag.maxCol).then(() => {
+        setSelection({
+          anchor: { row: drag.startRow, col: drag.minCol },
+          focus: { row: drag.endRow, col: drag.maxCol },
+          editing: null,
+        });
+      });
+    }
+    window.addEventListener('mouseup', onWindowMouseUp);
+    return () => window.removeEventListener('mouseup', onWindowMouseUp);
+    // Intentionally empty: onWindowMouseUp reads fresh state through fillDragRef, so this
+    // listener never needs to be torn down and re-added as fillRangeDown's closure changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleGridKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
     // While a cell is editing, its own control owns keyboard input — this
@@ -789,6 +878,7 @@ export function GridView({
   }
 
   async function handleCreateTask(sectionId: string, title: string) {
+    if (!projectId) return; // cross-project mode never renders the add-row control that calls this
     const formData = new FormData();
     formData.set('title', title);
     formData.set('sectionId', sectionId);
@@ -825,6 +915,7 @@ export function GridView({
   }
 
   function handleDragEnd(result: DropResult) {
+    if (mode === 'cross-project') return; // no Draggables render in this mode
     const { source, destination, draggableId } = result;
     if (!destination) return;
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;
@@ -843,62 +934,71 @@ export function GridView({
     void moveTask(draggableId, destination.droppableId, destination.index).then(() => router.refresh());
   }
 
+  const crossProject = mode === 'cross-project';
+
+  const gridContent = (
+    <div
+      ref={gridRef}
+      tabIndex={-1}
+      onKeyDown={handleGridKeyDown}
+      onPaste={handleGridPaste}
+      className="select-none overflow-x-auto rounded-lg border border-slate-200 bg-white outline-none dark:border-slate-600 dark:bg-slate-800"
+    >
+      <table className="w-full min-w-[860px] border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
+            <th className="w-8 px-2 py-2"></th>
+            <th className="px-3 py-2">Title</th>
+            <th className="w-44 px-3 py-2">Tags</th>
+            <th className="w-40 px-3 py-2">Assignee</th>
+            <th className="w-32 px-3 py-2">Priority</th>
+            <th className="w-36 px-3 py-2">Status</th>
+            <th className="w-36 px-3 py-2">Due date</th>
+            <th className="w-40 px-3 py-2">Repeat</th>
+            <th className="w-10 px-2 py-2"></th>
+          </tr>
+        </thead>
+
+        {sections.map((section, sectionIndex) => (
+          <SectionBody
+            key={section.id}
+            section={section}
+            rowOffset={rowStarts[sectionIndex]}
+            members={crossProject ? (membersByProjectId?.[section.id] ?? []) : members}
+            allTags={crossProject ? (tagsByProjectId?.[section.id] ?? []) : allTags}
+            draggable={!crossProject}
+            addingToSectionId={addingToSectionId}
+            setAddingToSectionId={setAddingToSectionId}
+            onOpenTask={setOpenTaskId}
+            onFieldChange={handleFieldChange}
+            onAssigneesChange={handleAssigneesChange}
+            onTagsChange={handleTagsChange}
+            onDelete={handleDelete}
+            onCreateTask={handleCreateTask}
+            filtersActive={filtersActive}
+            selection={selection}
+            editSeed={editSeed}
+            cellErrors={cellErrors}
+            onSelectCell={selectCell}
+            onBeginEdit={beginEdit}
+            onEndEdit={endEdit}
+            onCommitAndMoveDown={commitAndMoveDown}
+            onCommitAndMoveTab={commitAndMoveTab}
+            programmaticBlurRef={programmaticBlurRef}
+            fillDrag={fillDrag}
+            onStartFillDrag={startFillDrag}
+            onFillDragEnterRow={fillDragEnterRow}
+          />
+        ))}
+      </table>
+    </div>
+  );
+
   return (
-    <DragDropContext onDragEnd={handleDragEnd}>
-      <div
-        ref={gridRef}
-        tabIndex={-1}
-        onKeyDown={handleGridKeyDown}
-        onPaste={handleGridPaste}
-        className="select-none overflow-x-auto rounded-lg border border-slate-200 bg-white outline-none dark:border-slate-700 dark:bg-slate-900"
-      >
-        <table className="w-full min-w-[860px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-              <th className="w-8 px-2 py-2"></th>
-              <th className="px-3 py-2">Title</th>
-              <th className="w-44 px-3 py-2">Tags</th>
-              <th className="w-40 px-3 py-2">Assignee</th>
-              <th className="w-32 px-3 py-2">Priority</th>
-              <th className="w-36 px-3 py-2">Status</th>
-              <th className="w-36 px-3 py-2">Due date</th>
-              <th className="w-40 px-3 py-2">Repeat</th>
-              <th className="w-10 px-2 py-2"></th>
-            </tr>
-          </thead>
-
-          {sections.map((section, sectionIndex) => (
-            <SectionBody
-              key={section.id}
-              section={section}
-              rowOffset={rowStarts[sectionIndex]}
-              members={members}
-              allTags={allTags}
-              addingToSectionId={addingToSectionId}
-              setAddingToSectionId={setAddingToSectionId}
-              onOpenTask={setOpenTaskId}
-              onFieldChange={handleFieldChange}
-              onAssigneesChange={handleAssigneesChange}
-              onTagsChange={handleTagsChange}
-              onDelete={handleDelete}
-              onCreateTask={handleCreateTask}
-              filtersActive={filtersActive}
-              selection={selection}
-              editSeed={editSeed}
-              cellErrors={cellErrors}
-              onSelectCell={selectCell}
-              onBeginEdit={beginEdit}
-              onEndEdit={endEdit}
-              onCommitAndMoveDown={commitAndMoveDown}
-              onCommitAndMoveTab={commitAndMoveTab}
-              programmaticBlurRef={programmaticBlurRef}
-            />
-          ))}
-        </table>
-      </div>
-
+    <>
+      {crossProject ? gridContent : <DragDropContext onDragEnd={handleDragEnd}>{gridContent}</DragDropContext>}
       {openTaskId && <TaskDetailModal taskId={openTaskId} onClose={() => setOpenTaskId(null)} />}
-    </DragDropContext>
+    </>
   );
 }
 
@@ -908,6 +1008,9 @@ function GridCell({
   col,
   isFocused,
   isInRange,
+  isFillPreview = false,
+  showFillHandle = false,
+  onFillHandleMouseDown,
   onSelect,
   onDoubleClick,
   className = '',
@@ -917,6 +1020,11 @@ function GridCell({
   col: number;
   isFocused: boolean;
   isInRange: boolean;
+  /** True for cells the in-progress fill-handle drag would overwrite if released now. */
+  isFillPreview?: boolean;
+  /** True only for the bottom-right cell of the current selection — renders the draggable fill handle. */
+  showFillHandle?: boolean;
+  onFillHandleMouseDown?: () => void;
   onSelect: (row: number, col: number, extend: boolean) => void;
   onDoubleClick?: () => void;
   className?: string;
@@ -926,9 +1034,19 @@ function GridCell({
     <td
       onClick={(e) => onSelect(row, col, e.shiftKey)}
       onDoubleClick={onDoubleClick}
-      className={`px-3 py-1.5 ${isInRange ? 'bg-brand-50 dark:bg-brand-950/30' : ''} ${isFocused ? 'outline outline-2 -outline-offset-2 outline-brand-500' : ''} ${className}`}
+      className={`relative px-3 py-1.5 ${isInRange ? 'bg-brand-50 dark:bg-brand-950/30' : ''} ${isFocused ? 'outline outline-2 -outline-offset-2 outline-brand-500' : ''} ${isFillPreview ? 'outline outline-2 outline-dashed -outline-offset-2 outline-brand-400 bg-brand-50/60 dark:bg-brand-950/20' : ''} ${className}`}
     >
       {children}
+      {showFillHandle && (
+        <div
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onFillHandleMouseDown?.();
+          }}
+          className="absolute -bottom-1 -right-1 h-2.5 w-2.5 cursor-crosshair rounded-sm border border-white bg-brand-500 dark:border-slate-800"
+        />
+      )}
     </td>
   );
 }
@@ -950,6 +1068,7 @@ function SectionBody({
   rowOffset,
   members,
   allTags,
+  draggable,
   addingToSectionId,
   setAddingToSectionId,
   onOpenTask,
@@ -968,11 +1087,16 @@ function SectionBody({
   onCommitAndMoveDown,
   onCommitAndMoveTab,
   programmaticBlurRef,
+  fillDrag,
+  onStartFillDrag,
+  onFillDragEnterRow,
 }: {
   section: KanbanSection;
   rowOffset: number;
   members: { id: string; name: string }[];
   allTags: TagInfo[];
+  /** false for the cross-project grid's read-only project groupings — no row reordering, no add-row. */
+  draggable: boolean;
   addingToSectionId: string | null;
   setAddingToSectionId: (id: string | null) => void;
   onOpenTask: (id: string) => void;
@@ -991,48 +1115,44 @@ function SectionBody({
   onCommitAndMoveDown: (row: number, col: number) => void;
   onCommitAndMoveTab: (row: number, col: number, direction: 1 | -1) => void;
   programmaticBlurRef: MutableRefObject<boolean>;
+  fillDrag: FillDragState | null;
+  onStartFillDrag: () => void;
+  onFillDragEnterRow: (row: number) => void;
 }) {
   const bounds = computeSelectionBounds(selection);
 
-  return (
-    <>
-      <tbody>
-        <tr className="border-b border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-800/70">
-          <td colSpan={9} className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
-            {section.name} <span className="font-normal text-slate-400 dark:text-slate-500">({section.tasks.length})</span>
-          </td>
-        </tr>
-        {filtersActive && section.tasks.length === 0 && (
-          <tr className="border-b border-slate-100 dark:border-slate-800">
-            <td colSpan={9} className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">
-              No tasks match your filters.
-            </td>
-          </tr>
-        )}
-      </tbody>
+  /**
+   * One row's cells — identical whether the row lives in a draggable, project-scoped
+   * grid (`dragProvided`/`snapshot` set, from inside a `Draggable`) or a read-only,
+   * cross-project grouping (`dragProvided`/`snapshot` undefined, rendered directly).
+   */
+  function renderTaskRow(task: KanbanTask, index: number, dragProvided?: DraggableProvided, snapshot?: DraggableStateSnapshot) {
+    const row = rowOffset + index;
+    const isFocusedCol = (col: number) => selection.focus?.row === row && selection.focus?.col === col;
+    const isInRangeCol = (col: number) =>
+      !!bounds && row >= bounds.minRow && row <= bounds.maxRow && col >= bounds.minCol && col <= bounds.maxCol;
+    const isEditingCol = (col: number) => selection.editing?.row === row && selection.editing?.col === col;
+    // Only the rows a fill-handle drag has reached *beyond* the original selection get the
+    // dashed preview — the source rows already show the solid isInRangeCol highlight.
+    const isFillPreviewCol = (col: number) =>
+      !!fillDrag && !!bounds && row > bounds.maxRow && row <= fillDrag.endRow && col >= fillDrag.minCol && col <= fillDrag.maxCol;
+    // The fill handle only ever renders on the bottom-right cell of the selection, and only
+    // for columns paste/fill-down already know how to write (Repeat is display-only).
+    const isFillHandleCell = (col: number) =>
+      !!bounds && row === bounds.maxRow && col === bounds.maxCol && !selection.editing && !!COLUMN_EDIT_KEY[col];
+    const errorAt = (col: number) => cellErrors.get(cellErrorKey(row, col));
+    const dueInfo = formatDueDate(task.dueDate);
 
-      <Droppable droppableId={section.id}>
-        {(provided) => (
-          <tbody ref={provided.innerRef} {...provided.droppableProps}>
-            {section.tasks.map((task, index) => {
-              const row = rowOffset + index;
-              const isFocusedCol = (col: number) => selection.focus?.row === row && selection.focus?.col === col;
-              const isInRangeCol = (col: number) =>
-                !!bounds && row >= bounds.minRow && row <= bounds.maxRow && col >= bounds.minCol && col <= bounds.maxCol;
-              const isEditingCol = (col: number) => selection.editing?.row === row && selection.editing?.col === col;
-              const errorAt = (col: number) => cellErrors.get(cellErrorKey(row, col));
-              const dueInfo = formatDueDate(task.dueDate);
-
-              return (
-                <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={filtersActive}>
-                  {(dragProvided, snapshot) => (
+    return (
                     <tr
-                      ref={dragProvided.innerRef}
-                      {...dragProvided.draggableProps}
-                      className={`border-b border-slate-100 dark:border-slate-800 ${snapshot.isDragging ? 'bg-brand-50 shadow-md dark:bg-brand-950' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                      key={task.id}
+                      ref={dragProvided?.innerRef}
+                      {...(dragProvided?.draggableProps ?? {})}
+                      onMouseEnter={() => onFillDragEnterRow(row)}
+                      className={`border-b border-slate-100 dark:border-slate-700 ${snapshot?.isDragging ? 'bg-brand-50 shadow-md dark:bg-brand-950' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                     >
-                      <td className="px-2 py-1.5 text-slate-300 dark:text-slate-600" {...dragProvided.dragHandleProps}>
-                        ⠿
+                      <td className="px-2 py-1.5 text-slate-300 dark:text-slate-600" {...(dragProvided?.dragHandleProps ?? {})}>
+                        {draggable ? '⠿' : ''}
                       </td>
 
                       <GridCell
@@ -1040,6 +1160,9 @@ function SectionBody({
                         col={COL.TITLE}
                         isFocused={isFocusedCol(COL.TITLE)}
                         isInRange={isInRangeCol(COL.TITLE)}
+                        isFillPreview={isFillPreviewCol(COL.TITLE)}
+                        showFillHandle={isFillHandleCell(COL.TITLE)}
+                        onFillHandleMouseDown={onStartFillDrag}
                         onSelect={onSelectCell}
                         onDoubleClick={() => onOpenTask(task.id)}
                       >
@@ -1073,7 +1196,7 @@ function SectionBody({
                               if (value !== task.title) onFieldChange(task.id, 'title', value);
                               onEndEdit();
                             }}
-                            className="w-full rounded border border-brand-400 bg-white px-1 py-0.5 text-sm text-slate-800 focus:outline-none dark:bg-slate-900 dark:text-slate-200"
+                            className="w-full rounded border border-brand-400 bg-white px-1 py-0.5 text-sm text-slate-800 focus:outline-none dark:bg-slate-800 dark:text-slate-200"
                           />
                         ) : errorAt(COL.TITLE) ? (
                           <ErrorCellDisplay raw={errorAt(COL.TITLE)!.raw} error={errorAt(COL.TITLE)!.error} />
@@ -1087,6 +1210,9 @@ function SectionBody({
                         col={COL.TAGS}
                         isFocused={isFocusedCol(COL.TAGS)}
                         isInRange={isInRangeCol(COL.TAGS)}
+                        isFillPreview={isFillPreviewCol(COL.TAGS)}
+                        showFillHandle={isFillHandleCell(COL.TAGS)}
+                        onFillHandleMouseDown={onStartFillDrag}
                         onSelect={onSelectCell}
                         onDoubleClick={() => onBeginEdit(row, COL.TAGS)}
                       >
@@ -1135,6 +1261,9 @@ function SectionBody({
                         col={COL.ASSIGNEE}
                         isFocused={isFocusedCol(COL.ASSIGNEE)}
                         isInRange={isInRangeCol(COL.ASSIGNEE)}
+                        isFillPreview={isFillPreviewCol(COL.ASSIGNEE)}
+                        showFillHandle={isFillHandleCell(COL.ASSIGNEE)}
+                        onFillHandleMouseDown={onStartFillDrag}
                         onSelect={onSelectCell}
                         onDoubleClick={() => onBeginEdit(row, COL.ASSIGNEE)}
                       >
@@ -1184,6 +1313,9 @@ function SectionBody({
                         col={COL.PRIORITY}
                         isFocused={isFocusedCol(COL.PRIORITY)}
                         isInRange={isInRangeCol(COL.PRIORITY)}
+                        isFillPreview={isFillPreviewCol(COL.PRIORITY)}
+                        showFillHandle={isFillHandleCell(COL.PRIORITY)}
+                        onFillHandleMouseDown={onStartFillDrag}
                         onSelect={onSelectCell}
                         onDoubleClick={() => onBeginEdit(row, COL.PRIORITY)}
                       >
@@ -1212,7 +1344,7 @@ function SectionBody({
                                 onEndEdit();
                               }
                             }}
-                            className="w-full rounded border border-brand-400 bg-white px-1 py-0.5 text-sm focus:outline-none dark:bg-slate-900"
+                            className="w-full rounded border border-brand-400 bg-white px-1 py-0.5 text-sm focus:outline-none dark:bg-slate-800"
                           >
                             {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
                               <option key={value} value={value}>
@@ -1232,6 +1364,9 @@ function SectionBody({
                         col={COL.STATUS}
                         isFocused={isFocusedCol(COL.STATUS)}
                         isInRange={isInRangeCol(COL.STATUS)}
+                        isFillPreview={isFillPreviewCol(COL.STATUS)}
+                        showFillHandle={isFillHandleCell(COL.STATUS)}
+                        onFillHandleMouseDown={onStartFillDrag}
                         onSelect={onSelectCell}
                         onDoubleClick={() => onBeginEdit(row, COL.STATUS)}
                       >
@@ -1260,7 +1395,7 @@ function SectionBody({
                                 onEndEdit();
                               }
                             }}
-                            className="w-full rounded border border-brand-400 bg-white px-1 py-0.5 text-sm focus:outline-none dark:bg-slate-900"
+                            className="w-full rounded border border-brand-400 bg-white px-1 py-0.5 text-sm focus:outline-none dark:bg-slate-800"
                           >
                             {Object.entries(STATUS_LABELS).map(([value, label]) => (
                               <option key={value} value={value}>
@@ -1280,6 +1415,9 @@ function SectionBody({
                         col={COL.DUE_DATE}
                         isFocused={isFocusedCol(COL.DUE_DATE)}
                         isInRange={isInRangeCol(COL.DUE_DATE)}
+                        isFillPreview={isFillPreviewCol(COL.DUE_DATE)}
+                        showFillHandle={isFillHandleCell(COL.DUE_DATE)}
+                        onFillHandleMouseDown={onStartFillDrag}
                         onSelect={onSelectCell}
                         onDoubleClick={() => onBeginEdit(row, COL.DUE_DATE)}
                       >
@@ -1302,7 +1440,7 @@ function SectionBody({
                                 onEndEdit();
                               }
                             }}
-                            className="w-full rounded border border-brand-400 bg-white px-1 py-0.5 text-sm focus:outline-none dark:bg-slate-900"
+                            className="w-full rounded border border-brand-400 bg-white px-1 py-0.5 text-sm focus:outline-none dark:bg-slate-800"
                           />
                         ) : errorAt(COL.DUE_DATE) ? (
                           <ErrorCellDisplay raw={errorAt(COL.DUE_DATE)!.raw} error={errorAt(COL.DUE_DATE)!.error} />
@@ -1340,29 +1478,59 @@ function SectionBody({
                         </button>
                       </td>
                     </tr>
-                  )}
-                </Draggable>
-              );
-            })}
-            <tr style={{ display: 'none' }}>
-              <td colSpan={9}>{provided.placeholder}</td>
-            </tr>
-          </tbody>
-        )}
-      </Droppable>
+    );
+  }
 
+  return (
+    <>
       <tbody>
-        <tr className="border-b border-slate-100 dark:border-slate-800">
-          <td colSpan={9} className="px-2 py-1">
-            <AddRow
-              isOpen={addingToSectionId === section.id}
-              onOpen={() => setAddingToSectionId(section.id)}
-              onClose={() => setAddingToSectionId(null)}
-              onSubmitTitle={(title) => onCreateTask(section.id, title)}
-            />
+        <tr className="border-b border-slate-100 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-700/70">
+          <td colSpan={9} className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            {section.name} <span className="font-normal text-slate-400 dark:text-slate-500">({section.tasks.length})</span>
           </td>
         </tr>
+        {filtersActive && section.tasks.length === 0 && (
+          <tr className="border-b border-slate-100 dark:border-slate-700">
+            <td colSpan={9} className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">
+              No tasks match your filters.
+            </td>
+          </tr>
+        )}
       </tbody>
+
+      {draggable ? (
+        <Droppable droppableId={section.id}>
+          {(provided) => (
+            <tbody ref={provided.innerRef} {...provided.droppableProps}>
+              {section.tasks.map((task, index) => (
+                <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={filtersActive}>
+                  {(dragProvided, snapshot) => renderTaskRow(task, index, dragProvided, snapshot)}
+                </Draggable>
+              ))}
+              <tr style={{ display: 'none' }}>
+                <td colSpan={9}>{provided.placeholder}</td>
+              </tr>
+            </tbody>
+          )}
+        </Droppable>
+      ) : (
+        <tbody>{section.tasks.map((task, index) => renderTaskRow(task, index))}</tbody>
+      )}
+
+      {draggable && (
+        <tbody>
+          <tr className="border-b border-slate-100 dark:border-slate-700">
+            <td colSpan={9} className="px-2 py-1">
+              <AddRow
+                isOpen={addingToSectionId === section.id}
+                onOpen={() => setAddingToSectionId(section.id)}
+                onClose={() => setAddingToSectionId(null)}
+                onSubmitTitle={(title) => onCreateTask(section.id, title)}
+              />
+            </td>
+          </tr>
+        </tbody>
+      )}
     </>
   );
 }
@@ -1394,7 +1562,7 @@ function AddRow({
 
   if (!isOpen) {
     return (
-      <button onClick={onOpen} className="w-full rounded px-2 py-1 text-left text-sm text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300">
+      <button onClick={onOpen} className="w-full rounded px-2 py-1 text-left text-sm text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300">
         + Add row
       </button>
     );
@@ -1407,7 +1575,7 @@ function AddRow({
         autoFocus
         required
         placeholder="Task title, then press Enter"
-        className="w-full rounded border border-slate-200 px-2 py-1 text-sm focus:border-brand-400 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+        className="w-full rounded border border-slate-200 px-2 py-1 text-sm focus:border-brand-400 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
         onKeyDown={(e) => {
           if (e.key === 'Escape') onClose();
         }}
@@ -1419,7 +1587,7 @@ function AddRow({
       >
         {loading ? 'Adding…' : 'Add'}
       </button>
-      <button type="button" onClick={onClose} className="shrink-0 rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">
+      <button type="button" onClick={onClose} className="shrink-0 rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700">
         Cancel
       </button>
     </form>

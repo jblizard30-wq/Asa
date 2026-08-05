@@ -130,38 +130,38 @@ export function ProjectView({
         <div className="flex shrink-0 items-center gap-2">
           <Link
             href={`/projects/${projectId}/automations`}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-500 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             Automations
           </Link>
           <Link
             href={`/projects/${projectId}/forms`}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-500 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             Forms
           </Link>
           <Link
             href={`/projects/${projectId}/workflow`}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-500 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             Workflow
           </Link>
           <button
             onClick={() => setShowFields(true)}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-500 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             Manage fields
           </button>
           <button
             onClick={() => setShowTags(true)}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-500 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             Manage tags
           </button>
           {isAdmin && (
             <button
               onClick={() => setShowInvite(true)}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-500 dark:text-slate-300 dark:hover:bg-slate-700"
             >
               + Invite member
             </button>
@@ -169,11 +169,11 @@ export function ProjectView({
         </div>
       </div>
 
-      <div className="mt-6 inline-flex rounded-md border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900">
+      <div className="mt-6 inline-flex rounded-md border border-slate-200 bg-white p-1 dark:border-slate-600 dark:bg-slate-800">
         <button
           onClick={() => setView('list')}
           className={`rounded px-3 py-1.5 text-sm font-medium ${
-            view === 'list' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            view === 'list' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
           }`}
         >
           List
@@ -181,7 +181,7 @@ export function ProjectView({
         <button
           onClick={() => setView('kanban')}
           className={`rounded px-3 py-1.5 text-sm font-medium ${
-            view === 'kanban' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            view === 'kanban' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
           }`}
         >
           Kanban
@@ -189,7 +189,7 @@ export function ProjectView({
         <button
           onClick={() => setView('grid')}
           className={`rounded px-3 py-1.5 text-sm font-medium ${
-            view === 'grid' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            view === 'grid' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
           }`}
         >
           Grid
@@ -197,7 +197,7 @@ export function ProjectView({
         <button
           onClick={() => setView('dashboard')}
           className={`rounded px-3 py-1.5 text-sm font-medium ${
-            view === 'dashboard' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            view === 'dashboard' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
           }`}
         >
           Dashboard

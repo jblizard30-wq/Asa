@@ -16,7 +16,7 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Dashboard</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">You don&apos;t manage any teams yet.</p>
-        <div className="mt-6 rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-600 dark:text-slate-500">
+        <div className="mt-6 rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-500 dark:text-slate-500">
           Ask an administrator to assign you as a team&apos;s manager on the{' '}
           <a href="/teams" className="text-brand-600 hover:underline dark:text-brand-400">
             Teams

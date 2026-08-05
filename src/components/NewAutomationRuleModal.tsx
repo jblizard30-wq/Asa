@@ -6,7 +6,7 @@ import { STATUS_LABELS, PRIORITY_LABELS } from '@/lib/format';
 import type { AutomationProjectOption } from '@/components/AutomationRulesView';
 
 const selectClass =
-  'mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200';
+  'mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200';
 const labelClass = 'block text-xs font-medium text-slate-500 dark:text-slate-400';
 
 export function NewAutomationRuleModal({
@@ -101,7 +101,7 @@ export function NewAutomationRuleModal({
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
       <div
-        className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900 dark:shadow-slate-950/50"
+        className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800 dark:shadow-slate-900/50"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">New automation rule</h2>
@@ -117,7 +117,7 @@ export function NewAutomationRuleModal({
             />
           </div>
 
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-600">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">When…</h3>
             <div className="mt-2 grid grid-cols-2 gap-3">
               <div>
@@ -188,7 +188,7 @@ export function NewAutomationRuleModal({
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-600">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Then…</h3>
             <div className="mt-2 grid grid-cols-2 gap-3">
               <div>

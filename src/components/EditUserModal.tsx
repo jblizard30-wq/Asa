@@ -26,7 +26,7 @@ export function EditUserModal({ user, onClose }: { user: ManagedUser; onClose: (
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
+        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Edit user</h2>
@@ -40,7 +40,7 @@ export function EditUserModal({ user, onClose }: { user: ManagedUser; onClose: (
               name="name"
               required
               defaultValue={user.name}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200"
             />
           </div>
           <div>
@@ -53,7 +53,7 @@ export function EditUserModal({ user, onClose }: { user: ManagedUser; onClose: (
               type="email"
               required
               defaultValue={user.email}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200"
             />
           </div>
           <div>
@@ -66,7 +66,7 @@ export function EditUserModal({ user, onClose }: { user: ManagedUser; onClose: (
               type="password"
               minLength={8}
               placeholder="Leave blank to keep current password"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200"
             />
             <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
               Only fill this in to reset the user&apos;s password. At least 8 characters.
@@ -79,7 +79,7 @@ export function EditUserModal({ user, onClose }: { user: ManagedUser; onClose: (
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
             >
               Cancel
             </button>

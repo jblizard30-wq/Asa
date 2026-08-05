@@ -84,12 +84,15 @@ export async function removeTeamMember(teamId: string, userId: string) {
 export async function moveTeamMember(userId: string, fromTeamId: string, toTeamId: string) {
   const session = await requireManagerOrAdmin();
 
+  // A move is a remove-from-A plus an add-to-B, so it requires the same authority each of those
+  // would individually need: managing A alone (or B alone) isn't enough, or a manager of A could
+  // dump a member into a team B they have no say over, bypassing addTeamMember's own check.
   const [managesFrom, managesTo] = await Promise.all([
     canManageTeam(session.user.id, session.user.role, fromTeamId),
     canManageTeam(session.user.id, session.user.role, toTeamId),
   ]);
-  if (!managesFrom && !managesTo) {
-    return { success: false, error: 'You do not manage either team involved in this move.' };
+  if (!managesFrom || !managesTo) {
+    return { success: false, error: 'You do not manage both teams involved in this move.' };
   }
 
   await prisma.$transaction([

@@ -19,8 +19,8 @@ export interface PersonOption {
 
 const ROLE_STYLES: Record<string, string> = {
   ADMIN: 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300',
-  MANAGER: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
-  USER: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+  MANAGER: 'bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-200',
+  USER: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400',
 };
 
 function RolePill({ role }: { role: string }) {
@@ -69,7 +69,7 @@ function PersonCard({
   }
 
   return (
-    <div className="w-52 shrink-0 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm dark:border-slate-700 dark:bg-slate-900">
+    <div className="w-52 shrink-0 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm dark:border-slate-600 dark:bg-slate-800">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{person.name}</p>
@@ -78,7 +78,7 @@ function PersonCard({
         {typeof reportCount === 'number' && reportCount > 0 && (
           <button
             onClick={onToggleCollapse}
-            className="shrink-0 rounded p-0.5 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800"
+            className="shrink-0 rounded p-0.5 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-700"
             title={collapsed ? 'Expand reports' : 'Collapse reports'}
             aria-label={collapsed ? 'Expand reports' : 'Collapse reports'}
           >
@@ -97,7 +97,7 @@ function PersonCard({
       </div>
 
       {isAdmin && (
-        <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-800">
+        <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-700">
           {editing ? (
             <select
               autoFocus
@@ -105,7 +105,7 @@ function PersonCard({
               disabled={pending}
               onChange={(e) => void handleChange(e.target.value)}
               onBlur={() => setEditing(false)}
-              className="w-full rounded-md border border-slate-200 px-1.5 py-1 text-xs text-slate-600 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="w-full rounded-md border border-slate-200 px-1.5 py-1 text-xs text-slate-600 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
             >
               <option value="">No manager</option>
               {managerOptions.map((m) => (
@@ -185,7 +185,7 @@ export function OrgChart({
           </ul>
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-700 dark:text-slate-500">
+        <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-600 dark:text-slate-500">
           {isAdmin
             ? 'No reporting relationships yet. Assign a manager to someone below to start building the chart.'
             : "No reporting relationships have been set up yet."}

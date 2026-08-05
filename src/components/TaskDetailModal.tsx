@@ -167,7 +167,7 @@ function DependencyPicker({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full truncate rounded-md border border-slate-200 px-2 py-1.5 text-left text-sm dark:border-slate-600 dark:bg-slate-900"
+        className="w-full truncate rounded-md border border-slate-200 px-2 py-1.5 text-left text-sm dark:border-slate-500 dark:bg-slate-800"
       >
         {selected.length === 0 ? (
           <span className="text-slate-400 dark:text-slate-500">No blockers — can start anytime</span>
@@ -177,14 +177,14 @@ function DependencyPicker({
       </button>
 
       {open && (
-        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-600 dark:bg-slate-700">
           {options.length === 0 ? (
             <p className="px-2 py-1.5 text-xs text-slate-400 dark:text-slate-500">No other tasks in this project yet.</p>
           ) : (
             options.map((o) => (
               <label
                 key={o.id}
-                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-600"
               >
                 <input
                   type="checkbox"
@@ -861,14 +861,14 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                   placeholder="Minutes"
                   value={timeMinutes}
                   onChange={(e) => setTimeMinutes(e.target.value)}
-                  className="w-24 rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                  className="w-24 rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-500 dark:bg-slate-800 dark:text-slate-200"
                 />
                 <input
                   type="text"
                   placeholder="Note (optional)"
                   value={timeNote}
                   onChange={(e) => setTimeNote(e.target.value)}
-                  className="min-w-[8rem] flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                  className="min-w-[8rem] flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-500 dark:bg-slate-800 dark:text-slate-200"
                 />
                 <button
                   type="submit"
@@ -941,7 +941,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                         .map((link) => (
                           <div
                             key={link.id}
-                            className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-2 py-1.5 text-xs dark:border-slate-600"
+                            className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-2 py-1.5 text-xs dark:border-slate-500"
                           >
                             <span className="min-w-0 truncate text-slate-600 dark:text-slate-300">{link.path}</span>
                             <span className="flex shrink-0 items-center gap-2">
@@ -969,7 +969,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                         type="button"
                         onClick={handleCreateGuestLink}
                         disabled={creatingGuestLink}
-                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-500 dark:text-slate-300 dark:hover:bg-slate-700"
                       >
                         {creatingGuestLink ? 'Creating…' : '+ New guest link'}
                       </button>

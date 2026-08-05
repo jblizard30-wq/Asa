@@ -24,8 +24,8 @@ export function ListView({
   return (
     <div className="space-y-6">
       {sections.map((section) => (
-        <div key={section.id} className="rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 dark:border-slate-800">
+        <div key={section.id} className="rounded-lg border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 dark:border-slate-700">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{section.name}</h3>
             <span className="text-xs text-slate-400 dark:text-slate-500">{section.tasks.length}</span>
           </div>
@@ -35,14 +35,14 @@ export function ListView({
               {filtersActive ? 'No tasks match your filters.' : 'No tasks yet.'}
             </p>
           ) : (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            <ul className="divide-y divide-slate-100 dark:divide-slate-700">
               {section.tasks.map((task) => {
                 const due = formatDueDate(task.dueDate);
                 return (
                   <li key={task.id}>
                     <button
                       onClick={() => setOpenTaskId(task.id)}
-                      className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800"
+                      className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700"
                     >
                       <span className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-slate-800 dark:text-slate-200">
                         {task.locked && (
@@ -80,7 +80,7 @@ export function ListView({
             </ul>
           )}
 
-          <div className="border-t border-slate-100 p-2 dark:border-slate-800">
+          <div className="border-t border-slate-100 p-2 dark:border-slate-700">
             <QuickAddTask projectId={projectId} sectionId={section.id} />
           </div>
         </div>

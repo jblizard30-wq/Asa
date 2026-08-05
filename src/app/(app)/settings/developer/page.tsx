@@ -1,10 +1,14 @@
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { listApiKeys } from '@/lib/actions/apiKeys';
 import { listWebhooks } from '@/lib/actions/webhooks';
 import { ApiKeysPanel } from '@/components/ApiKeysPanel';
 import { WebhooksPanel } from '@/components/WebhooksPanel';
 
 export default async function SettingsDeveloperPage() {
-  const [apiKeys, webhooks] = await Promise.all([listApiKeys(), listWebhooks()]);
+  const session = await getServerSession(authOptions);
+  const isAdmin = session?.user.role === 'ADMIN';
+  const [apiKeys, webhooks] = await Promise.all([listApiKeys(), isAdmin ? listWebhooks() : Promise.resolve([])]);
 
   return (
     <div className="space-y-10">
@@ -32,7 +36,13 @@ export default async function SettingsDeveloperPage() {
           <code>X-Webhook-Signature</code> (HMAC-SHA256 of the body, using your secret).
         </p>
         <div className="mt-4 max-w-xl">
-          <WebhooksPanel initialWebhooks={webhooks} />
+          {isAdmin ? (
+            <WebhooksPanel initialWebhooks={webhooks} />
+          ) : (
+            <p className="text-sm text-slate-400 dark:text-slate-500">
+              Webhooks receive activity across the whole org, so only administrators can manage them.
+            </p>
+          )}
         </div>
       </section>
     </div>
