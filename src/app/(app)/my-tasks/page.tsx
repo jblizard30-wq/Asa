@@ -25,7 +25,13 @@ export default async function MyTasksPage() {
 
   const [assignedRaw, personalProject] = await Promise.all([
     prisma.task.findMany({
-      where: { assignees: { some: { id: userId } }, deletedAt: null },
+      // Exclude subtasks here — every other top-level task list in this codebase filters
+      // parentTaskId: null (see projects/[projectId]/page.tsx, automations.ts, etc.) so that
+      // subtasks only surface nested under their parent's `subtasks` include. Without this,
+      // a subtask assigned directly to the user would show up twice: once as its own
+      // top-level row here, and again nested under its parent (if the parent is also assigned
+      // to / owned by the user).
+      where: { assignees: { some: { id: userId } }, deletedAt: null, parentTaskId: null },
       include: taskInclude,
     }),
     prisma.project.findFirst({
@@ -36,7 +42,7 @@ export default async function MyTasksPage() {
 
   const personalRaw = personalProject
     ? await prisma.task.findMany({
-        where: { projectId: personalProject.id, deletedAt: null },
+        where: { projectId: personalProject.id, deletedAt: null, parentTaskId: null },
         include: taskInclude,
       })
     : [];

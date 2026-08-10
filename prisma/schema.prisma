@@ -406,11 +406,12 @@ model Task {
 /// Postgres treats every recurrenceId = NULL as distinct, so plain (non-recurring) tasks
 /// never collide with each other under this constraint.
 model TaskRecurrence {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   title       String
   description String?
   projectId   String
   sectionId   String
+  priority    Priority @default(MEDIUM)
 
   rrule     String
   timezone  String         @default("America/Chicago")

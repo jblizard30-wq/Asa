@@ -41,8 +41,14 @@ export async function searchAll(query: string): Promise<SearchResults> {
     )
     .map((def) => ({ key: def.key, label: def.label, href: def.href }));
 
+  // Admins can search every shared project, but never another user's personal project — `isAdmin
+  // ? {}` used to mean literally no filter, so an admin's search pulled in task titles, task
+  // descriptions, and comment bodies from every user's private "Personal Tasks" project (only the
+  // separate `projects` result below excluded personal projects, not `tasks`/`comments`).
   const accessibleProjects = await prisma.project.findMany({
-    where: isAdmin ? {} : { members: { some: { userId: session.user.id } } },
+    where: isAdmin
+      ? { OR: [{ isPersonal: false }, { isPersonal: true, createdById: session.user.id }] }
+      : { members: { some: { userId: session.user.id } } },
     select: { id: true },
   });
   const projectIds = accessibleProjects.map((p) => p.id);

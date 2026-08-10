@@ -1,4 +1,4 @@
-import { Prisma, type RecurrenceMode } from '@prisma/client';
+import { Prisma, type Priority, type RecurrenceMode } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { nextRunAfter } from '@/lib/recurrence';
 import { dispatchWebhooks } from '@/lib/webhooks/dispatch';
@@ -9,6 +9,7 @@ type RecurrenceRow = {
   description: string | null;
   projectId: string;
   sectionId: string;
+  priority: Priority;
   rrule: string;
   timezone: string;
   mode: RecurrenceMode;
@@ -32,6 +33,7 @@ async function createOccurrence(recurrence: RecurrenceRow, occurrenceDate: Date)
         description: recurrence.description,
         projectId: recurrence.projectId,
         sectionId: recurrence.sectionId,
+        priority: recurrence.priority,
         dueDate: occurrenceDate,
         order: (lastTask?.order ?? -1) + 1,
         recurrenceId: recurrence.id,

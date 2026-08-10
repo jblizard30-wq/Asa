@@ -36,6 +36,37 @@ function sameIdSet(a: string[], b: string[]): boolean {
   return a.every((id) => setB.has(id));
 }
 
+type TaskStatusValue = 'TODO' | 'IN_PROGRESS' | 'DONE';
+
+// The board column a task's status corresponds to, and vice versa. Every project's sections
+// start as exactly these three (see DEFAULT_SECTIONS in actions/projects.ts) and there's no
+// UI to rename or add sections yet, so matching on name is reliable — not a placeholder for a
+// more elaborate scheme. Keeping status and column in sync (both ways) is the point: without
+// it, a status edit made outside the board (grid dropdown, task detail, subtask checkbox)
+// leaves the task's card sitting in a column that no longer matches its status.
+const STATUS_SECTION_NAMES: Record<TaskStatusValue, string> = {
+  TODO: 'to do',
+  IN_PROGRESS: 'in progress',
+  DONE: 'done',
+};
+
+function statusFromSectionName(name: string): TaskStatusValue | null {
+  const normalized = name.trim().toLowerCase();
+  const entry = (Object.entries(STATUS_SECTION_NAMES) as [TaskStatusValue, string][]).find(
+    ([, sectionName]) => sectionName === normalized,
+  );
+  return entry ? entry[0] : null;
+}
+
+/** Appends `taskId` to the end of `sectionId`, returning the order value to write. Top-level tasks only. */
+async function endOfSectionOrder(sectionId: string): Promise<number> {
+  const last = await prisma.task.findFirst({
+    where: { sectionId, parentTaskId: null, deletedAt: null },
+    orderBy: { order: 'desc' },
+  });
+  return (last?.order ?? -1) + 1;
+}
+
 /** Unfinished blockers of `taskId` — the tasks it can't start/move forward until they're DONE. */
 async function getUnfinishedBlockers(taskId: string): Promise<{ id: string; title: string; status: string }[]> {
   const rows = await prisma.taskDependency.findMany({
@@ -197,6 +228,21 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
     data.dueDate = parsed.data.dueDate ? new Date(parsed.data.dueDate) : null;
   }
 
+  // Keep the board column in sync with a status change made outside the board itself (grid
+  // dropdown, task detail panel, subtask checkbox). moveTask (drag-and-drop) already does the
+  // reverse — deriving status from the destination column — so this is the other half of the
+  // same invariant; skip subtasks, which aren't independently positioned on the board.
+  if (parsed.data.status && parsed.data.status !== existing.status && existing.parentTaskId === null) {
+    const targetSectionName = STATUS_SECTION_NAMES[parsed.data.status];
+    const destinationSection = await prisma.section.findFirst({
+      where: { projectId: existing.projectId, name: { equals: targetSectionName, mode: 'insensitive' } },
+    });
+    if (destinationSection && destinationSection.id !== existing.sectionId) {
+      data.sectionId = destinationSection.id;
+      data.order = await endOfSectionOrder(destinationSection.id);
+    }
+  }
+
   const existingAssigneeIds = existing.assignees.map((a) => a.id);
   const newAssigneeIds = parsed.data.assigneeIds;
   const assigneesChanged = newAssigneeIds !== undefined && !sameIdSet(newAssigneeIds, existingAssigneeIds);
@@ -206,12 +252,30 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
 
   const turningDone = parsed.data.status === 'DONE' && existing.status !== 'DONE';
 
+  // Atomically claim the not-DONE -> DONE transition before materializing the next occurrence.
+  // `existing.status` above is a snapshot read before this request's write lands, so two
+  // concurrent requests completing the same task (a double-click, or a race against moveTask
+  // below) would otherwise both compute turningDone = true from their own stale snapshot and
+  // each call materializeAfterCompletion with a slightly different completedAt — which can round
+  // to two different occurrenceDate values that both legitimately pass the
+  // (recurrenceId, occurrenceDate) unique index, producing two real duplicate task rows for what
+  // was really one completion event. The updateMany's `where` makes the claim atomic: only the
+  // request whose write actually flips status from non-DONE to DONE gets count > 0.
+  const claimedDoneTransition =
+    turningDone &&
+    (
+      await prisma.task.updateMany({
+        where: { id: taskId, status: { not: 'DONE' } },
+        data: { status: 'DONE' },
+      })
+    ).count > 0;
+
   const task = await prisma.task.update({ where: { id: taskId }, data });
 
   // A repeating task that's just been marked DONE spawns its next occurrence as a new task
   // row (store the recipe, not the meals) — this one stays DONE, with real history, instead
   // of the old behavior of silently flipping the same row back to not-done.
-  if (turningDone) {
+  if (claimedDoneTransition) {
     await materializeAfterCompletion(taskId, new Date());
   }
 
@@ -307,14 +371,7 @@ export async function moveTask(taskId: string, destinationSectionId: string, des
     return { success: false, error: 'That section belongs to a different project' };
   }
 
-  const statusForSection = (name: string) => {
-    const normalized = name.trim().toLowerCase();
-    if (normalized === 'done') return 'DONE' as const;
-    if (normalized === 'in progress') return 'IN_PROGRESS' as const;
-    return task.status;
-  };
-
-  const destinationStatus = statusForSection(destinationSection.name);
+  const destinationStatus = statusFromSectionName(destinationSection.name) ?? task.status;
   if (destinationStatus !== 'TODO' && task.status === 'TODO') {
     const blockers = await getUnfinishedBlockers(taskId);
     if (blockers.length > 0) {
@@ -329,7 +386,24 @@ export async function moveTask(taskId: string, destinationSectionId: string, des
 
   const turningDone = destinationStatus === 'DONE' && task.status !== 'DONE';
 
+  // See updateTask's identical claim for the full explanation: `task.status` above is a snapshot
+  // read before this transaction starts, so a concurrent updateTask (or another moveTask) landing
+  // on the same task could otherwise race this one — both would compute turningDone = true and
+  // both call materializeAfterCompletion with a different completedAt, which can round to two
+  // different occurrenceDate values that both pass the unique index, producing a real duplicate
+  // task row for one completion event. Claiming the status flip atomically inside the same
+  // transaction as the reorder (via updateMany's conditional `where`, not the unconditional
+  // `update` the sibling loop uses below) makes only one racing request's claim succeed.
+  let claimedDoneTransition = false;
   await prisma.$transaction(async (tx) => {
+    if (turningDone) {
+      const claim = await tx.task.updateMany({
+        where: { id: taskId, status: { not: 'DONE' } },
+        data: { status: 'DONE' },
+      });
+      claimedDoneTransition = claim.count > 0;
+    }
+
     const siblings = await tx.task.findMany({
       where: { sectionId: destinationSectionId, parentTaskId: null, deletedAt: null, id: { not: taskId } },
       orderBy: { order: 'asc' },
@@ -343,7 +417,7 @@ export async function moveTask(taskId: string, destinationSectionId: string, des
           data: {
             order: index,
             sectionId: destinationSectionId,
-            status: t.id === taskId ? statusForSection(destinationSection.name) : t.status,
+            status: t.id === taskId ? destinationStatus : t.status,
           },
         }),
       ),
@@ -353,7 +427,7 @@ export async function moveTask(taskId: string, destinationSectionId: string, des
   // Same "recipe, not the meals" spawn as updateTask's turningDone path — dragging an
   // AFTER_COMPLETION-mode recurring task's card into a "Done" column must also spawn its
   // next occurrence, not just plain status-change automations.
-  if (turningDone) {
+  if (claimedDoneTransition) {
     await materializeAfterCompletion(taskId, new Date());
   }
 
