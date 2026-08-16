@@ -23,7 +23,13 @@ const EVENT_LABELS: Record<WebhookEvent, string> = {
   COMMENT_ADDED: 'Comment added',
 };
 
-export function WebhooksPanel({ initialWebhooks }: { initialWebhooks: WebhookSummary[] }) {
+export function WebhooksPanel({
+  initialWebhooks,
+  canCreate,
+}: {
+  initialWebhooks: WebhookSummary[];
+  canCreate: boolean;
+}) {
   const router = useRouter();
   const [url, setUrl] = useState('');
   const [selectedEvents, setSelectedEvents] = useState<WebhookEvent[]>([]);
@@ -66,29 +72,33 @@ export function WebhooksPanel({ initialWebhooks }: { initialWebhooks: WebhookSum
 
   return (
     <div>
-      <div className="space-y-2">
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://example.org/webhook"
-          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-        />
-        <div className="flex flex-wrap gap-3">
-          {ALL_EVENTS.map((event) => (
-            <label key={event} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
-              <input type="checkbox" checked={selectedEvents.includes(event)} onChange={() => toggleEvent(event)} />
-              {EVENT_LABELS[event]}
-            </label>
-          ))}
+      {canCreate ? (
+        <div className="space-y-2">
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://example.org/webhook"
+            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          />
+          <div className="flex flex-wrap gap-3">
+            {ALL_EVENTS.map((event) => (
+              <label key={event} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+                <input type="checkbox" checked={selectedEvents.includes(event)} onChange={() => toggleEvent(event)} />
+                {EVENT_LABELS[event]}
+              </label>
+            ))}
+          </div>
+          <button
+            onClick={handleCreate}
+            disabled={isPending || !url.trim() || selectedEvents.length === 0}
+            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+          >
+            Create webhook
+          </button>
         </div>
-        <button
-          onClick={handleCreate}
-          disabled={isPending || !url.trim() || selectedEvents.length === 0}
-          className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
-        >
-          Create webhook
-        </button>
-      </div>
+      ) : (
+        <p className="text-sm text-slate-400 dark:text-slate-500">Only admins can create webhooks.</p>
+      )}
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
 
       {revealedSecret && (

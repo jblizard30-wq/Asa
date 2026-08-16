@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requireProjectMember } from '@/lib/actions/tasks';
 
 async function requireSession() {
   const session = await getServerSession(authOptions);
@@ -79,6 +80,7 @@ export async function deleteFolder(folderId: string) {
 
 export async function moveProjectToFolder(projectId: string, folderId: string | null) {
   const session = await requireSession();
+  await requireProjectMember(projectId);
 
   await prisma.projectFolderItem.deleteMany({
     where: { projectId, folder: { userId: session.user.id } },

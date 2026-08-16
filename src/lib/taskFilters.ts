@@ -1,4 +1,11 @@
 import { endOfMonth, endOfWeek, format, startOfMonth, startOfWeek } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
+
+// Same fixed-timezone convention as dashboard.ts / digestSchedule.ts — due dates are absolute,
+// org-wide calendar days (see toDayString below), so "is this due today" must be evaluated
+// against the org's own calendar day, not whichever timezone the viewer's browser happens to
+// be in (two viewers in different timezones must get the same answer for the same task).
+const APP_TIMEZONE = 'America/Chicago';
 
 /** Sentinel id used in `assigneeIds` to mean "no assignee set", since real user ids are cuids. */
 export const UNASSIGNED_ID = '__unassigned__';
@@ -76,7 +83,7 @@ function matchesDueDate(dueDate: string | null, filters: TaskFilters): boolean {
   if (!dueDate) return false;
 
   const day = dueDate.slice(0, 10);
-  const now = new Date();
+  const now = toZonedTime(new Date(), APP_TIMEZONE);
   const today = toDayString(now);
 
   switch (filters.dueDatePreset) {

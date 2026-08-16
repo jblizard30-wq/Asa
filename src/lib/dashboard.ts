@@ -1,4 +1,7 @@
-import { addDays, differenceInCalendarDays, startOfDay } from 'date-fns';
+import { differenceInCalendarDays } from 'date-fns';
+import { startOfLocalDay } from '@/lib/digestSchedule';
+
+const APP_TIMEZONE = 'America/Chicago';
 
 export const STATUS_ORDER = ['TODO', 'IN_PROGRESS', 'DONE'] as const;
 export const PRIORITY_ORDER = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
@@ -90,19 +93,19 @@ export interface TopLineStats {
 
 export function isOverdue(task: Pick<DashboardTask, 'status' | 'dueDate'>, now: Date): boolean {
   if (task.status === 'DONE' || !task.dueDate) return false;
-  return new Date(task.dueDate).getTime() < startOfDay(now).getTime();
+  return new Date(task.dueDate).getTime() < startOfLocalDay(now, APP_TIMEZONE).getTime();
 }
 
 export function isDueSoon(task: Pick<DashboardTask, 'status' | 'dueDate'>, now: Date, days = 7): boolean {
   if (task.status === 'DONE' || !task.dueDate) return false;
   const due = new Date(task.dueDate).getTime();
-  const today = startOfDay(now).getTime();
-  return due >= today && due <= addDays(startOfDay(now), days).getTime();
+  const today = startOfLocalDay(now, APP_TIMEZONE).getTime();
+  return due >= today && due <= startOfLocalDay(now, APP_TIMEZONE, days).getTime();
 }
 
 export function isRecentlyCompleted(task: Pick<DashboardTask, 'status' | 'updatedAt'>, now: Date, windowDays = 14): boolean {
   if (task.status !== 'DONE') return false;
-  return new Date(task.updatedAt).getTime() >= addDays(startOfDay(now), -windowDays).getTime();
+  return new Date(task.updatedAt).getTime() >= startOfLocalDay(now, APP_TIMEZONE, -windowDays).getTime();
 }
 
 function safeRate(numerator: number, denominator: number): number {
@@ -211,7 +214,7 @@ function toListEntry(task: DashboardTask, now: Date): TaskListEntry {
     priority: task.priority,
     dueDate: task.dueDate,
     updatedAt: task.updatedAt,
-    daysFromNow: task.dueDate ? differenceInCalendarDays(startOfDay(now), new Date(task.dueDate)) : null,
+    daysFromNow: task.dueDate ? differenceInCalendarDays(startOfLocalDay(now, APP_TIMEZONE), new Date(task.dueDate)) : null,
   };
 }
 

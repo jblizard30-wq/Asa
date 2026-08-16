@@ -26,7 +26,6 @@ These hold across the grid view, recurring tasks, and reminders features. Preser
 
 5. **All scheduled/cron jobs must be idempotent.** Vercel Cron can invoke a route more than once for the same trigger. Every cron handler needs a mechanism that makes a duplicate run a no-op — e.g. the `(recurrenceId, occurrenceDate)` unique index for recurrence materialization, or an atomic conditional claim (`updateMany` with `sentAt: null` in the `where`) before delivering a reminder. Never "check then act" without that guard.
 
-## Known gaps (as of 2026-08-04)
+## Known gaps (as of 2026-08-11)
 
-- The digest cron (`src/app/api/cron/digest/route.ts`) batches unread app *notifications*, not a scan of tasks due-today/overdue. A task with no fresh notification event won't appear in the digest even if it's due today.
 - Push/SMS reminder channels aren't implemented (`ReminderChannel` is EMAIL-only) — deferred intentionally, not an oversight.

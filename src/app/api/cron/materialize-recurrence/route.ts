@@ -22,12 +22,13 @@ export async function GET(request: Request) {
   }
 
   const now = new Date();
+  // Filtering here on `endsAt >= now` would wrongly drop a recurrence whose endsAt has already
+  // passed by cron-run time but which still has a legitimately-due, un-materialized occurrence
+  // between nextRunAt and endsAt (e.g. after a deploy outage). The per-iteration guard below
+  // (`current.nextRunAt > current.endsAt`) is the correct place to cut off — comparing endsAt
+  // against nextRunAt, not against `now`.
   const due = await prisma.taskRecurrence.findMany({
-    where: {
-      mode: 'PERIODIC',
-      nextRunAt: { lte: now },
-      OR: [{ endsAt: null }, { endsAt: { gte: now } }],
-    },
+    where: { mode: 'PERIODIC', nextRunAt: { lte: now } },
   });
 
   let materializedCount = 0;

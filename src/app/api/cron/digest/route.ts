@@ -182,13 +182,22 @@ export async function GET(request: Request) {
     if (projectSummaries.length > 0) subjectParts.push(`${projectSummaries.length} project summar${projectSummaries.length === 1 ? 'y' : 'ies'}`);
     if (notifications.length > 0) subjectParts.push(`${notifications.length} update${notifications.length === 1 ? '' : 's'}`);
 
+    // Atomically claim this user's send before delivering: conditioning the write on
+    // lastDigestSentAt still matching the value this loop iteration read means a second,
+    // overlapping cron invocation that read the same stale value will find its own claim
+    // fails (count === 0) instead of both invocations emailing the same digest twice.
+    const claim = await prisma.user.updateMany({
+      where: { id: user.id, lastDigestSentAt: user.lastDigestSentAt },
+      data: { lastDigestSentAt: now },
+    });
+    if (claim.count === 0) continue;
+
     await sendNotificationEmail(
       user.email,
       `${frequencyLabel} digest: ${subjectParts.join(', ')}`,
       sections.join('\n')
     );
 
-    await prisma.user.update({ where: { id: user.id }, data: { lastDigestSentAt: now } });
     sent++;
   }
 

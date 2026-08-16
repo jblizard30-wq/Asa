@@ -4,8 +4,9 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { WebhookEvent } from '@prisma/client';
-import { requireSession } from '@/lib/permissions';
+import { requireAdmin, requireSession } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
+import { assertPublicHttpUrl } from '@/lib/webhooks/urlSafety';
 
 const createWebhookSchema = z.object({
   url: z.string().url('Enter a valid URL'),
@@ -13,11 +14,20 @@ const createWebhookSchema = z.object({
   secret: z.string().min(1).optional(),
 });
 
+// Webhooks fan out every task/comment event org-wide, across every project regardless of the
+// creator's membership — an org-wide integration capability, not a per-project one, so creating
+// (and thus receiving that firehose) is restricted to admins the same way workflows.ts is.
 export async function createWebhook(url: string, events: WebhookEvent[], secret?: string) {
-  const session = await requireSession();
+  const session = await requireAdmin();
   const parsed = createWebhookSchema.safeParse({ url, events, secret });
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  }
+
+  try {
+    await assertPublicHttpUrl(parsed.data.url);
+  } catch (err) {
+    return { success: false as const, error: err instanceof Error ? err.message : 'Invalid URL' };
   }
 
   const resolvedSecret = parsed.data.secret ?? crypto.randomBytes(24).toString('hex');

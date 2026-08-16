@@ -83,6 +83,14 @@ export async function deleteCustomField(fieldId: string) {
 export async function reorderCustomFields(projectId: string, orderedFieldIds: string[]) {
   await requireProjectMember(projectId);
 
+  const fields = await prisma.customField.findMany({
+    where: { id: { in: orderedFieldIds }, projectId },
+    select: { id: true },
+  });
+  if (fields.length !== orderedFieldIds.length) {
+    return { success: false, error: 'One or more fields do not belong to this project.' };
+  }
+
   await prisma.$transaction(
     orderedFieldIds.map((id, index) =>
       prisma.customField.update({ where: { id }, data: { order: index } }),

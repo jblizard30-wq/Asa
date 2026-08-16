@@ -367,9 +367,8 @@ export async function getWorkflowOptionsForProject(projectId: string) {
 export async function applyWorkflowToProject(projectId: string, workflowId: string) {
   await requireProjectMember(projectId);
 
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
   if (!project) return { success: false, error: 'Project not found' };
-  if (project.workflowId) return { success: false, error: 'This project already has a workflow applied.' };
 
   const workflow = await prisma.workflow.findUnique({
     where: { id: workflowId },
@@ -391,7 +390,13 @@ export async function applyWorkflowToProject(projectId: string, workflowId: stri
   const lastSection = await prisma.section.findFirst({ where: { projectId }, orderBy: { order: 'desc' } });
   let sectionOrder = (lastSection?.order ?? -1) + 1;
 
-  await prisma.$transaction(async (tx) => {
+  const applied = await prisma.$transaction(async (tx) => {
+    // Atomic claim: only proceeds if workflowId is still null, so a double-click or two
+    // concurrent requests can't both pass a check-then-act and both instantiate a full
+    // duplicate copy of every section/task in the workflow.
+    const claim = await tx.project.updateMany({ where: { id: projectId, workflowId: null }, data: { workflowId } });
+    if (claim.count === 0) return false;
+
     for (const stage of workflow.stages) {
       const section = await tx.section.create({ data: { projectId, name: stage.name, order: sectionOrder++ } });
 
@@ -425,8 +430,10 @@ export async function applyWorkflowToProject(projectId: string, workflowId: stri
       }
     }
 
-    await tx.project.update({ where: { id: projectId }, data: { workflowId } });
+    return true;
   });
+
+  if (!applied) return { success: false, error: 'This project already has a workflow applied.' };
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath(`/projects/${projectId}/workflow`);
