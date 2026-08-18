@@ -1,3 +1,6 @@
+// Chesterfield Presbyterian Church ONLY. This seeds real staff names/emails
+// and their actual bulletin-production workflow — it is not a template and
+// must never be run against another customer's deployment/database.
 import { PrismaClient, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
