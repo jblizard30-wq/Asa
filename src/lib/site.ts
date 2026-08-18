@@ -14,6 +14,26 @@ export const APP_NAME = 'Asa';
 
 export const pageTitle = ORG_NAME ? `${APP_NAME} · ${ORG_NAME}` : APP_NAME;
 
+const LOGO_MIME_BY_EXTENSION: Record<string, string> = {
+  svg: 'image/svg+xml',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  ico: 'image/x-icon',
+};
+
+/**
+ * Web manifest icon `type` for LOGO_URL, derived from its file extension
+ * instead of assumed — deployments' logos aren't guaranteed to be PNGs.
+ * Falls back to the bundled icon.svg's type when LOGO_URL is unset.
+ */
+export function logoMimeType(): string {
+  if (!LOGO_URL) return 'image/svg+xml';
+  const extension = /\.([a-z0-9]+)(?:[?#]|$)/i.exec(LOGO_URL)?.[1]?.toLowerCase();
+  return (extension && LOGO_MIME_BY_EXTENSION[extension]) || 'image/png';
+}
+
 function hexToHsl(hex: string): [number, number, number] {
   const normalized = hex.replace('#', '');
   const r = parseInt(normalized.slice(0, 2), 16) / 255;

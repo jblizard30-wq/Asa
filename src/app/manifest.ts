@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { APP_NAME, LOGO_URL, brandHex, pageTitle } from '@/lib/site';
+import { APP_NAME, LOGO_URL, brandHex, logoMimeType, pageTitle } from '@/lib/site';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -13,7 +13,7 @@ export default function manifest(): MetadataRoute.Manifest {
       {
         src: LOGO_URL || '/icon.svg',
         sizes: 'any',
-        type: LOGO_URL ? 'image/png' : 'image/svg+xml',
+        type: logoMimeType(),
       },
     ],
   };
