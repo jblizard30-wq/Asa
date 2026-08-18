@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
-import { permanentlyDeleteTask, permanentlyDeleteTasks, restoreTask } from '@/lib/actions/trash';
+import { permanentlyDeleteTask, permanentlyDeleteTasks, restoreTask, restoreTasks } from '@/lib/actions/trash';
 
 export interface AdminTrashEntry {
   id: string;
@@ -27,6 +27,7 @@ export function AdminTrashList({ entries }: { entries: AdminTrashEntry[] }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(0);
   const [confirmingRestore, setConfirmingRestore] = useState<AdminTrashEntry | null>(null);
+  const [confirmingBulkRestore, setConfirmingBulkRestore] = useState(false);
 
   const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
@@ -99,6 +100,19 @@ export function AdminTrashList({ entries }: { entries: AdminTrashEntry[] }) {
     });
   }
 
+  function commitBulkRestore() {
+    const ids = Array.from(selectedIds);
+    setConfirmingBulkRestore(false);
+    if (ids.length === 0) return;
+    startBulkTransition(async () => {
+      const result = await restoreTasks(ids);
+      if (result.success) {
+        setItems((prev) => prev.filter((t) => !selectedIds.has(t.id)));
+        setSelectedIds(new Set());
+      }
+    });
+  }
+
   if (items.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-600 dark:text-slate-500">
@@ -129,6 +143,13 @@ export function AdminTrashList({ entries }: { entries: AdminTrashEntry[] }) {
               className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               Clear
+            </button>
+            <button
+              onClick={() => setConfirmingBulkRestore(true)}
+              disabled={isBulkPending}
+              className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              {isBulkPending ? 'Working…' : `Restore (${selectedIds.size})`}
             </button>
             <button
               onClick={handleBulkDelete}
@@ -261,6 +282,39 @@ export function AdminTrashList({ entries }: { entries: AdminTrashEntry[] }) {
               </button>
               <button
                 onClick={() => commitRestore(confirmingRestore.id)}
+                className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
+              >
+                Confirm restore
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmingBulkRestore && (
+        <div
+          className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={() => setConfirmingBulkRestore(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Restore {selectedIds.size} task{selectedIds.size === 1 ? '' : 's'}?
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              These were deleted by other people, not you — double check this is the right batch before restoring it.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmingBulkRestore(false)}
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={commitBulkRestore}
                 className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
               >
                 Confirm restore

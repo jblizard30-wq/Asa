@@ -29,6 +29,79 @@ export async function updateUserRole(userId: string, role: string) {
   return { success: true };
 }
 
+const bulkUpdateUserRoleSchema = z.object({
+  userIds: z.array(z.string().min(1)).min(1),
+  role: z.enum(['ADMIN', 'MANAGER', 'USER']),
+});
+
+/** Applies the same role to many users at once — the admin users table's multi-select toolbar. */
+export async function bulkUpdateUserRole(userIds: string[], role: string) {
+  const session = await requireAdmin();
+
+  const parsed = bulkUpdateUserRoleSchema.safeParse({ userIds, role });
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  }
+
+  // Self is never included — the UI disables selecting your own row so this is just a safety net.
+  const targetIds = parsed.data.userIds.filter((id) => id !== session.user.id);
+  if (targetIds.length === 0) {
+    return { success: false, error: 'You cannot change your own administrator access this way.' };
+  }
+
+  const result = await prisma.user.updateMany({ where: { id: { in: targetIds } }, data: { role: parsed.data.role } });
+
+  revalidatePath('/admin/users');
+  return { success: true, updatedCount: result.count };
+}
+
+const bulkDeleteUsersSchema = z.object({
+  userIds: z.array(z.string().min(1)).min(1),
+});
+
+/** Deletes many users at once, reassigning their owned records to the acting admin in one transaction — mirrors deleteUser's reassignment logic for the multi-select toolbar. */
+export async function bulkDeleteUsers(userIds: string[]) {
+  const session = await requireAdmin();
+
+  const parsed = bulkDeleteUsersSchema.safeParse({ userIds });
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  }
+
+  const targetIds = parsed.data.userIds.filter((id) => id !== session.user.id);
+  if (targetIds.length === 0) {
+    return { success: false, error: 'You cannot delete your own account.' };
+  }
+
+  const targets = await prisma.user.findMany({ where: { id: { in: targetIds } } });
+  if (targets.length === 0) {
+    return { success: false, error: 'No matching users found.' };
+  }
+
+  await prisma.$transaction([
+    prisma.project.updateMany({ where: { createdById: { in: targetIds } }, data: { createdById: session.user.id } }),
+    prisma.comment.updateMany({ where: { userId: { in: targetIds } }, data: { userId: session.user.id } }),
+    prisma.reminder.updateMany({ where: { senderId: { in: targetIds } }, data: { senderId: session.user.id } }),
+    prisma.automationRule.updateMany({
+      where: { createdById: { in: targetIds } },
+      data: { createdById: session.user.id },
+    }),
+    prisma.attachment.updateMany({
+      where: { uploadedById: { in: targetIds } },
+      data: { uploadedById: session.user.id },
+    }),
+    prisma.intakeForm.updateMany({
+      where: { createdById: { in: targetIds } },
+      data: { createdById: session.user.id },
+    }),
+    prisma.workflow.updateMany({ where: { createdById: { in: targetIds } }, data: { createdById: session.user.id } }),
+    prisma.user.deleteMany({ where: { id: { in: targetIds } } }),
+  ]);
+
+  revalidatePath('/admin/users');
+  return { success: true, deletedCount: targets.length };
+}
+
 const createUserSchema = z.object({
   name: z.string().min(1, 'Name is required').max(120),
   email: z.string().email('Enter a valid email address'),

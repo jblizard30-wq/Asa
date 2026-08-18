@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
-import { permanentlyDeleteTask, permanentlyDeleteTasks, restoreTask } from '@/lib/actions/trash';
+import { permanentlyDeleteTask, permanentlyDeleteTasks, restoreTask, restoreTasks } from '@/lib/actions/trash';
 
 export interface TrashEntry {
   id: string;
@@ -96,6 +96,18 @@ export function TrashList({ entries }: { entries: TrashEntry[] }) {
     });
   }
 
+  function handleBulkRestore() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    startBulkTransition(async () => {
+      const result = await restoreTasks(ids);
+      if (result.success) {
+        setItems((prev) => prev.filter((t) => !selectedIds.has(t.id)));
+        setSelectedIds(new Set());
+      }
+    });
+  }
+
   if (items.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-600 dark:text-slate-500">
@@ -126,6 +138,13 @@ export function TrashList({ entries }: { entries: TrashEntry[] }) {
               className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               Clear
+            </button>
+            <button
+              onClick={handleBulkRestore}
+              disabled={isBulkPending}
+              className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              {isBulkPending ? 'Working…' : `Restore (${selectedIds.size})`}
             </button>
             <button
               onClick={handleBulkDelete}
