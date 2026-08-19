@@ -9,14 +9,22 @@ import { SearchModal } from '@/components/SearchModal';
 interface NavbarProps {
   userName: string;
   notifications: NotificationItem[];
+  orgName: string;
 }
 
-export function Navbar({ userName, notifications }: NavbarProps) {
+// orgName is resolved server-side (src/lib/site.ts) and passed in as a prop —
+// this is a client component, so it can't read process.env itself.
+export function Navbar({ userName, notifications, orgName }: NavbarProps) {
   return (
     <header className="border-b border-slate-200 bg-white print:hidden dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between px-4 py-3">
-        <Link href="/my-tasks" className="text-base font-semibold text-brand-700 dark:text-brand-300">
-          Church Tasks
+        <Link href="/my-tasks" className="flex items-baseline gap-2">
+          <span className="text-base font-semibold text-brand-700 dark:text-brand-300">Asa</span>
+          {orgName && (
+            <span className="hidden text-xs text-slate-400 sm:inline dark:text-slate-500">
+              {orgName}
+            </span>
+          )}
         </Link>
 
         <div className="flex items-center gap-4">

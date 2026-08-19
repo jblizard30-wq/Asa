@@ -42,7 +42,22 @@ export async function applyAutomationAction(rule: AutomationRule, depth: number)
           await logRun(rule.id, 'SKIPPED', 'Missing target task or status');
           return;
         }
-        const before = await prisma.task.findUnique({ where: { id: rule.targetTaskId }, select: { status: true } });
+        // Atomically claim the not-DONE -> DONE transition, same guard as updateTask/moveTask in
+        // src/lib/actions/tasks.ts: a plain findUnique-then-update here would let this automation
+        // race a concurrent manual completion of the same task, each computing turningDone from
+        // its own stale snapshot and each materializing the next occurrence with a different
+        // completedAt — producing a real duplicate task row for one completion event. The
+        // updateMany's `where` makes the claim atomic: only the write that actually flips status
+        // from non-DONE to DONE gets count > 0.
+        const claimedDoneTransition =
+          rule.actionStatus === 'DONE' &&
+          (
+            await prisma.task.updateMany({
+              where: { id: rule.targetTaskId, status: { not: 'DONE' } },
+              data: { status: 'DONE' },
+            })
+          ).count > 0;
+
         const target = await prisma.task.update({
           where: { id: rule.targetTaskId },
           data: { status: rule.actionStatus },
@@ -50,7 +65,7 @@ export async function applyAutomationAction(rule: AutomationRule, depth: number)
         // Same rule as updateTask: an automation that completes a recurring task must still
         // spawn its next occurrence — this used to bypass that entirely by updating the row
         // directly instead of going through updateTask.
-        if (target.status === 'DONE' && before?.status !== 'DONE') {
+        if (claimedDoneTransition) {
           await materializeAfterCompletion(target.id, new Date());
         }
         await logRun(rule.id, 'SUCCESS');

@@ -179,6 +179,15 @@ model User {
   @@index([managerId])
 }
 
+/// One row per redeemed HQ "log in as admin" support token (see src/lib/auth.ts).
+/// The unique constraint on jti is what makes redemption single-use, not just
+/// short-lived — a replayed token fails the insert instead of racing a check.
+model SupportLoginToken {
+  id     String   @id @default(cuid())
+  jti    String   @unique
+  usedAt DateTime @default(now())
+}
+
 /// Per-user customization of the sidebar navigation: display order and show/hide per item key.
 model NavPreference {
   id      String  @id @default(cuid())
@@ -403,11 +412,12 @@ model Task {
 /// Postgres treats every recurrenceId = NULL as distinct, so plain (non-recurring) tasks
 /// never collide with each other under this constraint.
 model TaskRecurrence {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   title       String
   description String?
   projectId   String
   sectionId   String
+  priority    Priority @default(MEDIUM)
 
   rrule     String
   timezone  String         @default("America/Chicago")

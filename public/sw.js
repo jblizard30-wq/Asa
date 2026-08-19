@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'church-tasks-static-v1';
+const STATIC_CACHE = 'asa-static-v1';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
