@@ -1,8 +1,18 @@
 # CPCana Backlog Status (handoff note)
 
-Snapshot date: 2026-08-05. Branch: `wip-automation-builder`. Source doc: `church-tasks-improvements_1.md` (not in repo — pasted by Justin, kept for reference here).
+Snapshot date: 2026-08-19 (updated from 2026-08-05 original). Branch: `fix/security-race-cherry-pick` (superseded `wip-automation-builder`). Source doc: `church-tasks-improvements_1.md` (not in repo — pasted by Justin, kept for reference here).
 
 Paste this file's contents back to Claude in a fresh conversation to resume with full context.
+
+---
+
+## Step 0 — DONE: PR opened, awaiting sign-off
+
+**https://github.com/jblizard30-wq/CPCana/pull/1** — 4 commits from `fix/security-race-cherry-pick` into `main`. Not merged; explicitly waiting on Justin's sign-off per his instructions.
+
+Verified clean: `npm run lint` (no warnings), `npm test` (68/68 across 9 files), `npm run build` (28/28 routes, no errors).
+
+**Environment note (judgment call, documented per instructions):** local verification in the original `~/Documents/GitHub/CPCana` working copy was unreliable for a stretch of this session — `npm run build`, `git status`, and even a `git worktree add` intermittently hung or failed with inconsistent error signatures (`ETIMEDOUT` on a plain `fs.readFileSync`, `mmap failed`, multi-minute `git status` hangs). Root cause: iCloud Drive's "Desktop & Documents" sync is enabled and was evicting `node_modules`/`.git` content to cloud-only placeholder files (confirmed via `brctl status`; disk was also at ~95% capacity, which makes macOS evict more aggressively). Several other concurrent Claude Code sessions on the same machine independently reproduced the same `git status` hang, corroborating this isn't specific to one session or a code defect. Justin confirmed and had already begun moving to a non-iCloud working copy at `~/Developer/CPCana` (fresh `git clone` from origin, not a copy of the flaky tree) — all three checks above were run there, first-hand, not just relayed from another session. The original `~/Documents/GitHub/CPCana` directory has an uncommitted stash another session was migrating over; it hasn't been deleted.
 
 ---
 
@@ -13,6 +23,9 @@ Paste this file's contents back to Claude in a fresh conversation to resume with
 - **P0.3 — personal-task leak (security bug, confirmed).** `src/lib/actions/search.ts`: admin search previously had `isAdmin ? {}` (no project filter at all), leaking other users' Personal Tasks project content into admin search results. Fixed to `{ OR: [{ isPersonal: false }, { isPersonal: true, createdById: session.user.id }] }`.
 - **P1.2 — priority default.** Added `priority` column to `TaskRecurrence` (migration `20260805130113_add_task_recurrence_priority`), threaded through `taskRecurrences.ts` and `materializeRecurrence.ts` so recurring occurrences inherit the series' priority instead of reverting to MEDIUM.
 - **P1.4 — My Tasks grouping.** `src/app/(app)/my-tasks/page.tsx` was missing `parentTaskId: null` on its two queries, causing assigned/owned subtasks to double-render (nested + duplicate top-level card). Fixed to match convention used everywhere else.
+- **Rebrand to Asa.** Env-driven org branding (name/color/logo) for single-codebase multi-tenant deploys, signed single-use "log in as admin" HQ support token flow, reworked trash list/restore UX (`src/lib/site.ts`, `src/app/support-login/`, `src/lib/supportLogin.ts`).
+- **Web manifest icon MIME type.** Now derived from `LOGO_URL`'s actual file extension instead of hardcoded `image/png` — fixes deployments (like this one) using an SVG logo.
+- **Bulk actions.** Status/priority/assignee/delete for task lists, restore for trashed tasks, role change/delete for admin users table — one batched action instead of one request per row. **Note for P1.1:** this already covers "bulk-assign in List view" from P1.1's scope below — check `ListView.tsx`/`MyTasksList.tsx` before re-implementing that part of P1.1.
 
 ## NOT done — explicitly still open
 
