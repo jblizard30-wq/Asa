@@ -13,7 +13,8 @@
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "seed:bulletin": "tsx prisma/seed-bulletin.ts",
-    "backfill:org-chart": "tsx prisma/backfill-org-chart.ts"
+    "backfill:org-chart": "tsx prisma/backfill-org-chart.ts",
+    "backfill:status-section-sync": "tsx prisma/backfill-status-section-sync.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
