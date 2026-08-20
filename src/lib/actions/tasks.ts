@@ -144,7 +144,6 @@ export async function createTask(projectId: string, formData: FormData) {
     data: {
       title: parsed.data.title,
       description: parsed.data.description,
-      url: parsed.data.url || null,
       projectId,
       sectionId: parsed.data.sectionId,
       parentTaskId: parsed.data.parentTaskId || null,
@@ -152,6 +151,7 @@ export async function createTask(projectId: string, formData: FormData) {
       dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
       priority: parsed.data.priority ?? 'MEDIUM',
       order: (lastTask?.order ?? -1) + 1,
+      links: parsed.data.url ? { create: [{ url: parsed.data.url, order: 0 }] } : undefined,
     },
   });
 
@@ -193,7 +193,10 @@ type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 export async function updateTask(taskId: string, input: UpdateTaskInput) {
   const existing = await prisma.task.findUnique({
     where: { id: taskId },
-    include: { assignees: { select: { id: true } } },
+    include: {
+      assignees: { select: { id: true } },
+      links: { orderBy: { order: 'asc' }, take: 1 },
+    },
   });
   if (!existing) return { success: false, error: 'Task not found' };
   if (existing.deletedAt) return { success: false, error: 'This task is in the trash. Restore it first.' };
@@ -222,7 +225,20 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
   const data: Record<string, unknown> = { ...parsed.data };
   delete data.assigneeIds;
   if ('url' in parsed.data) {
-    data.url = parsed.data.url || null;
+    delete data.url;
+    // Task no longer carries a scalar url — it has a `links` relation instead. The task detail
+    // UI still only edits one link, so preserve that UX by upserting/deleting just the first one
+    // (ordered by `order`), via a nested write so it lands in the same task.update as everything
+    // else here. A future multi-link editor is what actually exposes the rest of `links`.
+    const desiredUrl = parsed.data.url || null;
+    const firstLink = existing.links[0];
+    if (desiredUrl) {
+      data.links = firstLink
+        ? { update: { where: { id: firstLink.id }, data: { url: desiredUrl } } }
+        : { create: [{ url: desiredUrl, order: 0 }] };
+    } else if (firstLink) {
+      data.links = { delete: { id: firstLink.id } };
+    }
   }
   if ('dueDate' in parsed.data) {
     data.dueDate = parsed.data.dueDate ? new Date(parsed.data.dueDate) : null;
@@ -498,6 +514,7 @@ export async function getTaskDetail(taskId: string) {
       blockedBy: { include: { blocker: { select: { id: true, title: true, status: true } } } },
       blocking: { include: { blocked: { select: { id: true, title: true, status: true } } } },
       attachments: { include: { uploadedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } },
+      links: { orderBy: { order: 'asc' } },
       tags: { orderBy: { order: 'asc' } },
       timeEntries: { include: { user: { select: { id: true, name: true } } }, orderBy: { loggedAt: 'desc' } },
       activities: {
@@ -538,7 +555,10 @@ export async function getTaskDetail(taskId: string) {
     id: task.id,
     title: task.title,
     description: task.description,
-    url: task.url,
+    // Derived for backward compatibility with the single-link task detail UI — the data layer
+    // now supports multiple links (task.links), but only the first is exposed as `url` until a
+    // multi-link editor replaces this field on the UI side.
+    url: task.links[0]?.url ?? null,
     status: task.status,
     priority: task.priority,
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
