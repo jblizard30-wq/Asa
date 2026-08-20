@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { Navbar } from '@/components/Navbar';
 import { Sidebar } from '@/components/Sidebar';
 import { applyNavPreferences, getVisibleNavDefs } from '@/lib/navItems';
+import { ORG_NAME } from '@/lib/site';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
@@ -69,6 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           read: n.read,
           createdAt: n.createdAt.toISOString(),
         }))}
+        orgName={ORG_NAME}
       />
       <div className="flex flex-1">
         <Sidebar folders={sidebarFolders} ungroupedProjects={ungroupedProjects} navItems={navItems} />

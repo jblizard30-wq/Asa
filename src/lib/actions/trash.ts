@@ -104,6 +104,63 @@ export async function permanentlyDeleteTask(taskId: string) {
   return { success: true };
 }
 
+/** Restores many trashed tasks at once in a single query — the trash list's bulk-select action. */
+export async function restoreTasks(taskIds: string[]) {
+  if (taskIds.length === 0) return { success: true, restoredCount: 0 };
+
+  const session = await requireSession();
+  const isAdmin = session.user.role === 'ADMIN';
+
+  const tasks = await prisma.task.findMany({ where: { id: { in: taskIds } } });
+  const found = new Map(tasks.map((t) => [t.id, t]));
+
+  const projectIds = new Set<string>();
+  for (const id of taskIds) {
+    const task = found.get(id);
+    if (!task || !task.deletedAt) return { success: false, error: 'One or more tasks are no longer in the trash.' };
+    if (!isAdmin && task.deletedById !== session.user.id) {
+      return { success: false, error: 'You can only manage tasks in your own trash' };
+    }
+    projectIds.add(task.projectId);
+  }
+
+  const result = await prisma.task.updateMany({
+    where: { id: { in: taskIds } },
+    data: { deletedAt: null, deletedById: null },
+  });
+
+  for (const projectId of projectIds) revalidatePath(`/projects/${projectId}`);
+  revalidatePath('/my-tasks');
+  revalidatePath('/trash');
+  revalidatePath('/admin/trash');
+  return { success: true, restoredCount: result.count };
+}
+
+/** Hard-deletes many trashed tasks at once in a single query — the trash list's bulk-select action. */
+export async function permanentlyDeleteTasks(taskIds: string[]) {
+  if (taskIds.length === 0) return { success: true, deletedCount: 0 };
+
+  const session = await requireSession();
+  const isAdmin = session.user.role === 'ADMIN';
+
+  const tasks = await prisma.task.findMany({ where: { id: { in: taskIds } } });
+  const found = new Map(tasks.map((t) => [t.id, t]));
+
+  for (const id of taskIds) {
+    const task = found.get(id);
+    if (!task || !task.deletedAt) return { success: false, error: 'One or more tasks are no longer in the trash.' };
+    if (!isAdmin && task.deletedById !== session.user.id) {
+      return { success: false, error: 'You can only manage tasks in your own trash' };
+    }
+  }
+
+  const result = await prisma.task.deleteMany({ where: { id: { in: taskIds } } });
+
+  revalidatePath('/trash');
+  revalidatePath('/admin/trash');
+  return { success: true, deletedCount: result.count };
+}
+
 /** Hard-deletes every task whose trash retention window has expired. Intended to be called by a scheduled job. */
 export async function purgeExpiredTrash() {
   const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);

@@ -1,6 +1,11 @@
 import nodemailer from 'nodemailer';
+import { APP_NAME, ORG_NAME } from '@/lib/site';
 
 const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM } = process.env;
+
+const DEFAULT_EMAIL_FROM = ORG_NAME
+  ? `${APP_NAME} (${ORG_NAME}) <notifications@example.org>`
+  : `${APP_NAME} <notifications@example.org>`;
 
 const emailEnabled = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASSWORD);
 
@@ -22,7 +27,7 @@ export async function sendNotificationEmail(to: string, subject: string, body: s
   if (!transporter) return;
   try {
     await transporter.sendMail({
-      from: EMAIL_FROM || 'Church Tasks <notifications@example.org>',
+      from: EMAIL_FROM || DEFAULT_EMAIL_FROM,
       to,
       subject,
       text: body,

@@ -64,6 +64,7 @@ export async function setTaskRecurrence(taskId: string, input: SetTaskRecurrence
         description: task.description,
         projectId: task.projectId,
         sectionId: task.sectionId,
+        priority: task.priority,
         rrule,
         timezone: APP_TIMEZONE,
         mode: parsed.data.mode,
