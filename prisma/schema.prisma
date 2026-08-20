@@ -118,6 +118,12 @@ enum ReminderChannel {
   EMAIL
 }
 
+enum RsvpStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
 model User {
   id                  String          @id @default(cuid())
   name                String
@@ -175,6 +181,8 @@ model User {
   apiKeys                   ApiKey[]
   createdWebhooks           Webhook[]
   taskRecurrenceAssignments TaskRecurrence[]         @relation("TaskRecurrenceAssignees")
+  volunteerAvailability     VolunteerAvailability[]
+  availabilityExceptions    AvailabilityException[]
 
   @@index([managerId])
 }
@@ -426,6 +434,14 @@ model TaskRecurrence {
   endsAt    DateTime?
   createdAt DateTime       @default(now())
 
+  // When true, an occurrence isn't assigned to every member of `assignees` — that list is
+  // instead the eligible volunteer pool, and each occurrence draws `rotationSlots` people
+  // from it (see src/lib/volunteerRotation.ts), ranked by who's least recently served and
+  // filtered by that occurrence date's availability. Default false preserves today's
+  // "assign everyone in the list" behavior for existing recurrences untouched.
+  rotationEnabled Boolean @default(false)
+  rotationSlots   Int     @default(1)
+
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   section   Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   assignees User[]  @relation("TaskRecurrenceAssignees")
@@ -433,6 +449,38 @@ model TaskRecurrence {
 
   @@index([projectId])
   @@index([nextRunAt])
+}
+
+/// A volunteer's weekly recurring availability pattern, one row per day they've explicitly set.
+/// Absence of a row for a (userId, dayOfWeek) pair means "available" — most volunteers never
+/// touch this, so only exceptions to the default need a row.
+model VolunteerAvailability {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayOfWeek Int
+  available Boolean @default(true)
+
+  @@unique([userId, dayOfWeek])
+  @@index([userId])
+}
+
+/// A one-off override of a specific calendar date, taking precedence over the weekly pattern
+/// (e.g. unavailable this particular Sunday despite normally being available, or a last-minute
+/// fill-in on a day normally marked unavailable). `date` is a floating date — its UTC components
+/// equal the wall-clock calendar day, same convention as recurrence.ts's toFloating — so it's
+/// compared directly without a timezone conversion at lookup time.
+model AvailabilityException {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime
+  available Boolean
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId])
 }
 
 model CustomField {
@@ -794,6 +842,14 @@ model TaskGuestLink {
   expiresAt   DateTime?
   revokedAt   DateTime?
   createdAt   DateTime  @default(now())
+
+  // Roster-confirmation extension (P3.4): when true, the guest page offers Accept/Decline
+  // instead of (or alongside) the comment form, and rsvpStatus/rsvpAt record the answer.
+  // false on every link created before this existed, so old share-for-viewing links are
+  // unaffected.
+  requiresRsvp Boolean    @default(false)
+  rsvpStatus   RsvpStatus @default(PENDING)
+  rsvpAt       DateTime?
 
   guestComments GuestComment[]
 
