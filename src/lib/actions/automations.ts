@@ -26,7 +26,7 @@ export async function getAutomationOptions() {
           tasks: {
             where: { deletedAt: null, parentTaskId: null },
             orderBy: { order: 'asc' },
-            select: { id: true, title: true },
+            select: { id: true, title: true, recurrenceId: true },
           },
         },
       },
@@ -40,7 +40,9 @@ export async function getAutomationOptions() {
     sections: p.sections.map((s) => ({
       id: s.id,
       name: s.name,
-      tasks: s.tasks.map((t) => ({ id: t.id, title: t.title })),
+      // `recurring` flags tasks materialized from a TaskRecurrence — picking one binds the
+      // rule to the whole series (see createAutomationRule), not just this occurrence.
+      tasks: s.tasks.map((t) => ({ id: t.id, title: t.title, recurring: t.recurrenceId != null })),
     })),
   }));
 }
@@ -54,7 +56,9 @@ export async function getAutomationRulesForProject(projectId: string) {
     },
     include: {
       sourceTask: { select: { id: true, title: true, project: { select: { name: true } } } },
+      sourceRecurrence: { select: { id: true, title: true, project: { select: { name: true } } } },
       targetTask: { select: { id: true, title: true, project: { select: { name: true } } } },
+      targetRecurrence: { select: { id: true, title: true, project: { select: { name: true } } } },
       targetSection: { select: { id: true, name: true, project: { select: { name: true } } } },
       actionAssignee: { select: { id: true, name: true } },
       newTaskAssignee: { select: { id: true, name: true } },
@@ -78,12 +82,18 @@ export async function getAutomationRulesForProject(projectId: string) {
     actionAssignee: r.actionAssignee,
     newTaskTitle: r.newTaskTitle,
     newTaskAssignee: r.newTaskAssignee,
-    sourceTask: r.sourceTask
-      ? { id: r.sourceTask.id, title: r.sourceTask.title, projectName: r.sourceTask.project.name }
-      : null,
-    targetTask: r.targetTask
-      ? { id: r.targetTask.id, title: r.targetTask.title, projectName: r.targetTask.project.name }
-      : null,
+    // A recurrence-bound rule shows the series' own title/project (stable across occurrences)
+    // instead of the literal, possibly long-completed task it was created from.
+    sourceTask: r.sourceRecurrence
+      ? { id: r.sourceRecurrence.id, title: r.sourceRecurrence.title, projectName: r.sourceRecurrence.project.name, recurring: true }
+      : r.sourceTask
+        ? { id: r.sourceTask.id, title: r.sourceTask.title, projectName: r.sourceTask.project.name, recurring: false }
+        : null,
+    targetTask: r.targetRecurrence
+      ? { id: r.targetRecurrence.id, title: r.targetRecurrence.title, projectName: r.targetRecurrence.project.name, recurring: true }
+      : r.targetTask
+        ? { id: r.targetTask.id, title: r.targetTask.title, projectName: r.targetTask.project.name, recurring: false }
+        : null,
     targetSection: r.targetSection
       ? { id: r.targetSection.id, name: r.targetSection.name, projectName: r.targetSection.project.name }
       : null,
@@ -158,8 +168,9 @@ export async function createAutomationRule(input: CreateAutomationRuleInput) {
   if (!sourceTask) return { success: false, error: 'Source task not found' };
   await requireProjectMember(sourceTask.projectId);
 
+  let targetTask = null;
   if (data.targetTaskId) {
-    const targetTask = await prisma.task.findUnique({ where: { id: data.targetTaskId } });
+    targetTask = await prisma.task.findUnique({ where: { id: data.targetTaskId } });
     if (!targetTask) return { success: false, error: 'Target task not found' };
     await requireProjectMember(targetTask.projectId);
   }
@@ -169,16 +180,22 @@ export async function createAutomationRule(input: CreateAutomationRuleInput) {
     await requireProjectMember(targetSection.projectId);
   }
 
+  const needsTargetTask = data.actionType === 'SET_STATUS' || data.actionType === 'SET_ASSIGNEE' || data.actionType === 'MOVE_SECTION';
+
   const rule = await prisma.automationRule.create({
     data: {
       name: data.name,
       createdById: session.user.id,
       sourceTaskId: data.sourceTaskId,
+      // Binding to the series (when the picked task recurs) is what lets the rule keep firing
+      // past the first completed occurrence — see the doc comment on the schema field.
+      sourceRecurrenceId: sourceTask.recurrenceId,
       triggerType: data.triggerType,
       triggerStatus: data.triggerType === 'STATUS_CHANGED' ? data.triggerStatus : null,
       triggerDaysBefore: data.triggerType === 'DUE_DATE_APPROACHING' ? data.triggerDaysBefore : null,
       actionType: data.actionType,
-      targetTaskId: data.targetTaskId || null,
+      targetTaskId: needsTargetTask ? data.targetTaskId || null : null,
+      targetRecurrenceId: needsTargetTask ? (targetTask?.recurrenceId ?? null) : null,
       actionStatus: data.actionType === 'SET_STATUS' ? data.actionStatus : null,
       assigneeMode: data.actionType === 'SET_ASSIGNEE' ? data.assigneeMode : null,
       actionAssigneeId:

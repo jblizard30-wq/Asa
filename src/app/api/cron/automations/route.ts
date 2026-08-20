@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { applyAutomationAction } from '@/lib/automations';
+import { applyAutomationAction, resolveAutomationSourceTask } from '@/lib/automations';
 import { startOfLocalDay } from '@/lib/digestSchedule';
 
 export const dynamic = 'force-dynamic';
@@ -60,14 +60,19 @@ export async function GET(request: Request) {
 
   const rules = await prisma.automationRule.findMany({
     where: { enabled: true, triggerType: 'DUE_DATE_APPROACHING' },
-    include: { sourceTask: true },
   });
 
   let firedCount = 0;
   for (const rule of rules) {
-    if (!rule.sourceTask.dueDate || rule.triggerDaysBefore == null) continue;
+    if (rule.triggerDaysBefore == null) continue;
 
-    const triggerDay = toDayString(new Date(rule.sourceTask.dueDate.getTime() - rule.triggerDaysBefore * DAY_MS));
+    // Resolved fresh each run rather than read off a static include: for a recurrence-bound
+    // rule the literal sourceTaskId row is often a long-completed occurrence with a stale due
+    // date, while the series' current occurrence is a different row entirely.
+    const sourceTask = await resolveAutomationSourceTask(rule);
+    if (!sourceTask?.dueDate) continue;
+
+    const triggerDay = toDayString(new Date(sourceTask.dueDate.getTime() - rule.triggerDaysBefore * DAY_MS));
     if (triggerDay !== todayStr) continue;
 
     const claimed = await claimRuleForToday(rule.id, todayStart);

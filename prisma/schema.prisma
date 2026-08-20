@@ -431,6 +431,9 @@ model TaskRecurrence {
   assignees User[]  @relation("TaskRecurrenceAssignees")
   tasks     Task[]
 
+  automationsAsSource AutomationRule[] @relation("AutomationSourceRecurrence")
+  automationsAsTarget AutomationRule[] @relation("AutomationTargetRecurrence")
+
   @@index([projectId])
   @@index([nextRunAt])
 }
@@ -516,8 +519,17 @@ model AutomationRule {
   createdById String
   createdBy   User    @relation("AutomationCreatedBy", fields: [createdById], references: [id])
 
+  // The literal task picked when the rule was created — kept for display/history even once a
+  // rule becomes recurrence-bound (below), since occurrences always share the series' project.
   sourceTaskId String
   sourceTask   Task   @relation("AutomationSourceTask", fields: [sourceTaskId], references: [id], onDelete: Cascade)
+
+  // When the picked source task belongs to a recurring series, this is set alongside
+  // sourceTaskId and takes priority for trigger matching and SAME_AS_SOURCE resolution: the
+  // rule follows whichever occurrence is currently active in the series, not the one specific
+  // task row picked at creation time (which stops firing once completed and superseded).
+  sourceRecurrenceId String?
+  sourceRecurrence   TaskRecurrence? @relation("AutomationSourceRecurrence", fields: [sourceRecurrenceId], references: [id], onDelete: Cascade)
 
   triggerType       AutomationTriggerType
   triggerStatus     TaskStatus?
@@ -527,6 +539,10 @@ model AutomationRule {
 
   targetTaskId String?
   targetTask   Task?   @relation("AutomationTargetTask", fields: [targetTaskId], references: [id], onDelete: Cascade)
+
+  // Same override relationship as sourceRecurrenceId, for the action side.
+  targetRecurrenceId String?
+  targetRecurrence   TaskRecurrence? @relation("AutomationTargetRecurrence", fields: [targetRecurrenceId], references: [id], onDelete: Cascade)
 
   actionStatus     TaskStatus?
   assigneeMode     AutomationAssigneeMode?
@@ -547,7 +563,9 @@ model AutomationRule {
   runs      AutomationRun[]
 
   @@index([sourceTaskId])
+  @@index([sourceRecurrenceId])
   @@index([targetTaskId])
+  @@index([targetRecurrenceId])
 }
 
 model AutomationRun {

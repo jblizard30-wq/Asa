@@ -11,7 +11,7 @@ export interface AutomationProjectOption {
   id: string;
   name: string;
   members: { id: string; name: string }[];
-  sections: { id: string; name: string; tasks: { id: string; title: string }[] }[];
+  sections: { id: string; name: string; tasks: { id: string; title: string; recurring: boolean }[] }[];
 }
 
 export interface AutomationRuleSummary {
@@ -28,8 +28,8 @@ export interface AutomationRuleSummary {
   actionAssignee: { id: string; name: string } | null;
   newTaskTitle: string | null;
   newTaskAssignee: { id: string; name: string } | null;
-  sourceTask: { id: string; title: string; projectName: string } | null;
-  targetTask: { id: string; title: string; projectName: string } | null;
+  sourceTask: { id: string; title: string; projectName: string; recurring: boolean } | null;
+  targetTask: { id: string; title: string; projectName: string; recurring: boolean } | null;
   targetSection: { id: string; name: string; projectName: string } | null;
   runs: { id: string; status: string; detail: string | null; createdAt: string }[];
 }
@@ -128,7 +128,8 @@ export function AutomationRulesView({
               <div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{rule.name}</p>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                  When <span className="font-medium">&ldquo;{rule.sourceTask?.title}&rdquo;</span>{' '}
+                  When <span className="font-medium">&ldquo;{rule.sourceTask?.title}&rdquo;</span>
+                  {rule.sourceTask?.recurring && <span className="text-xs text-slate-400"> (recurring series)</span>}{' '}
                   {triggerSummary(rule)} → {AUTOMATION_ACTION_LABELS[rule.actionType]?.toLowerCase()}:{' '}
                   {actionSummary(rule)}
                 </p>
