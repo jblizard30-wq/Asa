@@ -13,6 +13,10 @@
       "schedule": "0 14 * * *"
     },
     {
+      "path": "/api/cron/unassigned-digest",
+      "schedule": "0 14 * * 1"
+    },
+    {
       "path": "/api/cron/materialize-recurrence",
       "schedule": "0 7 * * *"
     },

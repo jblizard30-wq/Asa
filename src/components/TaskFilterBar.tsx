@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   DUE_DATE_PRESET_LABELS,
   EMPTY_TASK_FILTERS,
+  UNASSIGNED_ID,
   countActiveFilters,
   type DueDatePreset,
   type TaskFilters,
@@ -242,6 +243,7 @@ export function TaskFilterBar({
   statusOptions,
   priorityOptions,
   assigneeOptions,
+  unassignedCount,
   teamOptions,
   tagOptions,
   projectOptions,
@@ -256,6 +258,9 @@ export function TaskFilterBar({
   statusOptions: FilterOption[];
   priorityOptions: FilterOption[];
   assigneeOptions?: FilterOption[];
+  /** Count of tasks with no assignee under the other active filters. Renders a dedicated
+   *  quick-toggle chip alongside the Assignee dropdown when provided (project-scoped views). */
+  unassignedCount?: number;
   teamOptions?: FilterOption[];
   tagOptions?: FilterOption[];
   projectOptions?: FilterOption[];
@@ -305,6 +310,22 @@ export function TaskFilterBar({
           isOpen={openKey === 'assignee'}
           onToggle={() => toggleOpen('assignee')}
         />
+      )}
+      {unassignedCount !== undefined && (
+        <button
+          type="button"
+          onClick={() => {
+            const isActive = filters.assigneeIds.length === 1 && filters.assigneeIds[0] === UNASSIGNED_ID;
+            patch({ assigneeIds: isActive ? [] : [UNASSIGNED_ID] });
+          }}
+          className={`flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-sm font-medium ${
+            filters.assigneeIds.length === 1 && filters.assigneeIds[0] === UNASSIGNED_ID
+              ? 'border-amber-400 bg-amber-500 text-white dark:border-amber-600 dark:bg-amber-600'
+              : 'border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/30'
+          }`}
+        >
+          <span aria-hidden>⚠</span> Unassigned ({unassignedCount})
+        </button>
       )}
       {teamOptions && (teamOptions.length > 0 || filters.teamIds.length > 0) && (
         <MultiSelectFilter

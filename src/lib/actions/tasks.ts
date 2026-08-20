@@ -665,7 +665,9 @@ export async function bulkUpdateTasks(taskIds: string[], input: BulkUpdateInput)
   }
 
   if (assigneeIds !== undefined) {
-    await Promise.all(
+    // One $transaction, not one request per task — same batching requirement as
+    // batchUpdateTaskFields below (Prisma's M2M `set` has no bulk updateMany equivalent).
+    await prisma.$transaction(
       taskIds.map((id) =>
         prisma.task.update({ where: { id }, data: { assignees: { set: assigneeIds.map((uid) => ({ id: uid })) } } }),
       ),

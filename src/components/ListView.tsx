@@ -223,8 +223,15 @@ export function ListView({
                         )}
                       </span>
                       <div className="flex shrink-0 items-center gap-3">
-                        {task.assigneeNames.length > 0 && (
+                        {task.assigneeNames.length > 0 ? (
                           <span className="text-xs text-slate-400 dark:text-slate-500">{task.assigneeNames.join(', ')}</span>
+                        ) : (
+                          <span
+                            className="flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400"
+                            title="No one is assigned to this task yet"
+                          >
+                            <span aria-hidden>⚠</span> Unassigned
+                          </span>
                         )}
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[task.priority]}`}>
                           {PRIORITY_LABELS[task.priority]}
@@ -241,7 +248,7 @@ export function ListView({
           )}
 
           <div className="border-t border-slate-100 p-2 dark:border-slate-800">
-            <QuickAddTask projectId={projectId} sectionId={section.id} />
+            <QuickAddTask projectId={projectId} sectionId={section.id} members={members} />
           </div>
         </div>
       ))}
