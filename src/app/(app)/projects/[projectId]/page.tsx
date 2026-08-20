@@ -94,6 +94,7 @@ export default async function ProjectPage({ params }: { params: { projectId: str
           description: t.description,
           priority: t.priority,
           status: t.status,
+          startDate: t.startDate ? t.startDate.toISOString() : null,
           dueDate: t.dueDate ? t.dueDate.toISOString() : null,
           assigneeIds: t.assignees.map((a) => a.id),
           assigneeNames: t.assignees.map((a) => a.name),

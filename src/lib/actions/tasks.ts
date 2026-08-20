@@ -106,6 +106,7 @@ const createTaskSchema = z.object({
   sectionId: z.string().min(1),
   parentTaskId: z.string().optional(),
   assigneeIds: z.array(z.string()).optional(),
+  startDate: z.string().optional(),
   dueDate: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
 });
@@ -124,6 +125,7 @@ export async function createTask(projectId: string, formData: FormData) {
     sectionId: formData.get('sectionId'),
     parentTaskId: formData.get('parentTaskId') || undefined,
     assigneeIds: assigneeIdsRaw.length > 0 ? assigneeIdsRaw : undefined,
+    startDate: formData.get('startDate') || undefined,
     dueDate: formData.get('dueDate') || undefined,
     priority: formData.get('priority') || undefined,
   });
@@ -149,6 +151,7 @@ export async function createTask(projectId: string, formData: FormData) {
       sectionId: parsed.data.sectionId,
       parentTaskId: parsed.data.parentTaskId || null,
       assignees: assigneeIds.length > 0 ? { connect: assigneeIds.map((id) => ({ id })) } : undefined,
+      startDate: parsed.data.startDate ? new Date(parsed.data.startDate) : null,
       dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
       priority: parsed.data.priority ?? 'MEDIUM',
       order: (lastTask?.order ?? -1) + 1,
@@ -183,6 +186,7 @@ const updateTaskSchema = z.object({
   description: z.string().max(4000).optional().nullable(),
   url: z.union([urlSchema, z.null()]).optional(),
   assigneeIds: z.array(z.string()).optional(),
+  startDate: z.string().optional().nullable(),
   dueDate: z.string().optional().nullable(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   status: z.enum(['TODO', 'IN_PROGRESS', 'DONE']).optional(),
@@ -223,6 +227,9 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
   delete data.assigneeIds;
   if ('url' in parsed.data) {
     data.url = parsed.data.url || null;
+  }
+  if ('startDate' in parsed.data) {
+    data.startDate = parsed.data.startDate ? new Date(parsed.data.startDate) : null;
   }
   if ('dueDate' in parsed.data) {
     data.dueDate = parsed.data.dueDate ? new Date(parsed.data.dueDate) : null;
@@ -541,6 +548,7 @@ export async function getTaskDetail(taskId: string) {
     url: task.url,
     status: task.status,
     priority: task.priority,
+    startDate: task.startDate ? task.startDate.toISOString() : null,
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
     assignees: task.assignees.map((a) => ({ id: a.id, name: a.name })),
     taskRecurrence,
