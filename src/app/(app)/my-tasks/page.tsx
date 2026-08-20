@@ -7,8 +7,14 @@ export default async function MyTasksPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return null;
 
+  // Exclude subtasks here — every other top-level task list in this codebase filters
+  // parentTaskId: null (see projects/[projectId]/page.tsx, automations.ts, etc.) so that
+  // subtasks only surface nested under their parent's `subtasks` include. Without this,
+  // a subtask assigned directly to the user would show up twice: once as its own
+  // top-level row here, and again nested under its parent (if the parent is also assigned
+  // to / owned by the user).
   const tasksRaw = await prisma.task.findMany({
-    where: { assignees: { some: { id: session.user.id } }, deletedAt: null },
+    where: { assignees: { some: { id: session.user.id } }, deletedAt: null, parentTaskId: null },
     include: {
       project: true,
       section: true,

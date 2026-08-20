@@ -76,12 +76,16 @@ export async function applyAutomationAction(
           await logRun(rule.id, 'SKIPPED', 'Missing target task or status');
           return;
         }
-
         let turnedDone = false;
         if (rule.actionStatus === 'DONE') {
-          // Atomic conditional claim: guards against two concurrent triggers (e.g. this rule
-          // firing twice in a race, or racing a direct user completion) both observing
-          // "not done yet" and both materializing the recurrence's next occurrence.
+          // Atomic conditional claim, same guard as updateTask/moveTask in src/lib/actions/tasks.ts:
+          // a plain findUnique-then-update here would let this automation race a concurrent
+          // manual completion (or a second concurrent trigger of this same rule) — each computing
+          // turnedDone from its own stale snapshot and each materializing the recurrence's next
+          // occurrence for one completion event. The updateMany's `where` makes the claim atomic:
+          // only the write that actually flips status from non-DONE to DONE gets count > 0. Keyed
+          // on target.id (the resolved current occurrence), not rule.targetTaskId, so a
+          // recurrence-bound rule claims the series' live row rather than a stale literal one.
           const claim = await prisma.task.updateMany({
             where: { id: target.id, status: { not: 'DONE' } },
             data: { status: 'DONE' },
@@ -99,6 +103,9 @@ export async function applyAutomationAction(
           await prisma.task.update({ where: { id: target.id }, data: { status: rule.actionStatus } });
         }
 
+        // Same rule as updateTask: an automation that completes a recurring task must still
+        // spawn its next occurrence — this used to bypass that entirely by updating the row
+        // directly instead of going through updateTask.
         if (turnedDone) {
           await materializeAfterCompletion(target.id, new Date());
         }

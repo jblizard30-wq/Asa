@@ -1,6 +1,6 @@
-# Church Tasks
+# Asa
 
-A lightweight, Asana-style task manager for church staff — projects, kanban boards, assignments, comments, and notifications.
+A lightweight, Asana-style task manager for church/organization staff — projects, kanban boards, assignments, comments, and notifications. Deployed per-customer: one Vercel project + one Neon database each, running this same codebase, differentiated entirely by environment variables (see below) — no fork per customer.
 
 ## Tech stack
 
@@ -28,21 +28,36 @@ cp .env.example .env
 
 | Variable | Description |
 | --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string, e.g. `postgresql://postgres:postgres@localhost:5432/church_tasks?schema=public` |
+| `DATABASE_URL` | PostgreSQL connection string, e.g. `postgresql://postgres:postgres@localhost:5432/asa?schema=public` |
 | `NEXTAUTH_SECRET` | Random secret used to sign session tokens. Generate one with `openssl rand -base64 32` |
 | `NEXTAUTH_URL` | Base URL of the app. Use `http://localhost:3000` locally |
+| `ORG_NAME`, `BRAND_COLOR`, `LOGO_URL` | Optional per-deployment branding (see `src/lib/site.ts`). Blank renders a neutral, org-agnostic default — every real deployment sets these explicitly |
 | `EMAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Optional — enables outbound email notifications. Leave blank to skip; in-app notifications still work without them |
+| `HQ_SUPPORT_SECRET` | Shared secret this deployment and the vendor's HQ app both hold, for HQ's one-click "log in as admin" links. Generate a **unique** value per deployment with `openssl rand -base64 32` |
+
+### New customer checklist
+
+Every new deployment needs its own Neon database + Vercel project, with:
+`DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `ORG_NAME`, `BRAND_COLOR`,
+`LOGO_URL` (optional), `EMAIL_FROM`/`SMTP_*`, `CRON_SECRET`,
+`BLOB_READ_WRITE_TOKEN`, and a freshly generated `HQ_SUPPORT_SECRET`.
+
+`npm run seed` is safe to run against a new customer's database — it's
+generic/demo data. **`npm run seed:bulletin` is Chesterfield Presbyterian
+Church's own onboarding script and must never be run against another
+customer's database** — see the comment at the top of
+`prisma/seed-bulletin.ts`.
 
 If you don't have Postgres running locally, the quickest option is Docker:
 
 ```bash
-docker run --name church-tasks-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=church_tasks -p 5432:5432 -d postgres:16
+docker run --name asa-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=asa -p 5432:5432 -d postgres:16
 ```
 
 Then use:
 
 ```
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/church_tasks?schema=public"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/asa?schema=public"
 ```
 
 ### 3. Run database migrations

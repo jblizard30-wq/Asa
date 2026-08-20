@@ -6,20 +6,23 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Palette sampled from chespres.org: navy primary, sky accent, coral CTA, teal highlight.
+        // Brand scale is driven by CSS custom properties (see src/lib/site.ts
+        // and the inline <style> in src/app/layout.tsx), not literal hex, so
+        // the same build serves any deployment's BRAND_COLOR env var.
         brand: {
-          50: '#eef3f8',
-          100: '#dde7f0',
-          200: '#b9d0e3',
-          300: '#96c7ef',
-          400: '#6597bd',
-          500: '#3f7096',
-          600: '#2c4a68',
-          700: '#223a53',
-          800: '#182a3d',
-          900: '#101d2a',
-          950: '#0a1420',
+          50: 'rgb(var(--brand-50) / <alpha-value>)',
+          100: 'rgb(var(--brand-100) / <alpha-value>)',
+          200: 'rgb(var(--brand-200) / <alpha-value>)',
+          300: 'rgb(var(--brand-300) / <alpha-value>)',
+          400: 'rgb(var(--brand-400) / <alpha-value>)',
+          500: 'rgb(var(--brand-500) / <alpha-value>)',
+          600: 'rgb(var(--brand-600) / <alpha-value>)',
+          700: 'rgb(var(--brand-700) / <alpha-value>)',
+          800: 'rgb(var(--brand-800) / <alpha-value>)',
+          900: 'rgb(var(--brand-900) / <alpha-value>)',
+          950: 'rgb(var(--brand-950) / <alpha-value>)',
         },
+        // Fixed product accents, not per-customer.
         accent: {
           coral: '#f95759',
           teal: '#68ccd1',

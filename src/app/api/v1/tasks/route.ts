@@ -9,7 +9,10 @@ export const dynamic = 'force-dynamic';
 
 async function accessibleProjectIds(user: { id: string; role: string }): Promise<string[]> {
   const projects = await prisma.project.findMany({
-    where: user.role === 'ADMIN' ? {} : { members: { some: { userId: user.id } } },
+    where:
+      user.role === 'ADMIN'
+        ? { OR: [{ isPersonal: false }, { isPersonal: true, createdById: user.id }] }
+        : { members: { some: { userId: user.id } } },
     select: { id: true },
   });
   return projects.map((p) => p.id);

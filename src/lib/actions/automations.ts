@@ -13,7 +13,10 @@ export async function getAutomationOptions() {
   if (!session?.user) throw new Error('Not authenticated');
 
   const projects = await prisma.project.findMany({
-    where: session.user.role === 'ADMIN' ? {} : { members: { some: { userId: session.user.id } } },
+    where:
+      session.user.role === 'ADMIN'
+        ? { OR: [{ isPersonal: false }, { isPersonal: true, createdById: session.user.id }] }
+        : { members: { some: { userId: session.user.id } } },
     orderBy: { name: 'asc' },
     include: {
       members: { include: { user: { select: { id: true, name: true } } } },
