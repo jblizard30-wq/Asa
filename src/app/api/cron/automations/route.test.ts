@@ -67,6 +67,7 @@ vi.mock('@/lib/automations', () => ({
   applyAutomationAction: async () => {
     state.applyCallCount++;
   },
+  resolveAutomationSourceTask: async () => state.rule.sourceTask,
 }));
 
 import { GET } from './route';
