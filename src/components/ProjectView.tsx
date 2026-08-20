@@ -91,6 +91,23 @@ export function ProjectView({
     [filteredSections],
   );
 
+  // How many tasks would show if "Unassigned" were also applied on top of the other active
+  // filters — matches other filters first, then narrows to unassigned, so the chip's count
+  // previews what clicking it will do rather than double-counting against itself.
+  const unassignedCount = useMemo(() => {
+    const filtersWithoutAssignee = { ...filters, assigneeIds: [] };
+    return sections.reduce(
+      (sum, section) =>
+        sum +
+        section.tasks.filter(
+          (task) =>
+            task.assigneeIds.length === 0 &&
+            matchesTaskFilters(task, filtersWithoutAssignee, { teamIdsByUserId: memberTeamIds }),
+        ).length,
+      0,
+    );
+  }, [sections, filters, memberTeamIds]);
+
   return (
     <div>
       <div className="flex items-start justify-between gap-4">
@@ -212,6 +229,7 @@ export function ProjectView({
             statusOptions={STATUS_OPTIONS}
             priorityOptions={PRIORITY_OPTIONS}
             assigneeOptions={assigneeOptions}
+            unassignedCount={unassignedCount}
             teamOptions={teamOptions}
             tagOptions={tagOptions}
             searchPlaceholder="Search this project's tasks…"
@@ -232,7 +250,7 @@ export function ProjectView({
 
       <div className="mt-4">
         {view === 'kanban' && (
-          <KanbanBoard projectId={projectId} sections={filteredSections} filtersActive={filtersActive} />
+          <KanbanBoard projectId={projectId} sections={filteredSections} members={members} filtersActive={filtersActive} />
         )}
         {view === 'list' && (
           <ListView

@@ -7,6 +7,7 @@ import { PRIORITY_STYLES, formatDueDate } from '@/lib/format';
 import { QuickAddTask } from '@/components/QuickAddTask';
 import { TaskDetailModal } from '@/components/TaskDetailModal';
 import { TagBadge, type TagInfo } from '@/components/TagPicker';
+import type { AssigneeOption } from '@/components/AssigneePicker';
 
 export interface TaskFieldValue {
   customFieldId: string;
@@ -75,10 +76,12 @@ export interface KanbanSection {
 export function KanbanBoard({
   projectId,
   sections: initialSections,
+  members = [],
   filtersActive = false,
 }: {
   projectId: string;
   sections: KanbanSection[];
+  members?: AssigneeOption[];
   filtersActive?: boolean;
 }) {
   const [sections, setSections] = useState(initialSections);
@@ -180,9 +183,16 @@ export function KanbanBoard({
                                 {due.label}
                               </span>
                             </div>
-                            {task.assigneeNames.length > 0 && (
+                            {task.assigneeNames.length > 0 ? (
                               <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
                                 {task.assigneeNames.join(', ')}
+                              </p>
+                            ) : (
+                              <p
+                                className="mt-2 flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400"
+                                title="No one is assigned to this task yet"
+                              >
+                                <span aria-hidden>⚠</span> Unassigned
                               </p>
                             )}
                           </div>
@@ -196,7 +206,7 @@ export function KanbanBoard({
             </Droppable>
 
             <div className="mt-2">
-              <QuickAddTask projectId={projectId} sectionId={section.id} />
+              <QuickAddTask projectId={projectId} sectionId={section.id} members={members} />
             </div>
           </div>
         ))}

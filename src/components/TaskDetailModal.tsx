@@ -648,6 +648,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                   projectId={task.projectId}
                   sectionId={task.sectionId}
                   blockerId={task.id}
+                  members={task.members}
                   label="+ Add task after this one"
                   onAdded={refresh}
                 />
@@ -768,6 +769,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                   projectId={task.projectId}
                   sectionId={task.sectionId}
                   parentTaskId={task.id}
+                  members={task.members}
                   label="+ Add subtask"
                   onAdded={refresh}
                 />

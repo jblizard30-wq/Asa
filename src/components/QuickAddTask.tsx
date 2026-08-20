@@ -3,12 +3,14 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createTask, addDependency } from '@/lib/actions/tasks';
+import { AssigneePicker, type AssigneeOption } from '@/components/AssigneePicker';
 
 export function QuickAddTask({
   projectId,
   sectionId,
   parentTaskId,
   blockerId,
+  members = [],
   label = '+ Add task',
   onAdded,
 }: {
@@ -17,24 +19,29 @@ export function QuickAddTask({
   parentTaskId?: string;
   /** When set, the newly created task is made dependent on (blocked by) this task. */
   blockerId?: string;
+  /** Project members offered in the inline assignee picker. Omit to hide the picker. */
+  members?: AssigneeOption[];
   label?: string;
   onAdded?: () => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);
     formData.set('sectionId', sectionId);
     if (parentTaskId) formData.set('parentTaskId', parentTaskId);
+    assigneeIds.forEach((id) => formData.append('assigneeIds', id));
     const result = await createTask(projectId, formData);
     if (result.success && result.taskId && blockerId) {
       await addDependency(result.taskId, blockerId);
     }
     setLoading(false);
     formRef.current?.reset();
+    setAssigneeIds([]);
     setOpen(false);
     router.refresh();
     onAdded?.();
@@ -63,10 +70,18 @@ export function QuickAddTask({
           if (e.key === 'Escape') setOpen(false);
         }}
       />
+      {members.length > 0 && (
+        <div className="mt-1.5">
+          <AssigneePicker members={members} selectedIds={assigneeIds} onChange={setAssigneeIds} compact />
+        </div>
+      )}
       <div className="mt-2 flex justify-end gap-2">
         <button
           type="button"
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            setOpen(false);
+            setAssigneeIds([]);
+          }}
           className="rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           Cancel

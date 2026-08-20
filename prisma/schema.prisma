@@ -131,6 +131,10 @@ model User {
   // fixed America/Chicago timezone (this app is one church, not multi-timezone — see
   // src/lib/actions/taskRecurrences.ts's APP_TIMEZONE constant for the same convention).
   preferredDigestHour Int             @default(7)
+  // Idempotency claim for the weekly "unassigned tasks in your projects" digest sent to
+  // ProjectMember.isManager owners — independent of digestFrequency (that setting is for the
+  // user's personal task digest and can be OFF while they still own projects needing this).
+  lastUnassignedDigestSentAt DateTime?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
