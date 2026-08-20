@@ -350,7 +350,6 @@ model Task {
   id          String     @id @default(cuid())
   title       String
   description String?
-  url         String?
   projectId   String
   sectionId   String
   dueDate     DateTime?
