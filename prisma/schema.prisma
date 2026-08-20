@@ -350,7 +350,6 @@ model Task {
   id          String     @id @default(cuid())
   title       String
   description String?
-  url         String?
   projectId   String
   sectionId   String
   dueDate     DateTime?
@@ -396,6 +395,7 @@ model Task {
   activities    TaskActivity[]
   guestLinks    TaskGuestLink[]
   guestComments GuestComment[]
+  links         TaskLink[]
 
   @@unique([recurrenceId, occurrenceDate])
   @@index([projectId])
@@ -403,6 +403,22 @@ model Task {
   @@index([parentTaskId])
   @@index([deletedAt])
   @@index([deletedById])
+}
+
+/// One row per URL attached to a task. `order` fixes display order (and which link is "first" —
+/// the one the single-link task detail UI still reads/writes today, ahead of a future multi-link
+/// editor). Cascades with its task, so deleting a task never leaves orphaned links behind.
+model TaskLink {
+  id        String   @id @default(cuid())
+  taskId    String
+  url       String
+  label     String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
 }
 
 /// The recipe, not the meals: one row per recurring task definition. A nightly job
