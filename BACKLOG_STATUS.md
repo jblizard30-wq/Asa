@@ -6,9 +6,9 @@ Paste this file's contents back to Claude in a fresh conversation to resume with
 
 ---
 
-## Step 0 — DONE: PR opened, awaiting sign-off
+## Step 0 — DONE: PR #1 merged to main (2026-08-20)
 
-**https://github.com/jblizard30-wq/CPCana/pull/1** — 4 commits from `fix/security-race-cherry-pick` into `main`. Not merged; explicitly waiting on Justin's sign-off per his instructions.
+**https://github.com/jblizard30-wq/CPCana/pull/1** — 4 commits from `fix/security-race-cherry-pick`, merged into `main` (`992e85e`).
 
 Verified clean: `npm run lint` (no warnings), `npm test` (68/68 across 9 files), `npm run build` (28/28 routes, no errors).
 
@@ -26,12 +26,16 @@ Verified clean: `npm run lint` (no warnings), `npm test` (68/68 across 9 files),
 - **Rebrand to Asa.** Env-driven org branding (name/color/logo) for single-codebase multi-tenant deploys, signed single-use "log in as admin" HQ support token flow, reworked trash list/restore UX (`src/lib/site.ts`, `src/app/support-login/`, `src/lib/supportLogin.ts`).
 - **Web manifest icon MIME type.** Now derived from `LOGO_URL`'s actual file extension instead of hardcoded `image/png` — fixes deployments (like this one) using an SVG logo.
 - **Bulk actions.** Status/priority/assignee/delete for task lists, restore for trashed tasks, role change/delete for admin users table — one batched action instead of one request per row. **Note for P1.1:** this already covers "bulk-assign in List view" from P1.1's scope below — check `ListView.tsx`/`MyTasksList.tsx` before re-implementing that part of P1.1.
+- **P0.3 audit — completed 2026-08-20.** Confirmed the same `role === 'ADMIN' ? {} : {...}` bare-admin-bypass bug (no personal-project exclusion at all) in three more places and fixed all three the same way as `search.ts` (`{ OR: [{ isPersonal: false }, { isPersonal: true, createdById: <id> }] }`): `getAutomationOptions()` in `src/lib/actions/automations.ts` (this **is** the New Automation Rule project picker named in the original bug report — any admin building a rule could see every user's personal project names/sections/task titles), `accessibleProjectIds()` in `src/app/api/v1/tasks/route.ts` (worse than the others — public API-key endpoint, not just a UI leak), and `getTasksInRange()` in `src/lib/actions/calendar.ts` (personal task due dates were appearing on the shared org calendar for admins). Sidebar (`layout.tsx`, `projects/page.tsx`) already filtered correctly. Forms builder and workflow builder (`intakeForms.ts`, `workflows.ts`) only ever query within a single `projectId` the caller already passed `requireProjectMember` for — no cross-project listing, so no leak surface there. No standalone cross-project "move/copy task" picker exists in the codebase (`moveTask` only moves within a project's own sections) — that audit sub-item was based on a feature that doesn't exist. Verified: lint clean, 68/68 tests, build clean (28/28 routes).
+- **Notification bell — verified real, not a stub.** `NotificationBell.tsx` renders live unread count, dropdown list, mark-one/mark-all-read wired to real server actions in `src/lib/actions/notifications.ts`. Cleanup item resolved with no code change needed.
 
 ## NOT done — explicitly still open
 
+**Newly confirmed bug (from the "timezone check" cleanup item below — this is no longer just a suspicion):**
+- **Due/overdue math uses raw UTC instants, not America/Chicago calendar days.** `dueDate` is saved via `new Date(dateOnlyString)` (`src/lib/actions/tasks.ts:152,228,333,750`), which JS parses as midnight UTC. Every overdue computation (`src/lib/actions/dashboard.ts:79` and whatever `computeOverdueTasks`/`computeTopLineStats`/etc. do with that `now`, plus likely the Kanban/List/Grid "overdue" badges and `send-reminders`) compares that instant directly against `new Date()` — an absolute-time compare, not a calendar-day-in-Chicago compare. Concrete effect: a task due "2026-08-20" flips to overdue at 2026-08-20T00:00:00Z, which is **7pm Central on 2026-08-19** (CDT, UTC-5) — a task shows overdue almost a full day before its due date even starts locally, and for the entire day that is actually its due date. `src/app/api/cron/digest/route.ts` and `automations/route.ts` already define `APP_TIMEZONE = 'America/Chicago'` for scheduling, but that constant isn't used for the comparison math itself. **Not fixed yet** — deliberately left for a session with more budget: the correct fix is comparing Chicago calendar-dates (not instants) and needs one shared helper used consistently everywhere "overdue" is computed (mirrors the `STATUS_SECTION_NAMES` single-source-of-truth pattern), plus real verification of DST-boundary days, which wasn't safe to rush at 7% budget remaining.
+
 **P0 loose ends:**
 - One-time data migration to reconcile *existing* tasks where column/status already disagree (P0.1's acceptance criteria) — fix only stops new drift, doesn't backfill Sunday Service Planning's current mismatches.
-- P0.3's audit criterion — only `search.ts` was fixed. Sidebar, task move/copy, forms builder, workflow builder, and (notably) the **New Automation Rule project picker** — the literal dropdown described in the P0.3 bug report — have not been individually checked for the same missing personal-project scope.
 
 **P1 (2 of 4 remaining):**
 - **P1.1** — assignment pressure: inline assignee on quick-add, warning affordance on unassigned cards, "Unassigned (n)" filter chip, weekly digest to project owners, bulk-assign in List view. Nothing started.
@@ -52,12 +56,12 @@ Verified clean: `npm run lint` (no warnings), `npm test` (68/68 across 9 files),
 - P3.4 extend guest links to accept/decline roster confirmation
 - P3.5 Planning Center Online (or CCB/Rock RMS) integration — blocked on asking Justin what system the church runs
 
-**Cleanup (untouched):**
-- Delete the "123" test project from production
-- Triage the Bulletin project's 44 orphaned/unassigned tasks
-- Verify responsive/mobile layout (390px, sidebar + 4-col Kanban)
-- Verify the notification bell does anything
-- Timezone check — confirm due/overdue math uses America/Chicago, not UTC
+**Cleanup:**
+- Delete the "123" test project from production — untouched; needs direct prod DB access/confirmation, not something to do unattended.
+- Triage the Bulletin project's 44 orphaned/unassigned tasks — untouched; blocked on open question #7 below.
+- Verify responsive/mobile layout (390px, sidebar + 4-col Kanban) — untouched.
+- ~~Verify the notification bell does anything~~ — done, see above, it's real.
+- ~~Timezone check~~ — done, see confirmed bug above (upgraded from "check" to a real, unfixed bug).
 
 **Open questions for Justin — none formally answered except by default/inaction:**
 1. Sections vs. status: (A) simple vs (B) Asana-style — answered implicitly by choosing (A) for P0.1.
@@ -71,7 +75,7 @@ Verified clean: `npm run lint` (no warnings), `npm test` (68/68 across 9 files),
 
 ## Suggested next step (per doc's execution order)
 
-Next unstarted items in priority order: **Cleanup** (delete "123", triage Bulletin, timezone check — cheap, unblocks trustworthy dashboard numbers) → **P1.1** (assignment pressure + bulk assign) → **P1.4 empty-state polish already done, P1.3** (email notifications).
+Next unstarted items in priority order: **fix the confirmed overdue/timezone bug** (now well-scoped above, needs a full budget to fix + verify DST edges properly) → remaining **Cleanup** (delete "123", triage Bulletin, mobile layout) → **P1.1** (assignment pressure + bulk assign) → **P1.3** (email notifications).
 
 ## Repo invariants to preserve (from CLAUDE.md — still current)
 

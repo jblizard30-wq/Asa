@@ -31,7 +31,9 @@ export async function getTasksInRange(startISO: string, endISO: string): Promise
 
   const isAdmin = session.user.role === 'ADMIN';
   const accessibleProjects = await prisma.project.findMany({
-    where: isAdmin ? {} : { members: { some: { userId: session.user.id } } },
+    where: isAdmin
+      ? { OR: [{ isPersonal: false }, { isPersonal: true, createdById: session.user.id }] }
+      : { members: { some: { userId: session.user.id } } },
     select: { id: true },
   });
   const projectIds = accessibleProjects.map((p) => p.id);
