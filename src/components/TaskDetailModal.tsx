@@ -554,6 +554,15 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                 />
               </div>
               <div>
+                <label className="block text-xs font-medium text-slate-500">Start date</label>
+                <input
+                  type="date"
+                  defaultValue={task.startDate ? task.startDate.slice(0, 10) : ''}
+                  onChange={(e) => handleFieldChange('startDate', e.target.value || null)}
+                  className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5"
+                />
+              </div>
+              <div>
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-medium text-slate-500">Due date</label>
                   {task.assignees.some((a) => a.id === task.viewerId) && (

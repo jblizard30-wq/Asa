@@ -171,6 +171,7 @@ model User {
   notificationPreferences   NotificationPreference[]
   savedFilters              SavedFilter[]
   createdGuestLinks         TaskGuestLink[]
+  createdProjectShareLinks  ProjectShareLink[]      @relation("ProjectShareLinkCreatedBy")
   calendarConnections       CalendarConnection[]
   apiKeys                   ApiKey[]
   createdWebhooks           Webhook[]
@@ -279,6 +280,7 @@ model Project {
   intakeForms     IntakeForm[]
   tags            Tag[]
   savedFilters    SavedFilter[]
+  shareLinks      ProjectShareLink[]
 
   @@index([workflowId])
 }
@@ -344,6 +346,7 @@ model Task {
   url         String?
   projectId   String
   sectionId   String
+  startDate   DateTime?
   dueDate     DateTime?
   priority    Priority   @default(MEDIUM)
   status      TaskStatus @default(TODO)
@@ -788,6 +791,25 @@ model TaskGuestLink {
   guestComments GuestComment[]
 
   @@index([taskId])
+}
+
+/// A shareable, token-based link granting no-login, read-only access to a project's tasks —
+/// same public-access shape as TaskGuestLink, but scoped to a whole project instead of one task,
+/// and view-only (no guest comments). Gated off behind PROJECT_SHARE_LINKS_ENABLED in
+/// src/lib/actions/projectShare.ts pending Justin's sign-off (exposes task titles/assignee names
+/// to anyone with the link) — see BACKLOG_STATUS.md open question #5.
+model ProjectShareLink {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  token       String    @unique
+  createdById String
+  createdBy   User      @relation("ProjectShareLinkCreatedBy", fields: [createdById], references: [id])
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([projectId])
 }
 
 /// A comment left by an unauthenticated guest through a TaskGuestLink — kept separate from

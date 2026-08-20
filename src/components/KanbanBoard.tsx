@@ -54,6 +54,7 @@ export interface KanbanTask {
   description: string | null;
   priority: string;
   status: string;
+  startDate: string | null;
   dueDate: string | null;
   assigneeIds: string[];
   assigneeNames: string[];
