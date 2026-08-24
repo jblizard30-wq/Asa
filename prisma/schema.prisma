@@ -118,6 +118,19 @@ enum ReminderChannel {
   EMAIL
 }
 
+// The Western liturgical/ministry-year seasons this app recognizes. EASTER covers the whole
+// Eastertide (Easter Sunday through the day before Pentecost); ORDINARY_TIME is the catch-all
+// for both stretches outside the named seasons (Epiphany-to-Lent and Pentecost-to-Advent) — see
+// src/lib/liturgicalCalendar.ts for the boundary math.
+enum LiturgicalSeason {
+  ADVENT
+  CHRISTMAS
+  LENT
+  EASTER
+  PENTECOST
+  ORDINARY_TIME
+}
+
 model User {
   id                  String          @id @default(cuid())
   name                String
@@ -175,6 +188,7 @@ model User {
   apiKeys                   ApiKey[]
   createdWebhooks           Webhook[]
   taskRecurrenceAssignments TaskRecurrence[]         @relation("TaskRecurrenceAssignees")
+  createdServiceTemplates   ServiceTemplate[]
 
   @@index([managerId])
 }
@@ -279,15 +293,16 @@ model Project {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  members         ProjectMember[]
-  sections        Section[]
-  tasks           Task[]
-  taskRecurrences TaskRecurrence[]
-  folderItems     ProjectFolderItem[]
-  customFields    CustomField[]
-  intakeForms     IntakeForm[]
-  tags            Tag[]
-  savedFilters    SavedFilter[]
+  members          ProjectMember[]
+  sections         Section[]
+  tasks            Task[]
+  taskRecurrences  TaskRecurrence[]
+  serviceTemplates ServiceTemplate[]
+  folderItems      ProjectFolderItem[]
+  customFields     CustomField[]
+  intakeForms      IntakeForm[]
+  tags             Tag[]
+  savedFilters     SavedFilter[]
 
   @@index([workflowId])
 }
@@ -341,9 +356,10 @@ model Section {
   tasks     Task[]
   createdAt DateTime @default(now())
 
-  automationTargets AutomationRule[]
-  intakeForms       IntakeForm[]
-  taskRecurrences   TaskRecurrence[]
+  automationTargets   AutomationRule[]
+  intakeForms         IntakeForm[]
+  taskRecurrences     TaskRecurrence[]
+  serviceTemplateRuns ServiceTemplateRun[]
 }
 
 model Task {
@@ -433,6 +449,79 @@ model TaskRecurrence {
 
   @@index([projectId])
   @@index([nextRunAt])
+}
+
+/// The recipe for a repeatable *batch* of tasks (P3.1) — e.g. "Sunday Service" — as opposed to
+/// TaskRecurrence's single-task recipe. `rrule`/`nextRunAt` are optional: null means the template
+/// is on-demand only, applied manually for a chosen date rather than auto-scheduled. Never
+/// pre-generate future batches — a nightly job (or the manual "apply" action) materializes one
+/// occurrence's Section+Tasks at a time from `items`, same recipe-not-rows shape as TaskRecurrence.
+model ServiceTemplate {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  projectId   String
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User    @relation(fields: [createdById], references: [id])
+
+  rrule     String?
+  timezone  String    @default("America/Chicago")
+  nextRunAt DateTime?
+  endsAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items ServiceTemplateItem[]
+  runs  ServiceTemplateRun[]
+
+  @@index([projectId])
+  @@index([nextRunAt])
+}
+
+/// One checklist line of a ServiceTemplate. `season` is null for the default/Ordinary-Time item
+/// set; a non-null value marks a season-specific swap-in (P3.3) — at materialization time, items
+/// tagged with the occurrence's matched season replace the default (null-season) items entirely
+/// rather than merging with them. One level of subtask nesting, matching WorkflowTaskTemplate.
+model ServiceTemplateItem {
+  id                String                @id @default(cuid())
+  serviceTemplateId String
+  serviceTemplate   ServiceTemplate       @relation(fields: [serviceTemplateId], references: [id], onDelete: Cascade)
+  parentId          String?
+  parent            ServiceTemplateItem?  @relation("ServiceTemplateItemSubtasks", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks          ServiceTemplateItem[] @relation("ServiceTemplateItemSubtasks")
+  title             String
+  description       String?
+  order             Int                   @default(0)
+  defaultPriority   Priority              @default(MEDIUM)
+  // Days offset from the occurrence date this item's due date should land on (e.g. -3 for "3
+  // days before the service"). Null means no due date.
+  dueOffsetDays     Int?
+  season            LiturgicalSeason?
+
+  @@index([serviceTemplateId])
+  @@index([parentId])
+}
+
+/// The idempotency claim for one materialized occurrence of a ServiceTemplate. Created first,
+/// inside the same transaction that creates the batch's Section+Tasks, so a duplicate cron
+/// invocation or a double-click "Apply" collides on (serviceTemplateId, occurrenceDate) and
+/// becomes a no-op — same P2002-on-unique-index pattern as Task's (recurrenceId, occurrenceDate).
+model ServiceTemplateRun {
+  id                String            @id @default(cuid())
+  serviceTemplateId String
+  serviceTemplate   ServiceTemplate   @relation(fields: [serviceTemplateId], references: [id], onDelete: Cascade)
+  occurrenceDate    DateTime
+  // The season matched at materialization time — denormalized for audit/display even if the
+  // underlying items are later edited or the season math changes.
+  season            LiturgicalSeason?
+  sectionId         String
+  section           Section           @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdAt         DateTime          @default(now())
+
+  @@unique([serviceTemplateId, occurrenceDate])
+  @@index([serviceTemplateId])
 }
 
 model CustomField {
