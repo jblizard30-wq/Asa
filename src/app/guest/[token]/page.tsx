@@ -12,6 +12,10 @@ export default async function GuestTaskPage({ params }: { params: { token: strin
       task={result.task}
       comments={result.comments}
       canComment={result.canComment}
+      requiresRsvp={result.requiresRsvp}
+      rsvpStatus={result.rsvpStatus}
+      rsvpAt={result.rsvpAt}
     />
   );
 }
+

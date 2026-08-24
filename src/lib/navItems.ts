@@ -18,6 +18,7 @@ export interface NavPreferenceInput {
 }
 
 export const NAV_ITEMS: NavItemDef[] = [
+  { key: 'inbox', label: 'Inbox', href: '/inbox' },
   { key: 'my-tasks', label: 'My Tasks', href: '/my-tasks' },
   { key: 'dashboard', label: 'Dashboard', href: '/dashboard', requires: 'canManageTeams' },
   { key: 'personal-tasks', label: 'Personal Tasks', href: '/personal-tasks' },

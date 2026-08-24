@@ -1,10 +1,14 @@
 'use server';
 
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/permissions';
+import { generateAuthToken, verifyAuthToken } from '@/lib/authTokens';
+import { sendInviteEmail, sendPasswordResetEmail } from '@/lib/email';
+import { getBaseUrl } from '@/lib/site';
 
 const updateUserRoleSchema = z.object({
   userId: z.string().min(1),
@@ -105,18 +109,24 @@ export async function bulkDeleteUsers(userIds: string[]) {
 const createUserSchema = z.object({
   name: z.string().min(1, 'Name is required').max(120),
   email: z.string().email('Enter a valid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z.string().min(8, 'Password must be at least 8 characters').optional().or(z.literal('')),
   role: z.enum(['ADMIN', 'MANAGER', 'USER']),
+  sendInvite: z.boolean().default(true),
 });
 
 export async function createUser(formData: FormData) {
   await requireAdmin();
 
+  const rawPassword = formData.get('password');
+  const password = typeof rawPassword === 'string' && rawPassword.trim().length > 0 ? rawPassword.trim() : undefined;
+  const sendInvite = formData.get('sendInvite') === 'true' || formData.get('sendInvite') === 'on' || formData.get('sendInvite') === null;
+
   const parsed = createUserSchema.safeParse({
     name: formData.get('name'),
     email: formData.get('email'),
-    password: formData.get('password'),
+    password: password || '',
     role: formData.get('role') || 'USER',
+    sendInvite,
   });
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
@@ -128,14 +138,120 @@ export async function createUser(formData: FormData) {
     return { success: false, error: 'An account with that email already exists.' };
   }
 
+  // If no password provided, generate a secure random temporary password hash
+  const effectivePassword = password || crypto.randomBytes(24).toString('hex');
+  const passwordHash = await bcrypt.hash(effectivePassword, 10);
+
+  const newUser = await prisma.user.create({
+    data: {
+      name: parsed.data.name,
+      email,
+      passwordHash,
+      role: parsed.data.role,
+    },
+  });
+
+  let inviteUrl: string | undefined;
+
+  if (sendInvite) {
+    const token = generateAuthToken(newUser, 'INVITE');
+    inviteUrl = `${getBaseUrl()}/set-password?token=${token}`;
+    void sendInviteEmail(email, newUser.name, inviteUrl, password ? effectivePassword : undefined);
+  }
+
+  revalidatePath('/admin/users');
+  return { success: true, inviteUrl, userId: newUser.id };
+}
+
+/** Sends or resends a first-time login invite email to an existing user. */
+export async function sendUserInvite(userId: string) {
+  await requireAdmin();
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    return { success: false, error: 'User not found.' };
+  }
+
+  const token = generateAuthToken(user, 'INVITE');
+  const inviteUrl = `${getBaseUrl()}/set-password?token=${token}`;
+
+  await sendInviteEmail(user.email, user.name, inviteUrl);
+  return { success: true, inviteUrl, email: user.email };
+}
+
+/** Sends a password reset email to a user. */
+export async function sendUserPasswordReset(userId: string) {
+  await requireAdmin();
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    return { success: false, error: 'User not found.' };
+  }
+
+  const token = generateAuthToken(user, 'PASSWORD_RESET');
+  const resetUrl = `${getBaseUrl()}/set-password?token=${token}`;
+
+  await sendPasswordResetEmail(user.email, user.name, resetUrl);
+  return { success: true, resetUrl, email: user.email };
+}
+
+const adminResetPasswordSchema = z.object({
+  userId: z.string().min(1),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
+/** Allows an admin to manually set a user's password directly. */
+export async function adminResetPassword(userId: string, newPassword: string) {
+  await requireAdmin();
+
+  const parsed = adminResetPasswordSchema.safeParse({ userId, password: newPassword });
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: parsed.data.userId } });
+  if (!user) {
+    return { success: false, error: 'User not found.' };
+  }
+
   const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-  await prisma.user.create({
-    data: { name: parsed.data.name, email, passwordHash, role: parsed.data.role },
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash },
   });
 
   revalidatePath('/admin/users');
   return { success: true };
 }
+
+const setPasswordWithTokenSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
+/** Public action allowing a user with a valid invite or reset token to set their password. */
+export async function setPasswordWithToken(token: string, newPassword: string) {
+  const parsed = setPasswordWithTokenSchema.safeParse({ token, password: newPassword });
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  }
+
+  const verification = await verifyAuthToken(parsed.data.token);
+  if (!verification.valid || !verification.user) {
+    return { success: false, error: verification.error ?? 'Invalid or expired link.' };
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+
+  // Updating the passwordHash automatically and immediately invalidates this token and any other tokens
+  await prisma.user.update({
+    where: { id: verification.user.id },
+    data: { passwordHash },
+  });
+
+  return { success: true, email: verification.user.email };
+}
+
 
 const updateUserSchema = z.object({
   userId: z.string().min(1),

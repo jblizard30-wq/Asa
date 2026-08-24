@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { PRIORITY_LABELS, PRIORITY_STYLES, STATUS_LABELS, STATUS_STYLES } from '@/lib/format';
-import { addGuestComment } from '@/lib/actions/guestAccess';
+import { addGuestComment, respondToGuestRsvp } from '@/lib/actions/guestAccess';
 
 export interface GuestComment {
   id: string;
@@ -26,17 +26,37 @@ export function GuestTaskView({
   task,
   comments: initialComments,
   canComment,
+  requiresRsvp = false,
+  rsvpStatus: initialRsvpStatus = 'PENDING',
+  rsvpAt,
 }: {
   token: string;
   task: GuestTask;
   comments: GuestComment[];
   canComment: boolean;
+  requiresRsvp?: boolean;
+  rsvpStatus?: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+  rsvpAt?: string | null;
 }) {
   const [comments, setComments] = useState(initialComments);
   const [guestName, setGuestName] = useState('');
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [rsvpStatus, setRsvpStatus] = useState(initialRsvpStatus);
+  const [rsvpPending, setRsvpPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function handleRsvp(choice: 'ACCEPTED' | 'DECLINED') {
+    setRsvpPending(true);
+    setError(null);
+    const res = await respondToGuestRsvp(token, choice);
+    setRsvpPending(false);
+    if (!res.success) {
+      setError(res.error ?? 'Could not record RSVP.');
+      return;
+    }
+    setRsvpStatus(choice);
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -55,6 +75,49 @@ export function GuestTaskView({
   return (
     <main className="flex min-h-screen justify-center bg-slate-50 px-4 py-10">
       <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+        {/* RSVP Confirmation Banner */}
+        {requiresRsvp && (
+          <div className="mb-6 rounded-lg border border-brand-200 bg-brand-50/80 p-4 text-center dark:border-brand-800 dark:bg-brand-950/30">
+            <h2 className="text-sm font-semibold text-brand-900 dark:text-brand-200">
+              📋 Volunteer Roster Confirmation
+            </h2>
+            <p className="mt-1 text-xs text-brand-700 dark:text-brand-300">
+              You are invited to serve for this task. Please confirm your availability:
+            </p>
+
+            <div className="mt-3 flex items-center justify-center gap-3">
+              {rsvpStatus === 'ACCEPTED' ? (
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
+                  ✓ You Confirmed (Accepted)
+                </span>
+              ) : rsvpStatus === 'DECLINED' ? (
+                <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-medium text-slate-700">
+                  ✗ You Declined
+                </span>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleRsvp('ACCEPTED')}
+                    disabled={rsvpPending}
+                    className="rounded-md bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-60"
+                  >
+                    {rsvpPending ? 'Saving…' : '✓ Accept & Confirm'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRsvp('DECLINED')}
+                    disabled={rsvpPending}
+                    className="rounded-md border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Decline
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-start justify-between gap-4">
           <h1 className="text-xl font-semibold text-slate-900">{task.title}</h1>
           <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[task.status] ?? ''}`}>
@@ -74,6 +137,7 @@ export function GuestTaskView({
             </span>
           )}
         </div>
+
 
         <div className="mt-6 border-t border-slate-200 pt-4">
           <h2 className="text-sm font-semibold text-slate-900">Comments</h2>

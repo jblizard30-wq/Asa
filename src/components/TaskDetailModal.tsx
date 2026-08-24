@@ -18,6 +18,8 @@ import { RemindMeModal } from '@/components/RemindMeModal';
 import { MentionInput } from '@/components/MentionInput';
 import { TagPicker } from '@/components/TagPicker';
 import { AssigneePicker } from '@/components/AssigneePicker';
+import { MarkdownEditor } from '@/components/MarkdownEditor';
+import { addTaskToProject, removeTaskFromProject } from '@/lib/actions/multiHoming';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -493,13 +495,63 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
             </div>
             <p className="mt-1 text-xs text-slate-400">{task.projectName}</p>
 
-            <textarea
-              defaultValue={task.description ?? ''}
-              placeholder="Add a description…"
-              onBlur={(e) => e.target.value !== (task.description ?? '') && handleFieldChange('description', e.target.value)}
-              rows={3}
-              className="mt-4 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
-            />
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-slate-500 mb-1">Description</label>
+              <MarkdownEditor
+                value={task.description ?? ''}
+                onChange={(val) => handleFieldChange('description', val || null)}
+                placeholder="Add a detailed description… (Markdown supported)"
+              />
+            </div>
+
+            {/* Multi-Homing: Cross-Project Membership */}
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-slate-500 mb-1">Projects</label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  📁 {task.projectName} <span className="ml-1 text-[10px] text-slate-400">(Primary)</span>
+                </span>
+                {task.extraProjects.map((ep) => (
+                  <span
+                    key={ep.id}
+                    className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 dark:bg-brand-950/40 dark:text-brand-300"
+                  >
+                    📁 {ep.name}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await removeTaskFromProject(task.id, ep.id);
+                        refresh();
+                      }}
+                      className="ml-1 hover:text-red-500"
+                      title="Remove from project"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {task.allUserProjects.filter((p) => p.id !== task.projectId && !task.extraProjects.some((ep) => ep.id === p.id)).length > 0 && (
+                  <select
+                    value=""
+                    onChange={async (e) => {
+                      if (!e.target.value) return;
+                      await addTaskToProject(task.id, e.target.value);
+                      refresh();
+                    }}
+                    className="rounded-md border border-dashed border-slate-300 bg-transparent px-2 py-1 text-xs text-slate-500 hover:border-brand-500 dark:border-slate-700"
+                  >
+                    <option value="">+ Add to another project…</option>
+                    {task.allUserProjects
+                      .filter((p) => p.id !== task.projectId && !task.extraProjects.some((ep) => ep.id === p.id))
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </div>
+            </div>
 
             <div className="mt-2">
               <label className="block text-xs font-medium text-slate-500">Link</label>
@@ -534,7 +586,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div>
+              <div className="col-span-2">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-medium text-slate-500">Assignees</label>
                   {(task.viewerRole === 'ADMIN' || task.viewerRole === 'MANAGER') && task.assignees.length > 0 && (
@@ -551,6 +603,15 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                   members={task.members}
                   selectedIds={task.assignees.map((a) => a.id)}
                   onChange={handleAssigneesChange}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500">Start date</label>
+                <input
+                  type="date"
+                  defaultValue={task.startDate ? task.startDate.slice(0, 10) : ''}
+                  onChange={(e) => handleFieldChange('startDate', e.target.value || null)}
+                  className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5"
                 />
               </div>
               <div>
@@ -605,6 +666,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
             </div>
 
             {statusError && <p className="mt-2 text-xs text-red-600">{statusError}</p>}
+
 
             <div className="mt-4 border-t border-slate-100 pt-4">
               <h3 className="text-sm font-semibold text-slate-700">Dependencies</h3>
@@ -748,18 +810,40 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
               <h3 className="text-sm font-semibold text-slate-700">
                 Subtasks {task.subtasks.length > 0 && `(${task.subtasks.filter((s) => s.status === 'DONE').length}/${task.subtasks.length})`}
               </h3>
-              <ul className="mt-2 space-y-1">
+              <ul className="mt-2 space-y-1.5">
                 {task.subtasks.map((s) => (
-                  <li key={s.id} className="flex items-center gap-2 rounded-md px-1 py-1 hover:bg-slate-50">
-                    <input
-                      type="checkbox"
-                      checked={s.status === 'DONE'}
-                      onChange={(e) => handleToggleSubtask(s.id, e.target.checked)}
-                      className="h-4 w-4 shrink-0"
-                    />
-                    <span className={`truncate text-sm ${s.status === 'DONE' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                      {s.title}
-                    </span>
+                  <li key={s.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={s.status === 'DONE'}
+                        onChange={(e) => handleToggleSubtask(s.id, e.target.checked)}
+                        className="h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                      />
+                      <span className={`truncate text-sm ${s.status === 'DONE' ? 'text-slate-400 line-through dark:text-slate-500' : 'text-slate-700 dark:text-slate-200'}`}>
+                        {s.title}
+                      </span>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2 text-xs">
+                      {s.dueDate && (
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                          📅 {s.dueDate.slice(5, 10)}
+                        </span>
+                      )}
+                      {s.assignees.length > 0 && (
+                        <span className="flex -space-x-1 overflow-hidden" title={s.assignees.map((a) => a.name).join(', ')}>
+                          {s.assignees.map((a) => (
+                            <span
+                              key={a.id}
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-[10px] font-medium text-brand-700 ring-1 ring-white dark:bg-brand-900/60 dark:text-brand-300 dark:ring-slate-900"
+                            >
+                              {a.name.charAt(0).toUpperCase()}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -773,6 +857,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                 />
               </div>
             </div>
+
 
             <div className="mt-4 border-t border-slate-100 pt-4">
               <h3 className="text-sm font-semibold text-slate-700">

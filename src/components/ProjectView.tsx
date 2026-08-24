@@ -31,6 +31,10 @@ export interface ProjectTeamInfo {
 const STATUS_OPTIONS = Object.entries(STATUS_LABELS).map(([id, label]) => ({ id, label }));
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_LABELS).map(([id, label]) => ({ id, label }));
 
+import { TimelineView } from '@/components/TimelineView';
+import { useProjectLiveSync } from '@/hooks/useProjectLiveSync';
+import { ServiceTemplatesManager } from '@/components/ServiceTemplatesManager';
+
 export function ProjectView({
   projectId,
   projectName,
@@ -41,6 +45,7 @@ export function ProjectView({
   memberTeamIds,
   customFields,
   tags,
+  serviceTemplates = [],
   isAdmin,
 }: {
   projectId: string;
@@ -52,14 +57,19 @@ export function ProjectView({
   memberTeamIds: Record<string, string[]>;
   customFields: CustomFieldDef[];
   tags: TagInfo[];
+  serviceTemplates?: any[];
   isAdmin: boolean;
 }) {
   const router = useRouter();
-  const [view, setView] = useState<'list' | 'kanban' | 'grid' | 'dashboard'>('kanban');
+  useProjectLiveSync(projectId);
+  const [view, setView] = useState<'list' | 'kanban' | 'timeline' | 'grid' | 'dashboard'>('kanban');
+
   const [showInvite, setShowInvite] = useState(false);
   const [showFields, setShowFields] = useState(false);
   const [showTags, setShowTags] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [filters, setFilters] = useState<TaskFilters>(EMPTY_TASK_FILTERS);
+
   const [togglingManagerId, setTogglingManagerId] = useState<string | null>(null);
 
   async function toggleManager(memberId: string, nextIsManager: boolean) {
@@ -147,11 +157,18 @@ export function ProjectView({
             Workflow
           </Link>
           <button
+            onClick={() => setShowTemplates(true)}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            ⛪ Service templates
+          </button>
+          <button
             onClick={() => setShowFields(true)}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Manage fields
           </button>
+
           <button
             onClick={() => setShowTags(true)}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -185,6 +202,14 @@ export function ProjectView({
           }`}
         >
           Kanban
+        </button>
+        <button
+          onClick={() => setView('timeline')}
+          className={`rounded px-3 py-1.5 text-sm font-medium ${
+            view === 'timeline' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+          }`}
+        >
+          Timeline
         </button>
         <button
           onClick={() => setView('grid')}
@@ -243,6 +268,9 @@ export function ProjectView({
             filtersActive={filtersActive}
           />
         )}
+        {view === 'timeline' && (
+          <TimelineView projectId={projectId} sections={filteredSections} filtersActive={filtersActive} />
+        )}
         {view === 'grid' && (
           <GridView
             projectId={projectId}
@@ -257,10 +285,19 @@ export function ProjectView({
         )}
       </div>
 
+
       {showInvite && <InviteMemberModal projectId={projectId} onClose={() => setShowInvite(false)} />}
+      {showTemplates && (
+        <ServiceTemplatesManager
+          projectId={projectId}
+          templates={serviceTemplates}
+          onClose={() => setShowTemplates(false)}
+        />
+      )}
       {showFields && (
         <CustomFieldsManager projectId={projectId} fields={customFields} onClose={() => setShowFields(false)} />
       )}
+
       {showTags && <TagsManager projectId={projectId} tags={tags} onClose={() => setShowTags(false)} />}
     </div>
   );

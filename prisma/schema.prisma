@@ -118,6 +118,21 @@ enum ReminderChannel {
   EMAIL
 }
 
+enum LiturgicalSeason {
+  ADVENT
+  CHRISTMAS
+  LENT
+  EASTER
+  PENTECOST
+  ORDINARY_TIME
+}
+
+enum RsvpStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
 model User {
   id                  String          @id @default(cuid())
   name                String
@@ -175,6 +190,9 @@ model User {
   apiKeys                   ApiKey[]
   createdWebhooks           Webhook[]
   taskRecurrenceAssignments TaskRecurrence[]         @relation("TaskRecurrenceAssignees")
+  createdServiceTemplates   ServiceTemplate[]
+  volunteerAvailability     VolunteerAvailability[]
+  availabilityExceptions    AvailabilityException[]
 
   @@index([managerId])
 }
@@ -279,15 +297,18 @@ model Project {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  members         ProjectMember[]
-  sections        Section[]
-  tasks           Task[]
-  taskRecurrences TaskRecurrence[]
-  folderItems     ProjectFolderItem[]
-  customFields    CustomField[]
-  intakeForms     IntakeForm[]
-  tags            Tag[]
-  savedFilters    SavedFilter[]
+  members          ProjectMember[]
+  sections         Section[]
+  tasks            Task[]
+  taskRecurrences  TaskRecurrence[]
+  serviceTemplates ServiceTemplate[]
+  extraHomedTasks  TaskProject[]
+  automationRules  AutomationRule[]
+  folderItems      ProjectFolderItem[]
+  customFields     CustomField[]
+  intakeForms      IntakeForm[]
+  tags             Tag[]
+  savedFilters     SavedFilter[]
 
   @@index([workflowId])
 }
@@ -341,10 +362,13 @@ model Section {
   tasks     Task[]
   createdAt DateTime @default(now())
 
-  automationTargets AutomationRule[]
-  intakeForms       IntakeForm[]
-  taskRecurrences   TaskRecurrence[]
+  automationTargets   AutomationRule[]
+  intakeForms         IntakeForm[]
+  taskRecurrences     TaskRecurrence[]
+  serviceTemplateRuns ServiceTemplateRun[]
+  extraHomedTasks     TaskProject[]
 }
+
 
 model Task {
   id          String     @id @default(cuid())
@@ -353,6 +377,7 @@ model Task {
   url         String?
   projectId   String
   sectionId   String
+  startDate   DateTime?
   dueDate     DateTime?
   priority    Priority   @default(MEDIUM)
   status      TaskStatus @default(TODO)
@@ -373,6 +398,7 @@ model Task {
 
   project            Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
   section            Section                @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  extraProjects      TaskProject[]
   comments           Comment[]
   parentTask         Task?                  @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
   subtasks           Task[]                 @relation("TaskSubtasks")
@@ -405,6 +431,23 @@ model Task {
   @@index([deletedById])
 }
 
+/// Join table enabling a task to belong to multiple projects simultaneously (multi-homing).
+model TaskProject {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sectionId String?
+  section   Section? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, projectId])
+  @@index([taskId])
+  @@index([projectId])
+  @@index([sectionId])
+}
+
 /// The recipe, not the meals: one row per recurring task definition. A nightly job
 /// materializes 'PERIODIC' occurrences on schedule (see RecurrenceMode); 'AFTER_COMPLETION'
 /// occurrences are materialized inline, in the same request that marks the current one done.
@@ -426,6 +469,9 @@ model TaskRecurrence {
   endsAt    DateTime?
   createdAt DateTime       @default(now())
 
+  rotationEnabled Boolean @default(false)
+  rotationSlots   Int     @default(1)
+
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   section   Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   assignees User[]  @relation("TaskRecurrenceAssignees")
@@ -434,6 +480,92 @@ model TaskRecurrence {
   @@index([projectId])
   @@index([nextRunAt])
 }
+
+/// The recipe for a repeatable batch of tasks — e.g. "Sunday Service".
+model ServiceTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  rrule     String?
+  timezone  String    @default("America/Chicago")
+  nextRunAt DateTime?
+  endsAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items ServiceTemplateItem[]
+  runs  ServiceTemplateRun[]
+
+  @@index([projectId])
+  @@index([nextRunAt])
+}
+
+/// One checklist line of a ServiceTemplate with liturgical season swap-in capability.
+model ServiceTemplateItem {
+  id                String                @id @default(cuid())
+  serviceTemplateId String
+  serviceTemplate   ServiceTemplate       @relation(fields: [serviceTemplateId], references: [id], onDelete: Cascade)
+  parentId          String?
+  parent            ServiceTemplateItem?  @relation("ServiceTemplateItemSubtasks", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks          ServiceTemplateItem[] @relation("ServiceTemplateItemSubtasks")
+  title             String
+  description       String?
+  order             Int                   @default(0)
+  defaultPriority   Priority              @default(MEDIUM)
+  dueOffsetDays     Int?
+  season            LiturgicalSeason?
+
+  @@index([serviceTemplateId])
+  @@index([parentId])
+}
+
+/// The idempotency claim for one materialized occurrence of a ServiceTemplate.
+model ServiceTemplateRun {
+  id                String            @id @default(cuid())
+  serviceTemplateId String
+  serviceTemplate   ServiceTemplate   @relation(fields: [serviceTemplateId], references: [id], onDelete: Cascade)
+  occurrenceDate    DateTime
+  season            LiturgicalSeason?
+  sectionId         String
+  section           Section           @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdAt         DateTime          @default(now())
+
+  @@unique([serviceTemplateId, occurrenceDate])
+  @@index([serviceTemplateId])
+}
+
+/// A volunteer's weekly recurring availability pattern.
+model VolunteerAvailability {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayOfWeek Int
+  available Boolean @default(true)
+
+  @@unique([userId, dayOfWeek])
+  @@index([userId])
+}
+
+/// A one-off override of a specific calendar date for volunteer availability.
+model AvailabilityException {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime
+  available Boolean
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId])
+}
+
 
 model CustomField {
   id        String          @id @default(cuid())
@@ -516,8 +648,11 @@ model AutomationRule {
   createdById String
   createdBy   User    @relation("AutomationCreatedBy", fields: [createdById], references: [id])
 
-  sourceTaskId String
-  sourceTask   Task   @relation("AutomationSourceTask", fields: [sourceTaskId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  sourceTaskId String?
+  sourceTask   Task?   @relation("AutomationSourceTask", fields: [sourceTaskId], references: [id], onDelete: Cascade)
 
   triggerType       AutomationTriggerType
   triggerStatus     TaskStatus?
@@ -546,9 +681,11 @@ model AutomationRule {
   updatedAt DateTime        @updatedAt
   runs      AutomationRun[]
 
+  @@index([projectId])
   @@index([sourceTaskId])
   @@index([targetTaskId])
 }
+
 
 model AutomationRun {
   id        String              @id @default(cuid())
@@ -795,10 +932,15 @@ model TaskGuestLink {
   revokedAt   DateTime?
   createdAt   DateTime  @default(now())
 
+  requiresRsvp Boolean    @default(false)
+  rsvpStatus   RsvpStatus @default(PENDING)
+  rsvpAt       DateTime?
+
   guestComments GuestComment[]
 
   @@index([taskId])
 }
+
 
 /// A comment left by an unauthenticated guest through a TaskGuestLink — kept separate from
 /// Comment (whose userId is a required real User) rather than making that field nullable.

@@ -199,19 +199,24 @@ export async function createAutomationRule(input: CreateAutomationRuleInput) {
 export async function toggleAutomationRule(ruleId: string, enabled: boolean) {
   const rule = await prisma.automationRule.findUnique({ where: { id: ruleId }, include: { sourceTask: true } });
   if (!rule) return { success: false, error: 'Rule not found' };
-  await requireProjectMember(rule.sourceTask.projectId);
+  const projectId = rule.projectId ?? rule.sourceTask?.projectId;
+  if (!projectId) return { success: false, error: 'Project not found for rule' };
+  await requireProjectMember(projectId);
 
   await prisma.automationRule.update({ where: { id: ruleId }, data: { enabled } });
-  revalidatePath(`/projects/${rule.sourceTask.projectId}/automations`);
+  revalidatePath(`/projects/${projectId}/automations`);
   return { success: true };
 }
 
 export async function deleteAutomationRule(ruleId: string) {
   const rule = await prisma.automationRule.findUnique({ where: { id: ruleId }, include: { sourceTask: true } });
   if (!rule) return { success: false, error: 'Rule not found' };
-  await requireProjectMember(rule.sourceTask.projectId);
+  const projectId = rule.projectId ?? rule.sourceTask?.projectId;
+  if (!projectId) return { success: false, error: 'Project not found for rule' };
+  await requireProjectMember(projectId);
 
   await prisma.automationRule.delete({ where: { id: ruleId } });
-  revalidatePath(`/projects/${rule.sourceTask.projectId}/automations`);
+  revalidatePath(`/projects/${projectId}/automations`);
   return { success: true };
 }
+

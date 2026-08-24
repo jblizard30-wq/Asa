@@ -106,6 +106,7 @@ const createTaskSchema = z.object({
   sectionId: z.string().min(1),
   parentTaskId: z.string().optional(),
   assigneeIds: z.array(z.string()).optional(),
+  startDate: z.string().optional(),
   dueDate: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
 });
@@ -124,6 +125,7 @@ export async function createTask(projectId: string, formData: FormData) {
     sectionId: formData.get('sectionId'),
     parentTaskId: formData.get('parentTaskId') || undefined,
     assigneeIds: assigneeIdsRaw.length > 0 ? assigneeIdsRaw : undefined,
+    startDate: formData.get('startDate') || undefined,
     dueDate: formData.get('dueDate') || undefined,
     priority: formData.get('priority') || undefined,
   });
@@ -149,6 +151,7 @@ export async function createTask(projectId: string, formData: FormData) {
       sectionId: parsed.data.sectionId,
       parentTaskId: parsed.data.parentTaskId || null,
       assignees: assigneeIds.length > 0 ? { connect: assigneeIds.map((id) => ({ id })) } : undefined,
+      startDate: parsed.data.startDate ? new Date(parsed.data.startDate) : null,
       dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
       priority: parsed.data.priority ?? 'MEDIUM',
       order: (lastTask?.order ?? -1) + 1,
@@ -183,6 +186,7 @@ const updateTaskSchema = z.object({
   description: z.string().max(4000).optional().nullable(),
   url: z.union([urlSchema, z.null()]).optional(),
   assigneeIds: z.array(z.string()).optional(),
+  startDate: z.string().optional().nullable(),
   dueDate: z.string().optional().nullable(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   status: z.enum(['TODO', 'IN_PROGRESS', 'DONE']).optional(),
@@ -224,9 +228,13 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
   if ('url' in parsed.data) {
     data.url = parsed.data.url || null;
   }
+  if ('startDate' in parsed.data) {
+    data.startDate = parsed.data.startDate ? new Date(parsed.data.startDate) : null;
+  }
   if ('dueDate' in parsed.data) {
     data.dueDate = parsed.data.dueDate ? new Date(parsed.data.dueDate) : null;
   }
+
 
   // Keep the board column in sync with a status change made outside the board itself (grid
   // dropdown, task detail panel, subtask checkbox). moveTask (drag-and-drop) already does the
@@ -490,9 +498,14 @@ export async function getTaskDetail(taskId: string) {
     include: {
       assignees: { select: { id: true, name: true } },
       taskRecurrence: true,
+      extraProjects: { include: { project: { select: { id: true, name: true } }, section: { select: { id: true, name: true } } } },
       comments: { include: { user: true }, orderBy: { createdAt: 'asc' } },
       project: { include: { members: { include: { user: true } } } },
-      subtasks: { where: { deletedAt: null }, orderBy: { order: 'asc' } },
+      subtasks: {
+        where: { deletedAt: null },
+        orderBy: { order: 'asc' },
+        include: { assignees: { select: { id: true, name: true } } },
+      },
       fieldValues: { include: { option: true } },
       parentTask: { select: { id: true, title: true } },
       blockedBy: { include: { blocker: { select: { id: true, title: true, status: true } } } },
@@ -522,6 +535,15 @@ export async function getTaskDetail(taskId: string) {
     orderBy: { order: 'asc' },
   });
 
+  const allUserProjects = await prisma.project.findMany({
+    where: {
+      isPersonal: false,
+      members: { some: { userId: session.user.id } },
+    },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+
   const projectTasks = await prisma.task.findMany({
     where: { projectId: task.projectId, id: { not: task.id }, deletedAt: null },
     select: { id: true, title: true },
@@ -541,11 +563,18 @@ export async function getTaskDetail(taskId: string) {
     url: task.url,
     status: task.status,
     priority: task.priority,
+    startDate: task.startDate ? task.startDate.toISOString() : null,
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
     assignees: task.assignees.map((a) => ({ id: a.id, name: a.name })),
     taskRecurrence,
     projectId: task.projectId,
     projectName: task.project.name,
+    extraProjects: task.extraProjects.map((ep) => ({
+      id: ep.project.id,
+      name: ep.project.name,
+      sectionName: ep.section?.name ?? null,
+    })),
+    allUserProjects: allUserProjects.map((p) => ({ id: p.id, name: p.name })),
     sectionId: task.sectionId,
     parentTask: task.parentTask,
     blockedBy,
@@ -562,7 +591,15 @@ export async function getTaskDetail(taskId: string) {
       userName: c.user.name,
       userId: c.userId,
     })),
-    subtasks: task.subtasks.map((s) => ({ id: s.id, title: s.title, status: s.status })),
+    subtasks: task.subtasks.map((s) => ({
+      id: s.id,
+      title: s.title,
+      status: s.status,
+      priority: s.priority,
+      dueDate: s.dueDate ? s.dueDate.toISOString() : null,
+      assignees: s.assignees.map((a) => ({ id: a.id, name: a.name })),
+    })),
+
     attachments: task.attachments.map((a) => ({
       id: a.id,
       fileName: a.fileName,

@@ -19,13 +19,13 @@ async function requireGuestLinkAccess(taskId: string) {
   return { session, task };
 }
 
-export async function createGuestLink(taskId: string) {
+export async function createGuestLink(taskId: string, requiresRsvp: boolean = false) {
   const { session, task } = await requireGuestLinkAccess(taskId);
   if (!task) return { success: false as const, error: 'Task not found.' };
 
   const token = crypto.randomBytes(24).toString('base64url');
   await prisma.taskGuestLink.create({
-    data: { taskId, token, createdById: session.user.id },
+    data: { taskId, token, requiresRsvp, createdById: session.user.id },
   });
 
   revalidatePath(`/projects/${task.projectId}`);
@@ -45,6 +45,9 @@ export async function listGuestLinks(taskId: string) {
     id: link.id,
     path: `/guest/${link.token}`,
     canComment: link.canComment,
+    requiresRsvp: link.requiresRsvp,
+    rsvpStatus: link.rsvpStatus,
+    rsvpAt: link.rsvpAt?.toISOString() ?? null,
     expiresAt: link.expiresAt?.toISOString() ?? null,
     revokedAt: link.revokedAt?.toISOString() ?? null,
     createdAt: link.createdAt.toISOString(),
@@ -63,6 +66,29 @@ export async function revokeGuestLink(id: string) {
   await prisma.taskGuestLink.update({ where: { id }, data: { revokedAt: new Date() } });
   revalidatePath(`/projects/${link.task.projectId}`);
   return { success: true };
+}
+
+export async function respondToGuestRsvp(token: string, rsvpStatus: 'ACCEPTED' | 'DECLINED') {
+  const link = await prisma.taskGuestLink.findUnique({
+    where: { token },
+    include: { task: true },
+  });
+
+  if (!link || link.revokedAt || (link.expiresAt && link.expiresAt < new Date())) {
+    return { success: false as const, error: 'This link is no longer active.' };
+  }
+
+  await prisma.taskGuestLink.update({
+    where: { id: link.id },
+    data: {
+      rsvpStatus,
+      rsvpAt: new Date(),
+    },
+  });
+
+  revalidatePath(`/guest/${token}`);
+  revalidatePath(`/projects/${link.task.projectId}`);
+  return { success: true as const, rsvpStatus };
 }
 
 export async function getTaskForGuest(token: string) {
@@ -84,6 +110,9 @@ export async function getTaskForGuest(token: string) {
 
   return {
     canComment: link.canComment,
+    requiresRsvp: link.requiresRsvp,
+    rsvpStatus: link.rsvpStatus,
+    rsvpAt: link.rsvpAt?.toISOString() ?? null,
     task: {
       id: link.task.id,
       title: link.task.title,
@@ -110,6 +139,7 @@ export async function getTaskForGuest(token: string) {
     ].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   };
 }
+
 
 const addGuestCommentSchema = z.object({
   guestName: z.string().min(1, 'Name is required').max(120),

@@ -18,6 +18,13 @@ export default async function ProjectPage({ params }: { params: { projectId: str
         include: { options: { orderBy: { order: 'asc' } } },
       },
       tags: { orderBy: { order: 'asc' } },
+      serviceTemplates: {
+        include: {
+          items: { orderBy: { order: 'asc' } },
+          runs: { orderBy: { occurrenceDate: 'desc' }, take: 5 },
+        },
+        orderBy: { createdAt: 'desc' },
+      },
       sections: {
         orderBy: { order: 'asc' },
         include: {
@@ -84,6 +91,7 @@ export default async function ProjectPage({ params }: { params: { projectId: str
         options: f.options.map((o) => ({ id: o.id, label: o.label })),
       }))}
       tags={project.tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
+      serviceTemplates={project.serviceTemplates}
       sections={project.sections.map((s) => ({
         id: s.id,
         name: s.name,
@@ -94,6 +102,7 @@ export default async function ProjectPage({ params }: { params: { projectId: str
           description: t.description,
           priority: t.priority,
           status: t.status,
+          startDate: t.startDate ? t.startDate.toISOString() : null,
           dueDate: t.dueDate ? t.dueDate.toISOString() : null,
           assigneeIds: t.assignees.map((a) => a.id),
           assigneeNames: t.assignees.map((a) => a.name),

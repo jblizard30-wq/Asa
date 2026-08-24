@@ -5,14 +5,21 @@ import { useRouter } from 'next/navigation';
 import { createUser } from '@/lib/actions/users';
 import { ROLES } from './UserManagement';
 
-export function NewUserModal({ onClose }: { onClose: () => void }) {
+interface NewUserModalProps {
+  onClose: () => void;
+  onShowLinkModal?: (title: string, link: string, message: string) => void;
+}
+
+export function NewUserModal({ onClose, onShowLinkModal }: NewUserModalProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sendInvite, setSendInvite] = useState(true);
 
   async function handleSubmit(formData: FormData) {
     setError(null);
     setLoading(true);
+    formData.set('sendInvite', String(sendInvite));
     const result = await createUser(formData);
     setLoading(false);
     if (!result.success) {
@@ -21,6 +28,15 @@ export function NewUserModal({ onClose }: { onClose: () => void }) {
     }
     router.refresh();
     onClose();
+
+    if (sendInvite && result.inviteUrl && onShowLinkModal) {
+      const email = formData.get('email') as string;
+      onShowLinkModal(
+        'User Invited',
+        result.inviteUrl,
+        `An invitation email with a 7-day setup link was sent to ${email}. You can also copy the direct link below:`,
+      );
+    }
   }
 
   return (
@@ -58,15 +74,15 @@ export function NewUserModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="password">
-              Temporary password
+              Temporary password {sendInvite && <span className="font-normal text-slate-400">(optional)</span>}
             </label>
             <input
               id="password"
               name="password"
               type="password"
-              required
+              required={!sendInvite}
               minLength={8}
-              placeholder="At least 8 characters"
+              placeholder={sendInvite ? 'Leave blank to auto-generate setup link' : 'At least 8 characters'}
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
             />
           </div>
@@ -88,9 +104,22 @@ export function NewUserModal({ onClose }: { onClose: () => void }) {
             </select>
           </div>
 
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              id="sendInvite"
+              type="checkbox"
+              checked={sendInvite}
+              onChange={(e) => setSendInvite(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600"
+            />
+            <label htmlFor="sendInvite" className="text-sm text-slate-700 dark:text-slate-300">
+              Send first-time login invitation email with setup link
+            </label>
+          </div>
+
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
               onClick={onClose}

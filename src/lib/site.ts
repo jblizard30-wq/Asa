@@ -14,6 +14,12 @@ export const APP_NAME = 'Asa';
 
 export const pageTitle = ORG_NAME ? `${APP_NAME} · ${ORG_NAME}` : APP_NAME;
 
+export function getBaseUrl(): string {
+  if (process.env.NEXTAUTH_URL) return process.env.NEXTAUTH_URL.replace(/\/$/, '');
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL.replace(/\/$/, '')}`;
+  return 'http://localhost:3000';
+}
+
 const LOGO_MIME_BY_EXTENSION: Record<string, string> = {
   svg: 'image/svg+xml',
   png: 'image/png',

@@ -30,3 +30,29 @@ export async function markAllNotificationsRead() {
   revalidatePath('/', 'layout');
   return { success: true };
 }
+
+export async function toggleNotificationRead(notificationId: string, read: boolean) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return { success: false };
+
+  await prisma.notification.updateMany({
+    where: { id: notificationId, recipientId: session.user.id },
+    data: { read },
+  });
+
+  revalidatePath('/', 'layout');
+  return { success: true };
+}
+
+export async function deleteNotification(notificationId: string) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return { success: false };
+
+  await prisma.notification.deleteMany({
+    where: { id: notificationId, recipientId: session.user.id },
+  });
+
+  revalidatePath('/', 'layout');
+  return { success: true };
+}
+

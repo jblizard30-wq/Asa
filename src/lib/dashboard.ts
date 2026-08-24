@@ -91,10 +91,12 @@ export interface TopLineStats {
   completionRate: number;
 }
 
+import { isTaskOverdue } from '@/lib/dateUtils';
+
 export function isOverdue(task: Pick<DashboardTask, 'status' | 'dueDate'>, now: Date): boolean {
-  if (task.status === 'DONE' || !task.dueDate) return false;
-  return new Date(task.dueDate).getTime() < startOfLocalDay(now, APP_TIMEZONE).getTime();
+  return isTaskOverdue(task.dueDate, task.status, now);
 }
+
 
 export function isDueSoon(task: Pick<DashboardTask, 'status' | 'dueDate'>, now: Date, days = 7): boolean {
   if (task.status === 'DONE' || !task.dueDate) return false;

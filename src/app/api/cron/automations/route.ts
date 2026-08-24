@@ -65,10 +65,11 @@ export async function GET(request: Request) {
 
   let firedCount = 0;
   for (const rule of rules) {
-    if (!rule.sourceTask.dueDate || rule.triggerDaysBefore == null) continue;
+    if (!rule.sourceTask || !rule.sourceTask.dueDate || rule.triggerDaysBefore == null) continue;
 
     const triggerDay = toDayString(new Date(rule.sourceTask.dueDate.getTime() - rule.triggerDaysBefore * DAY_MS));
     if (triggerDay !== todayStr) continue;
+
 
     const claimed = await claimRuleForToday(rule.id, todayStart);
     if (!claimed) continue;

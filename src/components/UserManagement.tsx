@@ -2,9 +2,10 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { bulkDeleteUsers, bulkUpdateUserRole, deleteUser, updateUserRole } from '@/lib/actions/users';
+import { bulkDeleteUsers, bulkUpdateUserRole, deleteUser, sendUserInvite, updateUserRole } from '@/lib/actions/users';
 import { NewUserModal } from './NewUserModal';
 import { EditUserModal } from './EditUserModal';
+import { ResetPasswordModal } from './ResetPasswordModal';
 
 export interface ManagedUser {
   id: string;
@@ -17,12 +18,22 @@ export interface ManagedUser {
 
 export const ROLES = ['ADMIN', 'MANAGER', 'USER'] as const;
 
+interface LinkModalState {
+  title: string;
+  link: string;
+  message: string;
+}
+
 export function UserManagement({ currentUserId, users }: { currentUserId: string; users: ManagedUser[] }) {
   const router = useRouter();
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showNewUser, setShowNewUser] = useState(false);
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
+  const [resetUser, setResetUser] = useState<ManagedUser | null>(null);
+  const [linkModal, setLinkModal] = useState<LinkModalState | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkPending, startBulkTransition] = useTransition();
 
@@ -66,6 +77,38 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
       return;
     }
     router.refresh();
+  }
+
+  async function handleSendInvite(user: ManagedUser) {
+    setError(null);
+    setInvitingId(user.id);
+    const result = await sendUserInvite(user.id);
+    setInvitingId(null);
+
+    if (!result.success) {
+      setError(result.error ?? 'Could not send invitation email.');
+      return;
+    }
+
+    if (result.inviteUrl) {
+      setLinkModal({
+        title: 'Invitation Sent',
+        link: result.inviteUrl,
+        message: `An invitation email with a 7-day setup link was sent to ${user.email}. You can also copy the direct link below:`,
+      });
+    }
+    router.refresh();
+  }
+
+  async function handleCopyLink() {
+    if (!linkModal?.link) return;
+    try {
+      await navigator.clipboard.writeText(linkModal.link);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    } catch {
+      // ignore clipboard failure
+    }
   }
 
   function handleDelete(user: ManagedUser) {
@@ -116,7 +159,7 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">User Management</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Manage staff accounts and their access level. Only administrators can see this page.
+            Manage staff accounts, send login invitations, and reset passwords. Only administrators can access this section.
           </p>
         </div>
         <button
@@ -245,6 +288,20 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
                 <td className="whitespace-nowrap px-4 py-3 text-sm">
                   <div className="flex items-center gap-3">
                     <button
+                      onClick={() => handleSendInvite(user)}
+                      disabled={invitingId === user.id}
+                      title="Send or resend first-time login invitation email"
+                      className="text-xs font-medium text-emerald-600 hover:text-emerald-700 disabled:opacity-50 dark:text-emerald-400"
+                    >
+                      {invitingId === user.id ? 'Sending…' : 'Invite'}
+                    </button>
+                    <button
+                      onClick={() => setResetUser(user)}
+                      className="text-xs font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400"
+                    >
+                      Reset pass
+                    </button>
+                    <button
                       onClick={() => setEditingUser(user)}
                       className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
                     >
@@ -273,8 +330,70 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
         </table>
       </div>
 
-      {showNewUser && <NewUserModal onClose={() => setShowNewUser(false)} />}
+      {showNewUser && (
+        <NewUserModal
+          onClose={() => setShowNewUser(false)}
+          onShowLinkModal={(title, link, message) => setLinkModal({ title, link, message })}
+        />
+      )}
+
       {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} />}
+
+      {resetUser && (
+        <ResetPasswordModal
+          user={resetUser}
+          onClose={() => setResetUser(null)}
+          onShowLinkModal={(title, link, message) => setLinkModal({ title, link, message })}
+        />
+      )}
+
+      {/* Direct link sharing modal */}
+      {linkModal && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={() => {
+            setLinkModal(null);
+            setCopiedLink(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{linkModal.title}</h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{linkModal.message}</p>
+
+            <div className="mt-4 flex gap-2">
+              <input
+                type="text"
+                readOnly
+                value={linkModal.link}
+                className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-mono select-all focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              />
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="shrink-0 rounded-md bg-brand-600 px-3 py-2 text-xs font-medium text-white hover:bg-brand-700"
+              >
+                {copiedLink ? '✓ Copied' : 'Copy'}
+              </button>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setLinkModal(null);
+                  setCopiedLink(false);
+                }}
+                className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
