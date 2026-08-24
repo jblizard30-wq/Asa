@@ -223,8 +223,12 @@ export function ListView({
                         )}
                       </span>
                       <div className="flex shrink-0 items-center gap-3">
-                        {task.assigneeNames.length > 0 && (
+                        {task.assigneeNames.length > 0 ? (
                           <span className="text-xs text-slate-400 dark:text-slate-500">{task.assigneeNames.join(', ')}</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                            ⚠️ Unassigned
+                          </span>
                         )}
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[task.priority]}`}>
                           {PRIORITY_LABELS[task.priority]}
@@ -233,6 +237,7 @@ export function ListView({
                           {due.label}
                         </span>
                       </div>
+
                     </button>
                   </li>
                 );

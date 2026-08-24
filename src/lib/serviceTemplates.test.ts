@@ -58,3 +58,4 @@ describe('serviceTemplates liturgical filtering', () => {
     expect(titles).toContain('Audio / Visual Sound Check');
   });
 });
+

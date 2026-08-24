@@ -182,16 +182,21 @@ export function KanbanBoard({
                                 {due.label}
                               </span>
                             </div>
-                            {task.assigneeNames.length > 0 && (
+                            {task.assigneeNames.length > 0 ? (
                               <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
                                 {task.assigneeNames.join(', ')}
                               </p>
+                            ) : (
+                              <span className="mt-2 inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                                ⚠️ Unassigned
+                              </span>
                             )}
                           </div>
                         )}
                       </Draggable>
                     );
                   })}
+
                   {provided.placeholder}
                 </div>
               )}

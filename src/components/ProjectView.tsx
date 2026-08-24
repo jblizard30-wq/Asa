@@ -101,6 +101,38 @@ export function ProjectView({
     [filteredSections],
   );
 
+  function exportCsv() {
+    const rows: string[][] = [
+      ['ID', 'Title', 'Section', 'Status', 'Priority', 'Start Date', 'Due Date', 'Assignees', 'Tags'],
+    ];
+
+    for (const section of sections) {
+      for (const task of section.tasks) {
+        rows.push([
+          task.id,
+          `"${task.title.replace(/"/g, '""')}"`,
+          `"${section.name.replace(/"/g, '""')}"`,
+          task.status,
+          task.priority,
+          task.startDate ? task.startDate.slice(0, 10) : '',
+          task.dueDate ? task.dueDate.slice(0, 10) : '',
+          `"${task.assigneeNames.join(', ').replace(/"/g, '""')}"`,
+          `"${task.tags.map((t) => t.name).join(', ').replace(/"/g, '""')}"`,
+        ]);
+      }
+    }
+
+    const csvContent = rows.map((r) => r.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${projectName.toLowerCase().replace(/\s+/g, '_')}_tasks.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   return (
     <div>
       <div className="flex items-start justify-between gap-4">
@@ -108,27 +140,25 @@ export function ProjectView({
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{projectName}</h1>
           {description && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>}
           {isAdmin ? (
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
-              <span>Members:</span>
-              {members.length === 0 && <span>None yet</span>}
-              {members.map((m) =>
-                m.role === 'MANAGER' ? (
-                  <label key={m.id} className="flex items-center gap-1 whitespace-nowrap" title="Manages this project's exec-summary digest">
-                    <span>{m.name}</span>
-                    <input
-                      type="checkbox"
-                      checked={m.isManager}
-                      disabled={togglingManagerId === m.id}
-                      onChange={(e) => toggleManager(m.id, e.target.checked)}
-                      className="h-3 w-3"
-                    />
-                    <span className="text-[10px] uppercase tracking-wide">Mgr</span>
-                  </label>
-                ) : (
-                  <span key={m.id} className="whitespace-nowrap">
-                    {m.name}
-                  </span>
-                )
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Managers:</span>
+              {members.length === 0 ? (
+                <span className="text-xs text-slate-400">No members yet</span>
+              ) : (
+                members.map((member) => (
+                  <button
+                    key={member.id}
+                    onClick={() => toggleManager(member.id, !member.isManager)}
+                    disabled={togglingManagerId === member.id}
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium transition ${
+                      member.isManager
+                        ? 'bg-brand-100 text-brand-700 hover:bg-brand-200 dark:bg-brand-900/40 dark:text-brand-300'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                    }`}
+                  >
+                    {member.name} {member.isManager ? '✓ Manager' : '+ Make Manager'}
+                  </button>
+                ))
               )}
             </div>
           ) : (
@@ -138,6 +168,14 @@ export function ProjectView({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            title="Export tasks to CSV"
+          >
+            📥 Export CSV
+          </button>
           <Link
             href={`/projects/${projectId}/automations`}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
