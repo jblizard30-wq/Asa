@@ -74,7 +74,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       />
       <div className="flex flex-1">
         <Sidebar folders={sidebarFolders} ungroupedProjects={ungroupedProjects} navItems={navItems} />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 print:max-w-none print:p-0">{children}</main>
+        <main className="flex min-w-0 w-full flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8 print:max-w-none print:p-0">{children}</main>
       </div>
     </div>
   );

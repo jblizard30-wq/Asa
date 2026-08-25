@@ -20,9 +20,20 @@ body {
 }
 
 /* Pure-CSS connector lines for the org chart tree (src/components/OrgChart.tsx). */
+.org-canvas-dots {
+  background-image: radial-gradient(#cbd5e1 1.25px, transparent 1.25px);
+  background-size: 24px 24px;
+}
+
+.dark .org-canvas-dots {
+  background-image: radial-gradient(#334155 1.25px, transparent 1.25px);
+  background-size: 24px 24px;
+}
+
 .org-tree,
 .org-tree ul {
   display: flex;
+  justify-content: center;
 }
 
 .org-tree,

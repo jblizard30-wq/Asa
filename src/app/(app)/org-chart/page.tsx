@@ -19,13 +19,17 @@ export default async function OrgChartPage() {
   const unassigned = tree.filter((node) => node.children.length === 0);
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Org Chart</h1>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-        Who reports to whom across the organization.
-      </p>
+    <div className="flex min-h-0 flex-1 flex-col pb-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Org Chart</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Who reports to whom across the organization.
+          </p>
+        </div>
+      </div>
 
-      <div className="mt-6">
+      <div className="flex min-h-0 flex-1 flex-col">
         <OrgChart
           roots={chartRoots}
           unassigned={unassigned}
