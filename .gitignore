@@ -19,8 +19,12 @@
 *.pem
 npm-debug.log*
 
-# typescript
+# typescript & next
 *.tsbuildinfo
 next-env.d.ts
 .vercel
-.env*
+
+# editor
+.vscode/
+*.code-workspace
+
