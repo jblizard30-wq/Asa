@@ -1,4 +1,3 @@
-import { differenceInCalendarDays } from 'date-fns';
 import { startOfLocalDay } from '@/lib/digestSchedule';
 
 const APP_TIMEZONE = 'America/Chicago';
@@ -91,7 +90,7 @@ export interface TopLineStats {
   completionRate: number;
 }
 
-import { isTaskOverdue } from '@/lib/dateUtils';
+import { isTaskOverdue, daysFromToday } from '@/lib/dateUtils';
 
 export function isOverdue(task: Pick<DashboardTask, 'status' | 'dueDate'>, now: Date): boolean {
   return isTaskOverdue(task.dueDate, task.status, now);
@@ -100,9 +99,8 @@ export function isOverdue(task: Pick<DashboardTask, 'status' | 'dueDate'>, now: 
 
 export function isDueSoon(task: Pick<DashboardTask, 'status' | 'dueDate'>, now: Date, days = 7): boolean {
   if (task.status === 'DONE' || !task.dueDate) return false;
-  const due = new Date(task.dueDate).getTime();
-  const today = startOfLocalDay(now, APP_TIMEZONE).getTime();
-  return due >= today && due <= startOfLocalDay(now, APP_TIMEZONE, days).getTime();
+  const diff = daysFromToday(task.dueDate, now);
+  return diff <= 0 && diff >= -days;
 }
 
 export function isRecentlyCompleted(task: Pick<DashboardTask, 'status' | 'updatedAt'>, now: Date, windowDays = 14): boolean {
@@ -216,7 +214,7 @@ function toListEntry(task: DashboardTask, now: Date): TaskListEntry {
     priority: task.priority,
     dueDate: task.dueDate,
     updatedAt: task.updatedAt,
-    daysFromNow: task.dueDate ? differenceInCalendarDays(startOfLocalDay(now, APP_TIMEZONE), new Date(task.dueDate)) : null,
+    daysFromNow: task.dueDate ? daysFromToday(task.dueDate, now) : null,
   };
 }
 

@@ -26,13 +26,26 @@ function isPrivateIPv6(ip: string): boolean {
   return false;
 }
 
-/**
- * Resolves the URL's hostname and rejects loopback/private/link-local/CGNAT targets — otherwise
- * a webhook URL is an SSRF primitive onto internal services and cloud metadata endpoints (e.g.
- * 169.254.169.254). Called both at registration (for immediate feedback) and again right before
- * each delivery (since DNS can be repointed after a webhook is created).
- */
-export async function assertPublicHttpUrl(rawUrl: string): Promise<void> {
+export interface SafeAddress {
+  address: string;
+  family: 4 | 6;
+}
+
+async function resolveSafeAddresses(hostname: string): Promise<SafeAddress[]> {
+  const addresses = await dns.promises.lookup(hostname, { all: true });
+  if (addresses.length === 0) {
+    throw new Error('Could not resolve webhook URL host');
+  }
+  return addresses.map(({ address, family }) => {
+    const isPrivate = family === 6 ? isPrivateIPv6(address) : isPrivateIPv4(address);
+    if (isPrivate) {
+      throw new Error('Webhook URL resolves to a private or internal address');
+    }
+    return { address, family: family as 4 | 6 };
+  });
+}
+
+function parsePublicHttpUrl(rawUrl: string): URL {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -42,20 +55,33 @@ export async function assertPublicHttpUrl(rawUrl: string): Promise<void> {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('Webhook URL must use http or https');
   }
-
-  const hostname = url.hostname.toLowerCase();
-  if (BLOCKED_HOSTNAMES.has(hostname)) {
+  if (BLOCKED_HOSTNAMES.has(url.hostname.toLowerCase())) {
     throw new Error('Webhook URL host is not allowed');
   }
+  return url;
+}
 
-  const addresses = await dns.promises.lookup(hostname, { all: true });
-  if (addresses.length === 0) {
-    throw new Error('Could not resolve webhook URL host');
-  }
-  for (const { address, family } of addresses) {
-    const isPrivate = family === 6 ? isPrivateIPv6(address) : isPrivateIPv4(address);
-    if (isPrivate) {
-      throw new Error('Webhook URL resolves to a private or internal address');
-    }
-  }
+/**
+ * Resolves the URL's hostname and rejects loopback/private/link-local/CGNAT targets — otherwise
+ * a webhook URL is an SSRF primitive onto internal services and cloud metadata endpoints (e.g.
+ * 169.254.169.254). Called both at registration (for immediate feedback) and again right before
+ * each delivery (since DNS can be repointed after a webhook is created).
+ */
+export async function assertPublicHttpUrl(rawUrl: string): Promise<void> {
+  const url = parsePublicHttpUrl(rawUrl);
+  await resolveSafeAddresses(url.hostname.toLowerCase());
+}
+
+/**
+ * Same validation as assertPublicHttpUrl, but also hands back the exact address that was
+ * checked, so the caller can pin its connection to it. Calling fetch()/request() with the
+ * hostname again afterward would trigger a second, independent DNS lookup — reopening the
+ * DNS-rebinding TOCTOU window this check exists to close (attacker's nameserver answers this
+ * lookup with a public IP, then answers the real connection moments later with
+ * 169.254.169.254 or an internal address).
+ */
+export async function resolvePinnedAddress(rawUrl: string): Promise<{ url: URL; address: SafeAddress }> {
+  const url = parsePublicHttpUrl(rawUrl);
+  const [address] = await resolveSafeAddresses(url.hostname.toLowerCase());
+  return { url, address };
 }

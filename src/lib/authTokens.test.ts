@@ -21,6 +21,7 @@ describe('authTokens', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.NEXTAUTH_SECRET = 'test-secret-do-not-use-in-prod';
   });
 
   it('generates a valid invite token and verifies it', async () => {

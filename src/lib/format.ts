@@ -38,18 +38,6 @@ export const PRIORITY_BAR_COLORS: Record<string, string> = {
   URGENT: 'bg-red-500',
 };
 
-export const ROLE_LABELS: Record<string, string> = {
-  ADMIN: 'Administrator',
-  MANAGER: 'Manager',
-  USER: 'User',
-};
-
-export const AUTOMATION_TRIGGER_LABELS: Record<string, string> = {
-  STATUS_CHANGED: 'status changes to',
-  ASSIGNEE_CHANGED: 'assignee changes',
-  DUE_DATE_APPROACHING: 'due date is approaching',
-};
-
 export const TAG_COLORS = [
   'slate',
   'red',

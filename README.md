@@ -57,6 +57,9 @@ cp .env.example .env
 | `HQ_SUPPORT_SECRET` | Shared secret with `asa-hq` for 1-click admin support logins |
 | `CRON_SECRET` | Secret for securing `/api/cron/*` endpoints |
 | `SMTP_*` | Optional SMTP configuration for outbound email delivery |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob store token for task file attachments |
+| `GOOGLE_CALENDAR_CLIENT_ID` / `GOOGLE_CALENDAR_CLIENT_SECRET` | Optional — enables the Google Calendar "Connect" button under Settings > Integrations |
+| `OUTLOOK_CALENDAR_CLIENT_ID` / `OUTLOOK_CALENDAR_CLIENT_SECRET` | Optional — enables the Outlook Calendar "Connect" button under Settings > Integrations |
 
 ### 3. Run Database Migrations
 ```bash

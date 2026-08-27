@@ -1,8 +1,9 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 
-/** Hash algorithm and encoding must exactly match createApiKey in lib/actions/apiKeys.ts. */
-function hashKey(rawKey: string): string {
+/** Shared with createApiKey in lib/actions/apiKeys.ts — both must hash the same way, since one
+ * writes the keyHash this looks up. */
+export function hashKey(rawKey: string): string {
   return crypto.createHash('sha256').update(rawKey).digest('hex');
 }
 

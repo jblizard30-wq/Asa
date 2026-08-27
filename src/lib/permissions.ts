@@ -33,8 +33,14 @@ export async function canManageTeam(userId: string, role: string, teamId: string
 /** True if `candidateId` is `userId` itself or one of their existing managers, transitively. */
 export async function isSelfOrAncestorManager(userId: string, candidateId: string): Promise<boolean> {
   let currentId: string | null = candidateId;
+  // Guards against an infinite loop if managerId chains ever form a cycle — the sole write path
+  // (setUserManager) prevents that via wouldCreateDependencyCycle, but this function shouldn't
+  // rely on that holding true forever if managerId is ever written another way.
+  const visited = new Set<string>();
   while (currentId) {
     if (currentId === userId) return true;
+    if (visited.has(currentId)) return false;
+    visited.add(currentId);
     const current: { managerId: string | null } | null = await prisma.user.findUnique({
       where: { id: currentId },
       select: { managerId: true },

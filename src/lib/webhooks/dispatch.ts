@@ -1,7 +1,9 @@
 import crypto from 'crypto';
+import http from 'http';
+import https from 'https';
 import { WebhookEvent } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { assertPublicHttpUrl } from '@/lib/webhooks/urlSafety';
+import { resolvePinnedAddress } from '@/lib/webhooks/urlSafety';
 
 const DELIVERY_TIMEOUT_MS = 5000;
 
@@ -11,33 +13,50 @@ function signPayload(secret: string, body: string): string {
 
 async function deliver(url: string, secret: string, body: string) {
   // Re-checked here, not just at registration — DNS for the webhook's host can be repointed at
-  // an internal address after the webhook was created. `redirect: 'error'` closes the matching
-  // bypass where a webhook responds with a redirect to a target this check never saw.
+  // an internal address after the webhook was created.
+  let target: Awaited<ReturnType<typeof resolvePinnedAddress>>;
   try {
-    await assertPublicHttpUrl(url);
+    target = await resolvePinnedAddress(url);
   } catch (err) {
     console.error('Webhook delivery blocked: unsafe URL', url, err);
     return;
   }
+  const { url: parsed, address } = target;
+  const client = parsed.protocol === 'https:' ? https : http;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT_MS);
-  try {
-    await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Webhook-Signature': signPayload(secret, body),
+  await new Promise<void>((resolve) => {
+    const req = client.request(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+        path: `${parsed.pathname}${parsed.search}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+          'X-Webhook-Signature': signPayload(secret, body),
+        },
+        timeout: DELIVERY_TIMEOUT_MS,
+        // Pin the connection to the address validated above instead of letting Node resolve
+        // parsed.hostname again — that second, unpinned lookup is exactly the DNS-rebinding gap
+        // resolvePinnedAddress exists to close. http.request never follows redirects on its
+        // own, so this also closes the matching bypass where a webhook responds with a redirect
+        // to a target this check never saw.
+        lookup: (_hostname, _options, callback) => callback(null, address.address, address.family),
       },
-      body,
-      redirect: 'error',
-      signal: controller.signal,
+      (res) => {
+        res.resume();
+        resolve();
+      }
+    );
+    req.on('timeout', () => req.destroy(new Error('Webhook delivery timed out')));
+    req.on('error', (err) => {
+      console.error('Webhook delivery failed', url, err);
+      resolve();
     });
-  } catch (err) {
-    console.error('Webhook delivery failed', url, err);
-  } finally {
-    clearTimeout(timeout);
-  }
+    req.write(body);
+    req.end();
+  });
 }
 
 /**

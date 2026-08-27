@@ -16,6 +16,11 @@ export async function addTaskToProject(taskId: string, projectId: string, sectio
     return { success: false, error: 'Task not found' };
   }
 
+  // Membership in the destination project isn't enough on its own — without also being a
+  // member of the task's current (source) project, a caller could link in any task by ID and
+  // expose its title/description to everyone in their own project.
+  await requireProjectMember(task.projectId);
+
   // If it's already the task's primary project, nothing to do
   if (task.projectId === projectId) {
     return { success: true };
@@ -84,6 +89,10 @@ export async function removeTaskFromProject(taskId: string, projectId: string) {
 }
 
 export async function getTaskProjectMemberships(taskId: string) {
+  const primaryProjectId = await prisma.task.findUnique({ where: { id: taskId }, select: { projectId: true } });
+  if (!primaryProjectId) return [];
+  await requireProjectMember(primaryProjectId.projectId);
+
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: {

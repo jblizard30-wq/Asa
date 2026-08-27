@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import { sendNotificationEmail } from '@/lib/email';
 import { nextLocalClockInstant, startOfLocalDay } from '@/lib/digestSchedule';
+import { isAuthorizedCronRequest } from '@/lib/cronAuth';
+import { daysFromToday } from '@/lib/dateUtils';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,10 +17,30 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
   day: 'numeric',
 });
 
-/** Buckets a user's assigned, undone, non-deleted tasks against local-calendar day boundaries. */
+/**
+ * Buckets tasks against local-calendar days via daysFromToday (calendar-day-string diff), not a
+ * raw instant-vs-instant comparison — dueDate can be stored as either UTC-midnight (the
+ * <input type="date"> path) or Chicago-midnight (the grid-paste path, see gridCoercion.ts) of
+ * the picked day, and only a calendar-day comparison gets both right. Comparing raw instants
+ * against Chicago-midnight boundaries mislabeled a same-day UTC-midnight due date as overdue for
+ * the first several hours of its actual due day.
+ */
+function bucketByDueDate<T extends { dueDate: Date | null }>(tasks: T[], now: Date, lookaheadDays: number) {
+  const overdue: T[] = [];
+  const dueToday: T[] = [];
+  const dueSoon: T[] = [];
+  for (const task of tasks) {
+    if (!task.dueDate) continue;
+    const diff = daysFromToday(task.dueDate, now); // positive = overdue, 0 = today, negative = future
+    if (diff > 0) overdue.push(task);
+    else if (diff === 0) dueToday.push(task);
+    else if (diff >= -lookaheadDays) dueSoon.push(task);
+  }
+  return { overdue, dueToday, dueSoon };
+}
+
+/** Loads a user's assigned, undone, non-deleted tasks due within the lookahead window. */
 async function loadDueTaskBuckets(userId: string, now: Date) {
-  const todayStart = startOfLocalDay(now, APP_TIMEZONE, 0);
-  const tomorrowStart = startOfLocalDay(now, APP_TIMEZONE, 1);
   const lookaheadEnd = startOfLocalDay(now, APP_TIMEZONE, 1 + LOOKAHEAD_DAYS);
 
   const tasks = await prisma.task.findMany({
@@ -32,11 +54,7 @@ async function loadDueTaskBuckets(userId: string, now: Date) {
     select: { title: true, dueDate: true },
   });
 
-  return {
-    overdue: tasks.filter((t) => t.dueDate! < todayStart),
-    dueToday: tasks.filter((t) => t.dueDate! >= todayStart && t.dueDate! < tomorrowStart),
-    dueSoon: tasks.filter((t) => t.dueDate! >= tomorrowStart),
-  };
+  return bucketByDueDate(tasks, now, LOOKAHEAD_DAYS);
 }
 
 /**
@@ -63,8 +81,6 @@ async function loadManagedProjectIds(userId: string, role: string): Promise<stri
 async function loadProjectSummaries(projectIds: string[], now: Date) {
   if (projectIds.length === 0) return [];
 
-  const todayStart = startOfLocalDay(now, APP_TIMEZONE, 0);
-  const tomorrowStart = startOfLocalDay(now, APP_TIMEZONE, 1);
   const lookaheadEnd = startOfLocalDay(now, APP_TIMEZONE, 1 + LOOKAHEAD_DAYS);
 
   const [projects, tasks] = await Promise.all([
@@ -78,11 +94,12 @@ async function loadProjectSummaries(projectIds: string[], now: Date) {
   return projects
     .map((project) => {
       const projectTasks = tasks.filter((t) => t.projectId === project.id);
+      const buckets = bucketByDueDate(projectTasks, now, LOOKAHEAD_DAYS);
       return {
         name: project.name,
-        overdue: projectTasks.filter((t) => t.dueDate! < todayStart).length,
-        dueToday: projectTasks.filter((t) => t.dueDate! >= todayStart && t.dueDate! < tomorrowStart).length,
-        dueSoon: projectTasks.filter((t) => t.dueDate! >= tomorrowStart).length,
+        overdue: buckets.overdue.length,
+        dueToday: buckets.dueToday.length,
+        dueSoon: buckets.dueSoon.length,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -93,8 +110,7 @@ async function loadProjectSummaries(projectIds: string[], now: Date) {
  * /api/cron/automations rather than a user session.
  */
 export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isAuthorizedCronRequest(request)) {
     return new Response('Unauthorized', { status: 401 });
   }
 

@@ -26,6 +26,23 @@ export async function requireProjectMember(projectId: string) {
   return session;
 }
 
+/**
+ * Narrows candidate assignee ids down to users actually eligible for the project — a member of
+ * it, or an admin (who, per requireProjectMember above, can act on any project without a
+ * ProjectMember row). Without this, any project member could assign a task to an arbitrary
+ * known user id anywhere in the deployment, which both leaks the task's existence to someone
+ * outside the project (via the assignment notification/email) and puts a task on a stranger's
+ * list they have no way to see or act on.
+ */
+export async function filterToAssignableUsers(projectId: string, userIds: string[]): Promise<string[]> {
+  if (userIds.length === 0) return [];
+  const eligible = await prisma.user.findMany({
+    where: { id: { in: userIds }, OR: [{ role: 'ADMIN' }, { memberships: { some: { projectId } } }] },
+    select: { id: true },
+  });
+  return eligible.map((u) => u.id);
+}
+
 async function logActivity(taskId: string, actorId: string | null, action: ActivityAction, detail: string) {
   await prisma.taskActivity.create({ data: { taskId, actorId, action, detail } });
 }
@@ -140,7 +157,7 @@ export async function createTask(projectId: string, formData: FormData) {
     orderBy: { order: 'desc' },
   });
 
-  const assigneeIds = parsed.data.assigneeIds ?? [];
+  const assigneeIds = await filterToAssignableUsers(projectId, parsed.data.assigneeIds ?? []);
 
   const task = await prisma.task.create({
     data: {
@@ -252,7 +269,10 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
   }
 
   const existingAssigneeIds = existing.assignees.map((a) => a.id);
-  const newAssigneeIds = parsed.data.assigneeIds;
+  const newAssigneeIds =
+    parsed.data.assigneeIds !== undefined
+      ? await filterToAssignableUsers(existing.projectId, parsed.data.assigneeIds)
+      : undefined;
   const assigneesChanged = newAssigneeIds !== undefined && !sameIdSet(newAssigneeIds, existingAssigneeIds);
   if (newAssigneeIds !== undefined) {
     data.assignees = { set: newAssigneeIds.map((id) => ({ id })) };
@@ -702,10 +722,26 @@ export async function bulkUpdateTasks(taskIds: string[], input: BulkUpdateInput)
   }
 
   if (assigneeIds !== undefined) {
-    await Promise.all(
-      taskIds.map((id) =>
-        prisma.task.update({ where: { id }, data: { assignees: { set: assigneeIds.map((uid) => ({ id: uid })) } } }),
-      ),
+    // Selected tasks can span multiple projects, and an id eligible for one may not be for
+    // another, so eligibility is resolved per project rather than once for the whole batch.
+    const assignableByProject = new Map<string, string[]>();
+    for (const projectId of projectIds) {
+      assignableByProject.set(projectId, await filterToAssignableUsers(projectId, assigneeIds));
+    }
+
+    // Relation `set` isn't supported by updateMany, so this still needs one update per task —
+    // but $transaction makes the batch atomic (all tasks get the new assignee set, or none do)
+    // instead of Promise.all's every-request-independent semantics, where one failure leaves
+    // some tasks updated and others not.
+    await prisma.$transaction(
+      tasks
+        .filter((task) => !task.deletedAt)
+        .map((task) =>
+          prisma.task.update({
+            where: { id: task.id },
+            data: { assignees: { set: (assignableByProject.get(task.projectId) ?? []).map((uid) => ({ id: uid })) } },
+          }),
+        ),
     );
   }
 

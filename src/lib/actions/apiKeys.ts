@@ -5,10 +5,7 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { requireSession } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
-
-function hashKey(rawKey: string): string {
-  return crypto.createHash('sha256').update(rawKey).digest('hex');
-}
+import { hashKey } from '@/lib/apiAuth';
 
 const createApiKeySchema = z.object({
   name: z.string().min(1, 'Name is required').max(120),

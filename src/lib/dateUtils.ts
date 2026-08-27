@@ -1,4 +1,4 @@
-import { format, isSameWeek } from 'date-fns';
+import { format, parseISO, differenceInCalendarDays } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 
 export const APP_TIMEZONE = 'America/Chicago';
@@ -74,34 +74,22 @@ export function isTaskDueToday(
 }
 
 /**
- * Checks if a task's due date falls within the current calendar week (Monday-Sunday) in America/Chicago.
+ * Signed day count from today's Chicago calendar day to dueDate's calendar day: positive means
+ * dueDate was N days ago (overdue by N days), negative means dueDate is N days in the future.
+ *
+ * Diffs calendar-day strings rather than raw instants, same as isTaskOverdue/isTaskDueToday
+ * above — that's what makes this correct for both dueDate storage conventions this app has: a
+ * date typed into an <input type="date"> stores UTC-midnight of that day, while pasting into
+ * the grid stores Chicago-midnight of that day (see gridCoercion.ts's parseDueDate). Comparing
+ * the raw instants directly (e.g. `dueDate.getTime() < startOfLocalDay(now).getTime()`) mislabels
+ * a same-day UTC-midnight due date as overdue for the first several hours of its actual due day.
+ * parseISO on a date-only "yyyy-MM-dd" string anchors it at local midnight in the *server's*
+ * timezone, but since both operands go through it identically, the offset cancels out of the
+ * diff regardless of what timezone the server runs in.
  */
-export function isTaskDueThisWeek(
-  dueDate: Date | string | null | undefined,
-  now: Date = new Date(),
-): boolean {
-  if (!dueDate) return false;
-
-  const dueDay = getCalendarDayString(dueDate);
-  const [year, month, day] = dueDay.split('-').map(Number);
-  const dueDateObj = new Date(year, month - 1, day);
-
-  const nowZoned = toZonedTime(now, APP_TIMEZONE);
-
-  return isSameWeek(dueDateObj, nowZoned, { weekStartsOn: 1 });
-}
-
-/**
- * Formats a calendar date into a readable string (e.g. "Aug 24" or "MMM d, yyyy") in Chicago time.
- */
-export function formatChicagoDate(
-  date: Date | string | null | undefined,
-  formatPattern: string = 'MMM d',
-): string {
-  if (!date) return '';
-  const dayStr = getCalendarDayString(date);
-  const [year, month, day] = dayStr.split('-').map(Number);
-  const d = new Date(year, month - 1, day);
-  return format(d, formatPattern);
+export function daysFromToday(dueDate: Date | string, now: Date = new Date()): number {
+  const dueDay = parseISO(getCalendarDayString(dueDate));
+  const today = parseISO(getChicagoToday(now));
+  return differenceInCalendarDays(today, dueDay);
 }
 

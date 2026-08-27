@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { addDays, format } from 'date-fns';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireProjectMember } from '@/lib/actions/tasks';
 import { getLiturgicalSeason } from '@/lib/liturgicalCalendar';
@@ -124,45 +125,55 @@ export async function applyServiceTemplate(templateId: string, occurrenceDate: s
     select: { order: true },
   });
 
-  const result = await prisma.$transaction(async (tx) => {
-    const section = await tx.section.create({
-      data: {
-        name: sectionTitle,
-        projectId: template.projectId,
-        order: (lastSection?.order ?? -1) + 1,
-      },
-    });
-
-    // Create tasks for active template items
-    for (let i = 0; i < activeItems.length; i++) {
-      const item = activeItems[i];
-      const taskDueDate = item.dueOffsetDays !== null ? addDays(serviceDate, item.dueOffsetDays) : serviceDate;
-
-      await tx.task.create({
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      const section = await tx.section.create({
         data: {
-          title: item.title,
-          description: item.description,
+          name: sectionTitle,
           projectId: template.projectId,
-          sectionId: section.id,
-          priority: item.defaultPriority,
-          dueDate: taskDueDate,
-          order: i,
+          order: (lastSection?.order ?? -1) + 1,
         },
       });
-    }
 
-    // Record template run
-    await tx.serviceTemplateRun.create({
-      data: {
-        serviceTemplateId: template.id,
-        occurrenceDate: serviceDate,
-        season,
-        sectionId: section.id,
-      },
+      // Create tasks for active template items
+      for (let i = 0; i < activeItems.length; i++) {
+        const item = activeItems[i];
+        const taskDueDate = item.dueOffsetDays !== null ? addDays(serviceDate, item.dueOffsetDays) : serviceDate;
+
+        await tx.task.create({
+          data: {
+            title: item.title,
+            description: item.description,
+            projectId: template.projectId,
+            sectionId: section.id,
+            priority: item.defaultPriority,
+            dueDate: taskDueDate,
+            order: i,
+          },
+        });
+      }
+
+      // Record template run — the (serviceTemplateId, occurrenceDate) unique constraint is the
+      // real idempotency guard; the existingRun check above is only a fast path for the common
+      // case, since two concurrent calls could both pass it before either commits.
+      await tx.serviceTemplateRun.create({
+        data: {
+          serviceTemplateId: template.id,
+          occurrenceDate: serviceDate,
+          season,
+          sectionId: section.id,
+        },
+      });
+
+      return section;
     });
-
-    return section;
-  });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      return { success: false, error: `This service template has already been generated for ${dateStr}.` };
+    }
+    throw err;
+  }
 
   revalidatePath(`/projects/${template.projectId}`);
   revalidatePath('/my-tasks');

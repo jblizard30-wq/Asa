@@ -13,6 +13,15 @@ async function logRun(ruleId: string, status: 'SUCCESS' | 'FAILED' | 'SKIPPED', 
   await prisma.automationRun.create({ data: { ruleId, status, detail } });
 }
 
+/** True if the task is trashed, or no longer exists. Unlike updateTask, a rule firing on a
+ * trashed task has no user in the loop to see a "task is in the trash" error, so this is a
+ * silent skip (logged) rather than a thrown error — never resurrect/mutate a task someone
+ * deliberately trashed just because a rule happened to fire on it. */
+async function isTargetTrashed(taskId: string): Promise<boolean> {
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { deletedAt: true } });
+  return !task || task.deletedAt !== null;
+}
+
 /** Finds rules whose trigger matches `event` on `taskId` and applies each one's action. */
 export async function runTaskAutomations(taskId: string, event: TaskAutomationEvent, depth = 0): Promise<void> {
   if (depth >= MAX_CHAIN_DEPTH) return;
@@ -53,6 +62,10 @@ export async function applyAutomationAction(rule: AutomationRule, depth: number,
           await logRun(rule.id, 'SKIPPED', 'Missing target task or status');
           return;
         }
+        if (await isTargetTrashed(effectiveTargetTaskId)) {
+          await logRun(rule.id, 'SKIPPED', 'Target task is in the trash');
+          return;
+        }
 
         const claimedDoneTransition =
           rule.actionStatus === 'DONE' &&
@@ -82,6 +95,10 @@ export async function applyAutomationAction(rule: AutomationRule, depth: number,
       case 'SET_ASSIGNEE': {
         if (!effectiveTargetTaskId) {
           await logRun(rule.id, 'SKIPPED', 'Missing target task');
+          return;
+        }
+        if (await isTargetTrashed(effectiveTargetTaskId)) {
+          await logRun(rule.id, 'SKIPPED', 'Target task is in the trash');
           return;
         }
         let assigneeIdsToSet: string[] = rule.actionAssigneeId ? [rule.actionAssigneeId] : [];
@@ -120,6 +137,10 @@ export async function applyAutomationAction(rule: AutomationRule, depth: number,
       case 'MOVE_SECTION': {
         if (!effectiveTargetTaskId || !rule.targetSectionId) {
           await logRun(rule.id, 'SKIPPED', 'Missing target task or section');
+          return;
+        }
+        if (await isTargetTrashed(effectiveTargetTaskId)) {
+          await logRun(rule.id, 'SKIPPED', 'Target task is in the trash');
           return;
         }
         const target = await prisma.task.update({

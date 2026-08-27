@@ -18,10 +18,14 @@ export interface VerifyTokenResult {
   error?: string;
 }
 
-const DEFAULT_SECRET = 'asa-insecure-dev-auth-secret-change-in-prod';
-
 function getSecret(): string {
-  return process.env.NEXTAUTH_SECRET || DEFAULT_SECRET;
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    // Fail closed rather than silently signing invite/password-reset tokens with a fallback
+    // value that would be checked into source control and public to anyone with repo access.
+    throw new Error('NEXTAUTH_SECRET must be set to issue or verify auth tokens');
+  }
+  return secret;
 }
 
 /**

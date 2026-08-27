@@ -23,14 +23,18 @@ export async function uploadAttachment(taskId: string, formData: FormData) {
   }
 
   const pathname = `tasks/${taskId}/${Date.now()}-${file.name}`;
-  const blob = await put(pathname, file, { access: 'public' });
+  // addRandomSuffix: the pathname above is built from a non-secret taskId and a millisecond
+  // timestamp, so without it the blob's URL is guessable by anyone who can narrow down the
+  // upload time. downloadUrl (not the plain inline url) forces Content-Disposition: attachment,
+  // so an uploaded .html/.svg can't execute script by being opened directly in a tab.
+  const blob = await put(pathname, file, { access: 'public', addRandomSuffix: true });
 
   const attachment = await prisma.attachment.create({
     data: {
       taskId,
       uploadedById: session.user.id,
       fileName: file.name,
-      fileUrl: blob.url,
+      fileUrl: blob.downloadUrl,
       filePathname: blob.pathname,
       fileSize: file.size,
       mimeType: file.type || 'application/octet-stream',

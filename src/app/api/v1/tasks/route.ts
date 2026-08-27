@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { authenticateApiKey } from '@/lib/apiAuth';
 import { createNotification } from '@/lib/notifications';
 import { dispatchWebhooks } from '@/lib/webhooks/dispatch';
+import { filterToAssignableUsers } from '@/lib/actions/tasks';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,13 +89,15 @@ export async function POST(request: NextRequest) {
     orderBy: { order: 'desc' },
   });
 
+  const assigneeIds = await filterToAssignableUsers(parsed.data.projectId, parsed.data.assigneeIds ?? []);
+
   const task = await prisma.task.create({
     data: {
       title: parsed.data.title,
       description: parsed.data.description,
       projectId: parsed.data.projectId,
       sectionId: parsed.data.sectionId,
-      assignees: parsed.data.assigneeIds?.length ? { connect: parsed.data.assigneeIds.map((id) => ({ id })) } : undefined,
+      assignees: assigneeIds.length > 0 ? { connect: assigneeIds.map((id) => ({ id })) } : undefined,
       dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
       priority: parsed.data.priority ?? 'MEDIUM',
       order: (lastTask?.order ?? -1) + 1,

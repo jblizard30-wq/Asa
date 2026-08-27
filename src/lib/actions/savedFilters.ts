@@ -108,7 +108,7 @@ export async function reorderSavedFilters(ids: string[]): Promise<{ success: boo
   });
   const ownedIds = new Set(owned.map((o) => o.id));
 
-  await Promise.all(
+  await prisma.$transaction(
     ids
       .filter((id) => ownedIds.has(id))
       .map((id, index) => prisma.savedFilter.update({ where: { id }, data: { order: index } })),

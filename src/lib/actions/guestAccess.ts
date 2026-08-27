@@ -13,7 +13,11 @@ async function requireGuestLinkAccess(taskId: string) {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return { session, task: null };
 
-  if (session.user.role !== 'ADMIN' && session.user.role !== 'MANAGER') {
+  // A guest link exposes the task's title/description/comments to anyone with the URL, so
+  // creating/listing/revoking one needs the same project-membership check as touching the task
+  // itself — MANAGER doesn't get a blanket org-wide bypass here the way it does for permissions
+  // scoped to a resource within a project the actor is already confirmed a member of.
+  if (session.user.role !== 'ADMIN') {
     await requireProjectMember(task.projectId);
   }
   return { session, task };
@@ -59,7 +63,7 @@ export async function revokeGuestLink(id: string) {
   const link = await prisma.taskGuestLink.findUnique({ where: { id }, include: { task: true } });
   if (!link) return { success: false, error: 'Guest link not found.' };
 
-  if (session.user.role !== 'ADMIN' && session.user.role !== 'MANAGER') {
+  if (session.user.role !== 'ADMIN') {
     await requireProjectMember(link.task.projectId);
   }
 

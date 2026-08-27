@@ -2,6 +2,10 @@
 
 Last updated: 2026-08-24. Branch: `main`.
 
+"100% Complete" is scoped to the backlog items below — it doesn't cover the intentionally
+deferred scope in CLAUDE.md's "Known gaps" section (currently: push/SMS reminder channels,
+email-only by design).
+
 ---
 
 ## 🏆 Completed Backlog & Titan Benchmark Features
