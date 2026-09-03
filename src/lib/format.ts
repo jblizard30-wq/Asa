@@ -1,3 +1,5 @@
+import { startOfLocalDay } from '@/lib/digestSchedule';
+
 export const PRIORITY_LABELS: Record<string, string> = {
   LOW: 'Low',
   MEDIUM: 'Medium',
@@ -106,15 +108,22 @@ export const AUTOMATION_ACTION_LABELS: Record<string, string> = {
   CREATE_TASK: 'Create a new task',
 };
 
+// Must agree with dashboard.ts's isOverdue, which drives the dashboard's overdueCount stat tile —
+// otherwise per-task overdue badges here (Kanban, list, grid, My Tasks) can disagree with that
+// count. Using the device's local midnight (the previous behavior) breaks that agreement for
+// anyone whose device clock isn't set to Central time.
+const APP_TIMEZONE = 'America/Chicago';
+
 export function formatDueDate(dueDate: string | Date | null): { label: string; overdue: boolean } {
   if (!dueDate) return { label: 'No due date', overdue: false };
   const date = new Date(dueDate);
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const compare = new Date(date);
-  compare.setHours(0, 0, 0, 0);
 
-  const overdue = compare.getTime() < now.getTime();
-  const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const overdue = date.getTime() < startOfLocalDay(new Date(), APP_TIMEZONE).getTime();
+  const label = date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: APP_TIMEZONE,
+  });
   return { label, overdue };
 }
