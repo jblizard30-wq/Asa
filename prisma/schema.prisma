@@ -194,6 +194,9 @@ model User {
   volunteerAvailability     VolunteerAvailability[]
   availabilityExceptions    AvailabilityException[]
 
+  submittedInventoryCounts StockCount[]   @relation("InventoryStockCountSubmittedBy")
+  orderedRestockOrders     RestockOrder[] @relation("InventoryRestockOrderedBy")
+
   @@index([managerId])
 }
 
@@ -1003,4 +1006,133 @@ model Webhook {
   createdAt   DateTime       @default(now())
 
   @@index([createdById])
+}
+
+// ============================================================================
+// Inventory module (add-on — gated by ENABLED_MODULES, see src/lib/modules.ts).
+// Ported from the standalone Inventory-System app's Supabase schema. Two
+// changes from that source schema: (1) profiles/auth folds into this app's
+// own User/Role instead of a separate table, and (2) needed_qty and the
+// on-hand-qty-follows-latest-stock-count behavior were Postgres generated
+// columns / triggers there — both are plain application logic here instead
+// (see src/lib/actions/inventory.ts), to match this schema's existing
+// no-triggers convention.
+// ============================================================================
+
+/// A trackable inventory domain (e.g. "Weekly Consumables", "Liturgical & Worship Supplies").
+model InventoryType {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  description  String?
+  trackingMode String   @default("par_level")
+  cadence      String   @default("weekly")
+  icon         String?  @default("Package")
+  createdAt    DateTime @default(now())
+
+  items InventoryItem[]
+}
+
+model Building {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  rooms Room[]
+}
+
+model Room {
+  id         String   @id @default(cuid())
+  buildingId String
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  name       String
+  createdAt  DateTime @default(now())
+
+  items InventoryItem[]
+
+  @@unique([buildingId, name])
+}
+
+model Vendor {
+  id            String   @id @default(cuid())
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  url           String?
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  items         InventoryItem[]
+  restockOrders RestockOrder[]
+}
+
+model InventoryItem {
+  id               String         @id @default(cuid())
+  inventoryTypeId  String?
+  inventoryType    InventoryType? @relation(fields: [inventoryTypeId], references: [id], onDelete: SetNull)
+  roomId           String
+  room             Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  name             String
+  unit             String
+  idealQty         Int
+  onHandQty        Int            @default(0)
+  reorderThreshold Int            @default(0)
+  shelfLocation    String?
+  sortOrder        Int            @default(0)
+  vendorId         String?
+  vendor           Vendor?        @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  notes            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  stockCounts       StockCount[]
+  restockOrderItems RestockOrderItem[]
+
+  @@index([roomId])
+  @@index([inventoryTypeId])
+}
+
+/// Append-only log — submitting a count also updates the parent item's onHandQty
+/// (application logic, see src/lib/actions/inventory.ts), it does not overwrite history.
+model StockCount {
+  id            String   @id @default(cuid())
+  itemId        String
+  item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  qty           Int
+  submittedById String?
+  submittedBy   User?    @relation("InventoryStockCountSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  submittedAt   DateTime @default(now())
+
+  @@index([itemId, submittedAt(sort: Desc)])
+}
+
+model RestockOrder {
+  id               String    @id @default(cuid())
+  poNumber         String    @unique
+  vendorId         String
+  vendor           Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  status           String    @default("draft")
+  orderDate        DateTime?
+  expectedDelivery DateTime?
+  totalCost        Decimal?  @db.Decimal(10, 2)
+  orderedById      String?
+  orderedBy        User?     @relation("InventoryRestockOrderedBy", fields: [orderedById], references: [id], onDelete: SetNull)
+  notes            String?
+  createdAt        DateTime  @default(now())
+
+  items RestockOrderItem[]
+
+  @@index([vendorId])
+}
+
+model RestockOrderItem {
+  id               String       @id @default(cuid())
+  orderId          String
+  order            RestockOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  itemId           String
+  item             InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  quantityOrdered  Int
+  quantityReceived Int          @default(0)
+  unitPrice        Decimal?     @db.Decimal(10, 2)
 }
