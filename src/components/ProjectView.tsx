@@ -15,6 +15,7 @@ import { ProjectDashboardView } from '@/components/ProjectDashboardView';
 import type { TagInfo } from '@/components/TagPicker';
 import { PRIORITY_LABELS, STATUS_LABELS } from '@/lib/format';
 import { EMPTY_TASK_FILTERS, UNASSIGNED_ID, countActiveFilters, matchesTaskFilters, type TaskFilters } from '@/lib/taskFilters';
+import { generateCsvContent } from '@/lib/csv';
 
 export interface ProjectMemberInfo {
   id: string;
@@ -102,27 +103,26 @@ export function ProjectView({
   );
 
   function exportCsv() {
-    const rows: string[][] = [
-      ['ID', 'Title', 'Section', 'Status', 'Priority', 'Start Date', 'Due Date', 'Assignees', 'Tags'],
-    ];
+    const headers = ['ID', 'Title', 'Section', 'Status', 'Priority', 'Start Date', 'Due Date', 'Assignees', 'Tags'];
+    const rows: unknown[][] = [];
 
     for (const section of sections) {
       for (const task of section.tasks) {
         rows.push([
           task.id,
-          `"${task.title.replace(/"/g, '""')}"`,
-          `"${section.name.replace(/"/g, '""')}"`,
+          task.title,
+          section.name,
           task.status,
           task.priority,
           task.startDate ? task.startDate.slice(0, 10) : '',
           task.dueDate ? task.dueDate.slice(0, 10) : '',
-          `"${task.assigneeNames.join(', ').replace(/"/g, '""')}"`,
-          `"${task.tags.map((t) => t.name).join(', ').replace(/"/g, '""')}"`,
+          task.assigneeNames.join(', '),
+          task.tags.map((t) => t.name).join(', '),
         ]);
       }
     }
 
-    const csvContent = rows.map((r) => r.join(',')).join('\n');
+    const csvContent = generateCsvContent(headers, rows);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

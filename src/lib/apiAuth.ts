@@ -16,7 +16,7 @@ export async function authenticateApiKey(request: Request) {
 
   const keyHash = hashKey(rawKey);
   const apiKey = await prisma.apiKey.findUnique({ where: { keyHash }, include: { user: true } });
-  if (!apiKey || apiKey.revokedAt) return null;
+  if (!apiKey || apiKey.revokedAt || (apiKey.expiresAt && apiKey.expiresAt < new Date())) return null;
 
   void prisma.apiKey.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
 

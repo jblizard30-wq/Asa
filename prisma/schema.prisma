@@ -998,6 +998,7 @@ model ApiKey {
   keyHash    String    @unique
   keyPrefix  String
   lastUsedAt DateTime?
+  expiresAt  DateTime?
   revokedAt  DateTime?
   createdAt  DateTime  @default(now())
 

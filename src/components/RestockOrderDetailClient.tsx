@@ -28,6 +28,7 @@ import {
   deleteRestockOrder,
 } from '@/lib/actions/inventory';
 import { formatCalendarDate } from '@/lib/dateUtils';
+import { generateCsvContent } from '@/lib/csv';
 
 export interface OrderDetailItem {
   id: string;
@@ -250,15 +251,7 @@ export function RestockOrderDetailClient({
       i.unitPrice !== null ? (i.unitPrice * i.quantityOrdered).toFixed(2) : '',
     ]);
 
-    const escapeCSV = (field: string) => {
-      if (field.includes(',') || field.includes('"') || field.includes('\n')) {
-        return `"${field.replace(/"/g, '""')}"`;
-      }
-      return field;
-    };
-
-    const csvContent =
-      [headers.map(escapeCSV).join(','), ...rows.map((r) => r.map(escapeCSV).join(','))].join('\n');
+    const csvContent = generateCsvContent(headers, rows);
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
