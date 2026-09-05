@@ -93,3 +93,17 @@ export function daysFromToday(dueDate: Date | string, now: Date = new Date()): n
   return differenceInCalendarDays(today, dueDay);
 }
 
+
+/**
+ * Formats a stored date for display as a calendar day (M/D/YYYY), correct for both of the
+ * storage conventions described above. Resolves the calendar day via getCalendarDayString
+ * first, so a UTC-midnight date (what an <input type="date"> stores) renders as that same
+ * day instead of slipping back one for a viewer in Chicago — which is what a bare
+ * `new Date(value).toLocaleDateString()` does. Returns null for a missing date so callers
+ * can pick their own placeholder.
+ */
+export function formatCalendarDate(date: Date | string | null | undefined): string | null {
+  if (!date) return null;
+  const [year, month, day] = getCalendarDayString(date).split('-');
+  return `${Number(month)}/${Number(day)}/${year}`;
+}

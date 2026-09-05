@@ -27,6 +27,7 @@ import {
   receiveRestockOrder,
   deleteRestockOrder,
 } from '@/lib/actions/inventory';
+import { formatCalendarDate } from '@/lib/dateUtils';
 
 export interface OrderDetailItem {
   id: string;
@@ -199,7 +200,7 @@ export function RestockOrderDetailClient({
     `Hi ${order.vendor.contactPerson || order.vendor.name},\n\n` +
     `Please place an order for church supplies:\n` +
     `Purchase Order: ${order.poNumber}\n` +
-    `Order Date: ${order.orderDate ? new Date(order.orderDate).toLocaleDateString() : new Date().toLocaleDateString()}\n\n` +
+    `Order Date: ${formatCalendarDate(order.orderDate) ?? formatCalendarDate(new Date())}\n\n` +
     `Items:\n` +
     order.items
       .map(
@@ -422,15 +423,13 @@ export function RestockOrderDetailClient({
               <div>
                 <span className="text-slate-400">Order Date:</span>{' '}
                 <strong className="text-slate-800 dark:text-slate-200">
-                  {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 'Not recorded'}
+                  {formatCalendarDate(order.orderDate) ?? 'Not recorded'}
                 </strong>
               </div>
               <div>
                 <span className="text-slate-400">Expected Delivery:</span>{' '}
                 <strong className="text-slate-800 dark:text-slate-200">
-                  {order.expectedDelivery
-                    ? new Date(order.expectedDelivery).toLocaleDateString()
-                    : 'Not specified'}
+                  {formatCalendarDate(order.expectedDelivery) ?? 'Not specified'}
                 </strong>
               </div>
               <div>

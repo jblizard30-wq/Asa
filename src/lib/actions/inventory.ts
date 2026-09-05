@@ -4,17 +4,49 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireSession, requireManagerOrAdmin } from '@/lib/permissions';
+import { isModuleEnabled } from '@/lib/modules';
 import { Prisma } from '@prisma/client';
 
 export type ActionResult<T = unknown> =
   | ({ success: true } & T)
   | { success: false; error: string };
 
+/**
+ * Server actions are individually addressable POST endpoints — the isModuleEnabled gate on
+ * the /inventory pages does not cover them. Without this, every inventory mutation stays
+ * live for a deployment that never bought the module. Called by every action below.
+ */
+function requireInventoryModule() {
+  if (!isModuleEnabled('inventory')) {
+    throw new Error('The Inventory module is not enabled for this deployment.');
+  }
+}
+
+/**
+ * Recomputes RestockOrder.totalCost from its current line items. Takes the transaction
+ * client so the total is always written in the same transaction as the line-item change
+ * that invalidated it, and can never be left disagreeing with the lines it sums.
+ */
+async function recomputeOrderTotal(tx: Prisma.TransactionClient, orderId: string) {
+  const items = await tx.restockOrderItem.findMany({ where: { orderId } });
+  const total = items.reduce((sum, item) => {
+    const price = item.unitPrice ? Number(item.unitPrice) : 0;
+    return sum + price * item.quantityOrdered;
+  }, 0);
+
+  await tx.restockOrder.update({
+    where: { id: orderId },
+    data: { totalCost: new Prisma.Decimal(total) },
+  });
+}
+
 function revalidateAllInventory() {
   revalidatePath('/inventory');
   revalidatePath('/inventory/orders');
   revalidatePath('/inventory/vendors');
   revalidatePath('/inventory/settings');
+  // The dynamic routes (/inventory/count/[roomId], /inventory/orders/[id]) are per-id and
+  // can't be blanket-revalidated here; each action revalidates the specific one it touched.
 }
 
 // ============================================================================
@@ -36,6 +68,7 @@ export async function submitStockCount(input: {
   qty: number;
 }): Promise<ActionResult<{ stockCountId: string; onHandQty: number }>> {
   try {
+    requireInventoryModule();
     const session = await requireSession();
     const parsed = submitStockCountSchema.safeParse(input);
     if (!parsed.success) {
@@ -83,6 +116,7 @@ export async function submitBatchStockCounts(input: {
   counts: Record<string, number>;
 }): Promise<ActionResult<{ count: number }>> {
   try {
+    requireInventoryModule();
     const session = await requireSession();
     const validEntries = Object.entries(input.counts).filter(
       ([, qty]) => typeof qty === 'number' && Number.isFinite(qty) && qty >= 0
@@ -127,10 +161,18 @@ export async function submitBatchStockCounts(input: {
  */
 export async function quickRestockItemToPar(itemId: string): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     const session = await requireSession();
     const item = await prisma.inventoryItem.findUnique({ where: { id: itemId } });
     if (!item) {
       return { success: false, error: 'Item not found' };
+    }
+
+    // Only ever raise stock to par, never lower it. Without this an overstocked item
+    // (onHand 50, par 20) would be "restocked" down to 20, discarding 30 units of real
+    // stock — quickRestockVendorItemsToPar already filters to under-par items this way.
+    if (item.onHandQty >= item.idealQty) {
+      return { success: true };
     }
 
     await prisma.$transaction(async (tx) => {
@@ -160,8 +202,11 @@ export async function quickRestockItemToPar(itemId: string): Promise<ActionResul
 /**
  * 1-click quick restock for a vendor: brings all items under par for this vendor up to idealQty.
  */
-export async function quickRestockVendorItemsToPar(vendorId: string): Promise<ActionResult<{ count: number }>> {
+export async function quickRestockVendorItemsToPar(
+  vendorId: string | null
+): Promise<ActionResult<{ count: number }>> {
   try {
+    requireInventoryModule();
     const session = await requireSession();
     const items = await prisma.inventoryItem.findMany({
       where: { vendorId },
@@ -207,6 +252,7 @@ const buildingSchema = z.object({
 
 export async function createBuilding(formData: FormData | { name: string }): Promise<ActionResult<{ buildingId: string }>> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     const name = (formData instanceof FormData ? formData.get('name') : formData.name)?.toString().trim() ?? '';
     const parsed = buildingSchema.safeParse({ name });
@@ -235,6 +281,7 @@ export async function updateBuilding(
   formData: FormData | { name: string }
 ): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     const name = (formData instanceof FormData ? formData.get('name') : formData.name)?.toString().trim() ?? '';
     const parsed = buildingSchema.safeParse({ name });
@@ -256,6 +303,7 @@ export async function updateBuilding(
 
 export async function deleteBuilding(id: string): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     await prisma.building.delete({ where: { id } });
     revalidateAllInventory();
@@ -276,6 +324,7 @@ const roomSchema = z.object({
 
 export async function createRoom(formData: FormData | { name: string; buildingId: string }): Promise<ActionResult<{ roomId: string }>> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     const name = (formData instanceof FormData ? formData.get('name') : formData.name)?.toString().trim() ?? '';
     const buildingId = (formData instanceof FormData ? formData.get('buildingId') : formData.buildingId)?.toString().trim() ?? '';
@@ -311,6 +360,7 @@ export async function updateRoom(
   formData: FormData | { name: string; buildingId?: string }
 ): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     const name = (formData instanceof FormData ? formData.get('name') : formData.name)?.toString().trim() ?? '';
     const buildingId = (formData instanceof FormData ? formData.get('buildingId') : formData.buildingId)?.toString().trim() || undefined;
@@ -336,6 +386,7 @@ export async function updateRoom(
 
 export async function deleteRoom(id: string): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     await prisma.room.delete({ where: { id } });
     revalidateAllInventory();
@@ -369,6 +420,7 @@ export async function createInventoryType(
   }
 ): Promise<ActionResult<{ typeId: string }>> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     const slug = (input.slug?.trim() || input.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')).replace(/^-|-$/g, '');
     const parsed = inventoryTypeSchema.safeParse({
@@ -402,6 +454,7 @@ export async function createInventoryType(
 
 export async function deleteInventoryType(id: string): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     await prisma.inventoryType.delete({ where: { id } });
     revalidateAllInventory();
@@ -443,6 +496,7 @@ export async function createInventoryItem(input: {
   notes?: string | null;
 }): Promise<ActionResult<{ itemId: string }>> {
   try {
+    requireInventoryModule();
     const session = await requireManagerOrAdmin();
     const parsed = inventoryItemSchema.safeParse(input);
     if (!parsed.success) {
@@ -517,6 +571,7 @@ export async function updateInventoryItem(
   }
 ): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     const existing = await prisma.inventoryItem.findUnique({ where: { id } });
     if (!existing) {
@@ -552,6 +607,7 @@ export async function updateInventoryItem(
 
 export async function deleteInventoryItem(id: string): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     const item = await prisma.inventoryItem.findUnique({ where: { id } });
     await prisma.inventoryItem.delete({ where: { id } });
@@ -587,6 +643,7 @@ export async function createVendor(input: {
   notes?: string | null;
 }): Promise<ActionResult<{ vendorId: string }>> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     const parsed = vendorSchema.safeParse({
       name: input.name.trim(),
@@ -624,6 +681,7 @@ export async function updateVendor(
   }
 ): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     const parsed = vendorSchema.safeParse({
       name: input.name.trim(),
@@ -652,6 +710,7 @@ export async function updateVendor(
 
 export async function deleteVendor(id: string): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     await prisma.vendor.delete({ where: { id } });
     revalidateAllInventory();
@@ -677,42 +736,61 @@ export async function createRestockOrder(input: {
   }>;
 }): Promise<ActionResult<{ orderId: string; poNumber: string }>> {
   try {
+    requireInventoryModule();
     const session = await requireManagerOrAdmin();
     if (!input.vendorId) {
       return { success: false, error: 'Vendor is required' };
     }
-
-    // Generate unique PO number (e.g. PO-784912)
-    const randomSuffix = Math.floor(100000 + Math.random() * 900000).toString();
-    const poNumber = `PO-${Date.now().toString().slice(-4)}${randomSuffix.slice(-2)}`;
 
     const totalCost = input.items?.reduce((sum, item) => {
       const price = item.unitPrice ?? 0;
       return sum + price * item.quantityOrdered;
     }, 0);
 
-    const order = await prisma.restockOrder.create({
-      data: {
-        poNumber,
-        vendorId: input.vendorId,
-        status: 'draft',
-        orderDate: input.orderDate ? new Date(input.orderDate) : new Date(),
-        expectedDelivery: input.expectedDelivery ? new Date(input.expectedDelivery) : null,
-        totalCost: totalCost !== undefined ? new Prisma.Decimal(totalCost) : null,
-        notes: input.notes?.trim() || null,
-        orderedById: session.user.id,
-        items: input.items && input.items.length > 0
-          ? {
-              create: input.items.map((i) => ({
-                itemId: i.itemId,
-                quantityOrdered: Math.max(1, Math.floor(i.quantityOrdered)),
-                quantityReceived: 0,
-                unitPrice: i.unitPrice !== undefined && i.unitPrice !== null ? new Prisma.Decimal(i.unitPrice) : null,
-              })),
-            }
-          : undefined,
-      },
-    });
+    const orderData = {
+      vendorId: input.vendorId,
+      status: 'draft',
+      orderDate: input.orderDate ? new Date(input.orderDate) : new Date(),
+      expectedDelivery: input.expectedDelivery ? new Date(input.expectedDelivery) : null,
+      totalCost: totalCost !== undefined ? new Prisma.Decimal(totalCost) : null,
+      notes: input.notes?.trim() || null,
+      orderedById: session.user.id,
+      items: input.items && input.items.length > 0
+        ? {
+            create: input.items.map((i) => ({
+              itemId: i.itemId,
+              quantityOrdered: Math.max(1, Math.floor(i.quantityOrdered)),
+              quantityReceived: 0,
+              unitPrice: i.unitPrice !== undefined && i.unitPrice !== null ? new Prisma.Decimal(i.unitPrice) : null,
+            })),
+          }
+        : undefined,
+    };
+
+    // poNumber is @unique but only carries ~2 random digits on top of a 4-digit timestamp
+    // slice, so two orders created in the same 10-second bucket collide about 1% of the
+    // time. Retry on P2002 instead of surfacing a raw constraint error to the user.
+    let order: { id: string; poNumber: string } | null = null;
+    for (let attempt = 0; attempt < 5 && !order; attempt += 1) {
+      const randomSuffix = Math.floor(100000 + Math.random() * 900000).toString();
+      const poNumber = `PO-${Date.now().toString().slice(-4)}${randomSuffix.slice(-2)}`;
+      try {
+        order = await prisma.restockOrder.create({
+          data: { ...orderData, poNumber },
+          select: { id: true, poNumber: true },
+        });
+      } catch (err: unknown) {
+        const isDuplicatePo =
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002' &&
+          String(err.meta?.target ?? '').includes('poNumber');
+        if (!isDuplicatePo) throw err;
+      }
+    }
+
+    if (!order) {
+      return { success: false, error: 'Could not allocate a unique PO number. Please try again.' };
+    }
 
     revalidateAllInventory();
     return { success: true, orderId: order.id, poNumber: order.poNumber };
@@ -727,16 +805,37 @@ export async function updateRestockOrderStatus(
   status: 'draft' | 'ordered' | 'shipped' | 'received' | 'canceled'
 ): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     const validStatuses = ['draft', 'ordered', 'shipped', 'received', 'canceled'];
     if (!validStatuses.includes(status)) {
       return { success: false, error: 'Invalid order status' };
     }
 
-    await prisma.restockOrder.update({
-      where: { id: orderId },
+    // A received order is terminal. Without this guard, flipping it back to 'draft' and
+    // re-receiving it adds the ordered quantity to stock a second time — which is exactly
+    // the double-count the atomic claim in receiveRestockOrder exists to prevent.
+    const claim = await prisma.restockOrder.updateMany({
+      where: { id: orderId, status: { not: 'received' } },
       data: { status },
     });
+
+    if (claim.count === 0) {
+      const existing = await prisma.restockOrder.findUnique({
+        where: { id: orderId },
+        select: { status: true },
+      });
+      if (!existing) {
+        return { success: false, error: 'Order not found' };
+      }
+      if (status === 'received') {
+        return { success: true };
+      }
+      return {
+        success: false,
+        error: 'This order has already been received and can no longer change status.',
+      };
+    }
 
     revalidateAllInventory();
     revalidatePath(`/inventory/orders/${orderId}`);
@@ -755,12 +854,22 @@ export async function updateRestockOrder(
   }
 ): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     await prisma.restockOrder.update({
       where: { id: orderId },
       data: {
-        orderDate: data.orderDate ? new Date(data.orderDate) : null,
-        expectedDelivery: data.expectedDelivery ? new Date(data.expectedDelivery) : null,
+        // Distinguish "not supplied" (leave alone) from "explicitly cleared" (write null),
+        // the way `notes` below already does. Writing null on undefined would erase a
+        // stored date for any caller that only means to update one of these three fields.
+        orderDate:
+          data.orderDate !== undefined ? (data.orderDate ? new Date(data.orderDate) : null) : undefined,
+        expectedDelivery:
+          data.expectedDelivery !== undefined
+            ? data.expectedDelivery
+              ? new Date(data.expectedDelivery)
+              : null
+            : undefined,
         notes: data.notes !== undefined ? data.notes?.trim() || null : undefined,
       },
     });
@@ -782,31 +891,29 @@ export async function addRestockOrderItem(
   }
 ): Promise<ActionResult<{ orderItemId: string }>> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     if (!data.itemId || data.quantityOrdered <= 0) {
       return { success: false, error: 'Invalid item or quantity' };
     }
 
-    const orderItem = await prisma.restockOrderItem.create({
-      data: {
-        orderId,
-        itemId: data.itemId,
-        quantityOrdered: Math.max(1, Math.floor(data.quantityOrdered)),
-        quantityReceived: 0,
-        unitPrice: data.unitPrice !== undefined && data.unitPrice !== null ? new Prisma.Decimal(data.unitPrice) : null,
-      },
-    });
+    // One transaction: the line item and the parent order's totalCost must not be able to
+    // diverge. Recomputing the total in a separate write left a window where a failure —
+    // or a concurrent line edit — produced an order whose total didn't match its lines.
+    const orderItem = await prisma.$transaction(async (tx) => {
+      const created = await tx.restockOrderItem.create({
+        data: {
+          orderId,
+          itemId: data.itemId,
+          quantityOrdered: Math.max(1, Math.floor(data.quantityOrdered)),
+          quantityReceived: 0,
+          unitPrice:
+            data.unitPrice !== undefined && data.unitPrice !== null ? new Prisma.Decimal(data.unitPrice) : null,
+        },
+      });
 
-    // Recompute total cost
-    const items = await prisma.restockOrderItem.findMany({ where: { orderId } });
-    const total = items.reduce((sum, item) => {
-      const price = item.unitPrice ? Number(item.unitPrice) : 0;
-      return sum + price * item.quantityOrdered;
-    }, 0);
-
-    await prisma.restockOrder.update({
-      where: { id: orderId },
-      data: { totalCost: new Prisma.Decimal(total) },
+      await recomputeOrderTotal(tx, orderId);
+      return created;
     });
 
     revalidateAllInventory();
@@ -826,6 +933,7 @@ export async function updateRestockOrderItem(
   }
 ): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     const existing = await prisma.restockOrderItem.findUnique({
       where: { id: orderItemId },
@@ -835,27 +943,23 @@ export async function updateRestockOrderItem(
       return { success: false, error: 'Order item not found' };
     }
 
-    await prisma.restockOrderItem.update({
-      where: { id: orderItemId },
-      data: {
-        ...(data.quantityOrdered !== undefined ? { quantityOrdered: Math.max(0, Math.floor(data.quantityOrdered)) } : {}),
-        ...(data.quantityReceived !== undefined ? { quantityReceived: Math.max(0, Math.floor(data.quantityReceived)) } : {}),
-        ...(data.unitPrice !== undefined
-          ? { unitPrice: data.unitPrice !== null ? new Prisma.Decimal(data.unitPrice) : null }
-          : {}),
-      },
-    });
+    await prisma.$transaction(async (tx) => {
+      await tx.restockOrderItem.update({
+        where: { id: orderItemId },
+        data: {
+          ...(data.quantityOrdered !== undefined
+            ? { quantityOrdered: Math.max(0, Math.floor(data.quantityOrdered)) }
+            : {}),
+          ...(data.quantityReceived !== undefined
+            ? { quantityReceived: Math.max(0, Math.floor(data.quantityReceived)) }
+            : {}),
+          ...(data.unitPrice !== undefined
+            ? { unitPrice: data.unitPrice !== null ? new Prisma.Decimal(data.unitPrice) : null }
+            : {}),
+        },
+      });
 
-    // Recompute order totalCost
-    const items = await prisma.restockOrderItem.findMany({ where: { orderId: existing.orderId } });
-    const total = items.reduce((sum, item) => {
-      const price = item.unitPrice ? Number(item.unitPrice) : 0;
-      return sum + price * item.quantityOrdered;
-    }, 0);
-
-    await prisma.restockOrder.update({
-      where: { id: existing.orderId },
-      data: { totalCost: new Prisma.Decimal(total) },
+      await recomputeOrderTotal(tx, existing.orderId);
     });
 
     revalidateAllInventory();
@@ -868,24 +972,16 @@ export async function updateRestockOrderItem(
 
 export async function deleteRestockOrderItem(orderItemId: string): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     const existing = await prisma.restockOrderItem.findUnique({ where: { id: orderItemId } });
     if (!existing) {
       return { success: false, error: 'Order item not found' };
     }
 
-    await prisma.restockOrderItem.delete({ where: { id: orderItemId } });
-
-    // Recompute totalCost
-    const items = await prisma.restockOrderItem.findMany({ where: { orderId: existing.orderId } });
-    const total = items.reduce((sum, item) => {
-      const price = item.unitPrice ? Number(item.unitPrice) : 0;
-      return sum + price * item.quantityOrdered;
-    }, 0);
-
-    await prisma.restockOrder.update({
-      where: { id: existing.orderId },
-      data: { totalCost: new Prisma.Decimal(total) },
+    await prisma.$transaction(async (tx) => {
+      await tx.restockOrderItem.delete({ where: { id: orderItemId } });
+      await recomputeOrderTotal(tx, existing.orderId);
     });
 
     revalidateAllInventory();
@@ -905,52 +1001,63 @@ export async function receiveRestockOrder(
   updateStock: boolean = true
 ): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     const session = await requireManagerOrAdmin();
-    const order = await prisma.restockOrder.findUnique({
-      where: { id: orderId },
-      include: {
-        items: {
-          include: { item: true },
-        },
-      },
-    });
 
-    if (!order) {
-      return { success: false, error: 'Order not found' };
-    }
-
-    await prisma.$transaction(async (tx) => {
-      // 1. Mark order as received
-      await tx.restockOrder.update({
+    const outcome = await prisma.$transaction(async (tx) => {
+      const existing = await tx.restockOrder.findUnique({
         where: { id: orderId },
+        select: { id: true },
+      });
+      if (!existing) return 'not-found' as const;
+
+      // Atomically claim the receive instead of checking status and then acting on it.
+      // A duplicate submit (double-click, retry, two managers at once) matches zero rows
+      // here and becomes a no-op, rather than adding the ordered quantity to stock twice.
+      const claim = await tx.restockOrder.updateMany({
+        where: { id: orderId, status: { not: 'received' } },
         data: { status: 'received' },
       });
+      if (claim.count === 0) return 'already-received' as const;
 
-      // 2. Mark each line item received
-      for (const orderItem of order.items) {
+      // Read line items inside the transaction so they can't shift under us mid-receive.
+      const orderItems = await tx.restockOrderItem.findMany({ where: { orderId } });
+
+      for (const orderItem of orderItems) {
         await tx.restockOrderItem.update({
           where: { id: orderItem.id },
           data: { quantityReceived: orderItem.quantityOrdered },
         });
 
-        // 3. Update stock if requested
         if (updateStock) {
-          const newOnHand = orderItem.item.onHandQty + orderItem.quantityOrdered;
+          // Atomic increment rather than a read-modify-write off a snapshot taken outside
+          // the transaction: a concurrent stock count (which writes onHandQty absolutely)
+          // or a second PO for the same item can no longer be silently clobbered.
+          const updatedItem = await tx.inventoryItem.update({
+            where: { id: orderItem.itemId },
+            data: { onHandQty: { increment: orderItem.quantityOrdered } },
+            select: { onHandQty: true },
+          });
+
           await tx.stockCount.create({
             data: {
               itemId: orderItem.itemId,
-              qty: newOnHand,
+              qty: updatedItem.onHandQty,
               submittedById: session.user.id,
             },
           });
-
-          await tx.inventoryItem.update({
-            where: { id: orderItem.itemId },
-            data: { onHandQty: newOnHand },
-          });
         }
       }
+
+      return 'received' as const;
     });
+
+    if (outcome === 'not-found') {
+      return { success: false, error: 'Order not found' };
+    }
+    if (outcome === 'already-received') {
+      return { success: false, error: 'This order has already been received.' };
+    }
 
     revalidateAllInventory();
     revalidatePath(`/inventory/orders/${orderId}`);
@@ -963,6 +1070,7 @@ export async function receiveRestockOrder(
 
 export async function deleteRestockOrder(orderId: string): Promise<ActionResult> {
   try {
+    requireInventoryModule();
     await requireManagerOrAdmin();
     await prisma.restockOrder.delete({ where: { id: orderId } });
     revalidateAllInventory();

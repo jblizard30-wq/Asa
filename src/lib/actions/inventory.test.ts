@@ -10,10 +10,17 @@ const mockState = vi.hoisted(() => ({
   rooms: new Map<string, { id: string; name: string; buildingId: string }>(),
   vendors: new Map<string, { id: string; name: string }>(),
   orders: new Map<string, { id: string; poNumber: string; status: string; vendorId: string }>(),
+  // Inventory is an add-on module. Held explicitly here so these tests don't silently
+  // depend on ENABLED_MODULES happening to be set in the developer's .env.
+  inventoryEnabled: true,
 }));
 
 vi.mock('next-auth', () => ({
   getServerSession: vi.fn(async () => mockState.session),
+}));
+
+vi.mock('@/lib/modules', () => ({
+  isModuleEnabled: vi.fn((key: string) => (key === 'inventory' ? mockState.inventoryEnabled : false)),
 }));
 
 vi.mock('next/cache', () => ({
@@ -135,6 +142,7 @@ import {
 
 describe('Inventory Server Actions', () => {
   beforeEach(() => {
+    mockState.inventoryEnabled = true;
     mockState.items.clear();
     mockState.stockCounts = [];
     mockState.buildings.clear();
@@ -320,6 +328,40 @@ describe('Inventory Server Actions', () => {
       });
       expect(res.success).toBe(true);
       expect(mockState.vendors.size).toBe(1);
+    });
+  });
+
+  // Server actions are individually addressable POST endpoints, so the isModuleEnabled gate
+  // on the /inventory pages does not cover them. These assert the action-level gate.
+  describe('Module gating', () => {
+    it('refuses a stock count when the inventory module is disabled', async () => {
+      mockState.inventoryEnabled = false;
+      mockState.items.set('item-1', {
+        id: 'item-1',
+        name: 'Communion Cups',
+        idealQty: 20,
+        onHandQty: 5,
+        roomId: 'room-1',
+        vendorId: null,
+      });
+
+      const res = await submitStockCount({ itemId: 'item-1', qty: 12 });
+
+      expect(res.success).toBe(false);
+      expect(mockState.stockCounts).toHaveLength(0);
+      expect(mockState.items.get('item-1')?.onHandQty).toBe(5);
+    });
+
+    it('refuses a management mutation when the inventory module is disabled', async () => {
+      mockState.inventoryEnabled = false;
+      mockState.session = {
+        user: { id: 'user-admin', role: 'ADMIN', name: 'Pastor Dan', email: 'dan@example.org' },
+      };
+
+      const res = await createBuilding({ name: 'Education Wing' });
+
+      expect(res.success).toBe(false);
+      expect(mockState.buildings.size).toBe(0);
     });
   });
 });
