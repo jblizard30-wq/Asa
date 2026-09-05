@@ -3,8 +3,9 @@
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
-import { requireSession, requireManagerOrAdmin } from '@/lib/permissions';
+import { requireSession } from '@/lib/permissions';
 import { isModuleEnabled } from '@/lib/modules';
+import { RaciAccessLevel, RaciRole } from '@prisma/client';
 
 export type ActionResult<T = unknown> =
   | ({ success: true } & T)
@@ -18,11 +19,46 @@ function requireRaciModule(): string | null {
   return isModuleEnabled('raci') ? null : 'The RACI module is not enabled for this deployment.';
 }
 
+export async function canUserEditChart(
+  userId: string,
+  userRole: string,
+  chartId: string
+): Promise<boolean> {
+  if (userRole === 'ADMIN') return true;
+
+  const chart = await prisma.raciChart.findUnique({
+    where: { id: chartId },
+    include: { shares: true },
+  });
+  if (!chart) return false;
+
+  if (chart.createdById === userId) return true;
+  if (userRole === 'MANAGER' && chart.isPublic) return true;
+
+  const directShare = chart.shares.find((s) => s.userId === userId);
+  if (directShare && directShare.access === 'EDIT') return true;
+
+  const userTeams = await prisma.teamMember.findMany({
+    where: { userId },
+    select: { teamId: true },
+  });
+  const userTeamIds = new Set(userTeams.map((t) => t.teamId));
+
+  const teamShare = chart.shares.find(
+    (s) => s.teamId && userTeamIds.has(s.teamId) && s.access === 'EDIT'
+  );
+  if (teamShare) return true;
+
+  return false;
+}
+
 const createChartSchema = z.object({
   processName: z.string().trim().min(1, 'Process name is required'),
   owner: z.string().trim().default(''),
   trigger: z.string().trim().default(''),
   ministryArea: z.string().trim().optional(),
+  tags: z.array(z.string().trim()).default([]),
+  isPublic: z.boolean().default(true),
 });
 
 export async function createRaciChart(input: {
@@ -30,16 +66,23 @@ export async function createRaciChart(input: {
   owner?: string;
   trigger?: string;
   ministryArea?: string;
+  tags?: string[];
+  isPublic?: boolean;
 }): Promise<ActionResult<{ chartId: string }>> {
   try {
     const gate = requireRaciModule();
     if (gate) return { success: false, error: gate };
-    await requireManagerOrAdmin();
+    const session = await requireSession();
 
     const parsed = createChartSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid chart input' };
     }
+
+    // Clean tags: trim, lowercase or normalize, remove duplicates and empties
+    const cleanedTags = Array.from(
+      new Set(parsed.data.tags.map((t) => t.trim().replace(/^#+/, '')).filter(Boolean))
+    );
 
     const chart = await prisma.raciChart.create({
       data: {
@@ -47,13 +90,198 @@ export async function createRaciChart(input: {
         owner: parsed.data.owner ?? '',
         trigger: parsed.data.trigger ?? '',
         ministryArea: parsed.data.ministryArea || null,
+        tags: cleanedTags,
+        isPublic: parsed.data.isPublic,
+        createdById: session.user.id,
       },
     });
 
     revalidatePath('/raci');
     return { success: true, chartId: chart.id };
-  } catch {
-    return { success: false, error: 'Could not create the chart.' };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not create the chart.' };
+  }
+}
+
+const updateChartSchema = z.object({
+  chartId: z.string().min(1),
+  processName: z.string().trim().min(1).optional(),
+  owner: z.string().trim().optional(),
+  trigger: z.string().trim().optional(),
+  ministryArea: z.string().trim().nullable().optional(),
+  tags: z.array(z.string().trim()).optional(),
+  isPublic: z.boolean().optional(),
+});
+
+export async function updateRaciChart(input: {
+  chartId: string;
+  processName?: string;
+  owner?: string;
+  trigger?: string;
+  ministryArea?: string | null;
+  tags?: string[];
+  isPublic?: boolean;
+}): Promise<ActionResult> {
+  try {
+    const gate = requireRaciModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireSession();
+
+    const parsed = updateChartSchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid update input' };
+    }
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, parsed.data.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to edit this chart.' };
+    }
+
+    const data: Record<string, unknown> = {};
+    if (parsed.data.processName !== undefined) data.processName = parsed.data.processName;
+    if (parsed.data.owner !== undefined) data.owner = parsed.data.owner;
+    if (parsed.data.trigger !== undefined) data.trigger = parsed.data.trigger;
+    if (parsed.data.ministryArea !== undefined) data.ministryArea = parsed.data.ministryArea;
+    if (parsed.data.isPublic !== undefined) data.isPublic = parsed.data.isPublic;
+    if (parsed.data.tags !== undefined) {
+      data.tags = Array.from(
+        new Set(parsed.data.tags.map((t) => t.trim().replace(/^#+/, '')).filter(Boolean))
+      );
+    }
+
+    await prisma.raciChart.update({
+      where: { id: parsed.data.chartId },
+      data,
+    });
+
+    revalidatePath('/raci');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not update the chart.' };
+  }
+}
+
+export async function archiveRaciChart(input: { chartId: string }): Promise<ActionResult> {
+  try {
+    const gate = requireRaciModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireSession();
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, input.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to delete this chart.' };
+    }
+
+    await prisma.raciChart.update({
+      where: { id: input.chartId },
+      data: { archivedAt: new Date() },
+    });
+
+    revalidatePath('/raci');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not archive the chart.' };
+  }
+}
+
+const shareChartSchema = z.object({
+  chartId: z.string().min(1),
+  targetType: z.enum(['USER', 'TEAM']),
+  targetId: z.string().min(1),
+  access: z.enum(['VIEW', 'EDIT']),
+});
+
+export async function shareRaciChart(input: {
+  chartId: string;
+  targetType: 'USER' | 'TEAM';
+  targetId: string;
+  access: 'VIEW' | 'EDIT';
+}): Promise<ActionResult<{ shareId: string }>> {
+  try {
+    const gate = requireRaciModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireSession();
+
+    const parsed = shareChartSchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid share input' };
+    }
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, parsed.data.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to manage shares for this chart.' };
+    }
+
+    const accessLevel = parsed.data.access as RaciAccessLevel;
+
+    let share;
+    if (parsed.data.targetType === 'USER') {
+      share = await prisma.raciChartShare.upsert({
+        where: {
+          chartId_userId: {
+            chartId: parsed.data.chartId,
+            userId: parsed.data.targetId,
+          },
+        },
+        create: {
+          chartId: parsed.data.chartId,
+          userId: parsed.data.targetId,
+          access: accessLevel,
+        },
+        update: {
+          access: accessLevel,
+        },
+      });
+    } else {
+      share = await prisma.raciChartShare.upsert({
+        where: {
+          chartId_teamId: {
+            chartId: parsed.data.chartId,
+            teamId: parsed.data.targetId,
+          },
+        },
+        create: {
+          chartId: parsed.data.chartId,
+          teamId: parsed.data.targetId,
+          access: accessLevel,
+        },
+        update: {
+          access: accessLevel,
+        },
+      });
+    }
+
+    revalidatePath('/raci');
+    return { success: true, shareId: share.id };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not share the chart.' };
+  }
+}
+
+export async function removeRaciChartShare(input: { shareId: string }): Promise<ActionResult> {
+  try {
+    const gate = requireRaciModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireSession();
+
+    const existing = await prisma.raciChartShare.findUnique({
+      where: { id: input.shareId },
+    });
+    if (!existing) return { success: true };
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, existing.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to remove shares for this chart.' };
+    }
+
+    await prisma.raciChartShare.delete({
+      where: { id: input.shareId },
+    });
+
+    revalidatePath('/raci');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not remove the share.' };
   }
 }
 
@@ -69,14 +297,18 @@ export async function addRaciStep(input: {
   try {
     const gate = requireRaciModule();
     if (gate) return { success: false, error: gate };
-    await requireManagerOrAdmin();
+    const session = await requireSession();
 
     const parsed = addStepSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid step input' };
     }
 
-    // Append to the end of the chart rather than renumbering existing rows.
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, parsed.data.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to edit this chart.' };
+    }
+
     const last = await prisma.raciStep.findFirst({
       where: { chartId: parsed.data.chartId },
       orderBy: { stepOrder: 'desc' },
@@ -93,8 +325,143 @@ export async function addRaciStep(input: {
 
     revalidatePath('/raci');
     return { success: true, stepId: step.id };
-  } catch {
-    return { success: false, error: 'Could not add the step.' };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not add the step.' };
+  }
+}
+
+export async function bulkAddRaciSteps(input: {
+  chartId: string;
+  stepNames: string[];
+}): Promise<ActionResult<{ count: number }>> {
+  try {
+    const gate = requireRaciModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireSession();
+
+    const validNames = input.stepNames.map((s) => s.trim()).filter(Boolean);
+    if (validNames.length === 0) {
+      return { success: false, error: 'No valid step names provided.' };
+    }
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, input.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to edit this chart.' };
+    }
+
+    const last = await prisma.raciStep.findFirst({
+      where: { chartId: input.chartId },
+      orderBy: { stepOrder: 'desc' },
+      select: { stepOrder: true },
+    });
+
+    let currentOrder = (last?.stepOrder ?? -1) + 1;
+    await prisma.$transaction(
+      validNames.map((name) =>
+        prisma.raciStep.create({
+          data: {
+            chartId: input.chartId,
+            stepName: name,
+            stepOrder: currentOrder++,
+          },
+        })
+      )
+    );
+
+    revalidatePath('/raci');
+    return { success: true, count: validNames.length };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not add steps.' };
+  }
+}
+
+export async function updateRaciStep(input: {
+  stepId: string;
+  stepName: string;
+}): Promise<ActionResult> {
+  try {
+    const gate = requireRaciModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireSession();
+
+    const step = await prisma.raciStep.findUnique({
+      where: { id: input.stepId },
+      select: { chartId: true },
+    });
+    if (!step) return { success: false, error: 'Step not found.' };
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, step.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to edit this step.' };
+    }
+
+    await prisma.raciStep.update({
+      where: { id: input.stepId },
+      data: { stepName: input.stepName.trim() },
+    });
+
+    revalidatePath('/raci');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not update the step.' };
+  }
+}
+
+export async function deleteRaciStep(input: { stepId: string }): Promise<ActionResult> {
+  try {
+    const gate = requireRaciModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireSession();
+
+    const step = await prisma.raciStep.findUnique({
+      where: { id: input.stepId },
+      select: { chartId: true },
+    });
+    if (!step) return { success: true };
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, step.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to delete this step.' };
+    }
+
+    await prisma.raciStep.delete({
+      where: { id: input.stepId },
+    });
+
+    revalidatePath('/raci');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not delete the step.' };
+  }
+}
+
+export async function reorderRaciSteps(input: {
+  chartId: string;
+  stepIds: string[];
+}): Promise<ActionResult> {
+  try {
+    const gate = requireRaciModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireSession();
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, input.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to reorder steps.' };
+    }
+
+    await prisma.$transaction(
+      input.stepIds.map((id, index) =>
+        prisma.raciStep.update({
+          where: { id },
+          data: { stepOrder: index },
+        })
+      )
+    );
+
+    revalidatePath('/raci');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not reorder steps.' };
   }
 }
 
@@ -102,21 +469,38 @@ const addPersonSchema = z.object({
   chartId: z.string().min(1),
   name: z.string().trim().min(1, 'Name is required'),
   roleTitle: z.string().trim().default(''),
+  userId: z.string().optional().nullable(),
 });
 
 export async function addRaciPerson(input: {
   chartId: string;
   name: string;
   roleTitle?: string;
+  userId?: string | null;
 }): Promise<ActionResult<{ personId: string }>> {
   try {
     const gate = requireRaciModule();
     if (gate) return { success: false, error: gate };
-    await requireManagerOrAdmin();
+    const session = await requireSession();
 
     const parsed = addPersonSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid person input' };
+    }
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, parsed.data.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to edit this chart.' };
+    }
+
+    // Try auto-linking userId if not explicitly provided but matches existing user name
+    let resolvedUserId = parsed.data.userId || null;
+    if (!resolvedUserId && prisma.user?.findFirst) {
+      const match = await prisma.user.findFirst({
+        where: { name: { equals: parsed.data.name, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (match) resolvedUserId = match.id;
     }
 
     const last = await prisma.raciPerson.findFirst({
@@ -130,14 +514,120 @@ export async function addRaciPerson(input: {
         chartId: parsed.data.chartId,
         name: parsed.data.name,
         roleTitle: parsed.data.roleTitle ?? '',
+        userId: resolvedUserId,
         personOrder: (last?.personOrder ?? -1) + 1,
       },
     });
 
     revalidatePath('/raci');
     return { success: true, personId: person.id };
-  } catch {
-    return { success: false, error: 'Could not add the person.' };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not add the person.' };
+  }
+}
+
+export async function updateRaciPerson(input: {
+  personId: string;
+  name: string;
+  roleTitle?: string;
+  userId?: string | null;
+}): Promise<ActionResult> {
+  try {
+    const gate = requireRaciModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireSession();
+
+    const person = await prisma.raciPerson.findUnique({
+      where: { id: input.personId },
+      select: { chartId: true },
+    });
+    if (!person) return { success: false, error: 'Person/Role not found.' };
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, person.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to edit this column.' };
+    }
+
+    let resolvedUserId = input.userId;
+    if (resolvedUserId === undefined && prisma.user?.findFirst) {
+      const match = await prisma.user.findFirst({
+        where: { name: { equals: input.name.trim(), mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (match) resolvedUserId = match.id;
+    }
+
+    await prisma.raciPerson.update({
+      where: { id: input.personId },
+      data: {
+        name: input.name.trim(),
+        roleTitle: (input.roleTitle ?? '').trim(),
+        ...(resolvedUserId !== undefined ? { userId: resolvedUserId } : {}),
+      },
+    });
+
+    revalidatePath('/raci');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not update the person.' };
+  }
+}
+
+export async function deleteRaciPerson(input: { personId: string }): Promise<ActionResult> {
+  try {
+    const gate = requireRaciModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireSession();
+
+    const person = await prisma.raciPerson.findUnique({
+      where: { id: input.personId },
+      select: { chartId: true },
+    });
+    if (!person) return { success: true };
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, person.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to delete this column.' };
+    }
+
+    await prisma.raciPerson.delete({
+      where: { id: input.personId },
+    });
+
+    revalidatePath('/raci');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not delete the person.' };
+  }
+}
+
+export async function reorderRaciPeople(input: {
+  chartId: string;
+  personIds: string[];
+}): Promise<ActionResult> {
+  try {
+    const gate = requireRaciModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireSession();
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, input.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to reorder columns.' };
+    }
+
+    await prisma.$transaction(
+      input.personIds.map((id, index) =>
+        prisma.raciPerson.update({
+          where: { id },
+          data: { personOrder: index },
+        })
+      )
+    );
+
+    revalidatePath('/raci');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not reorder columns.' };
   }
 }
 
@@ -162,7 +652,18 @@ export async function setRaciCell(input: {
   try {
     const gate = requireRaciModule();
     if (gate) return { success: false, error: gate };
-    await requireSession();
+    const session = await requireSession();
+
+    const step = await prisma.raciStep.findUnique({
+      where: { id: input.stepId },
+      select: { chartId: true },
+    });
+    if (!step) return { success: false, error: 'Step not found.' };
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, step.chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to edit this chart.' };
+    }
 
     const parsed = setCellSchema.safeParse(input);
     if (!parsed.success) {
@@ -179,13 +680,13 @@ export async function setRaciCell(input: {
 
     await prisma.raciAssignment.upsert({
       where: { stepId_personId: { stepId, personId } },
-      create: { stepId, personId, designations },
-      update: { designations },
+      create: { stepId, personId, designations: designations as RaciRole[] },
+      update: { designations: designations as RaciRole[] },
     });
 
     revalidatePath('/raci');
     return { success: true, cleared: false };
-  } catch {
-    return { success: false, error: 'Could not update the cell.' };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not update the cell.' };
   }
 }

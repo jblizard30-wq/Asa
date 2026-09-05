@@ -198,7 +198,9 @@ model User {
   orderedRestockOrders     RestockOrder[] @relation("InventoryRestockOrderedBy")
 
   // RACI module (add-on — gated by ENABLED_MODULES, see src/lib/modules.ts).
-  raciPersonLinks RaciPerson[] @relation("RaciPersonUser")
+  raciPersonLinks   RaciPerson[]     @relation("RaciPersonUser")
+  raciChartsCreated RaciChart[]      @relation("RaciChartCreator")
+  raciChartShares   RaciChartShare[] @relation("RaciChartUserShares")
 
   @@index([managerId])
 }
@@ -214,11 +216,13 @@ model SupportLoginToken {
 
 /// Per-user customization of the sidebar navigation: display order and show/hide per item key.
 model NavPreference {
-  id      String  @id @default(cuid())
-  userId  String
-  itemKey String
-  order   Int     @default(0)
-  hidden  Boolean @default(false)
+  id         String  @id @default(cuid())
+  userId     String
+  itemKey    String
+  order      Int     @default(0)
+  hidden     Boolean @default(false)
+  groupName  String?
+  groupOrder Int?    @default(0)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -234,8 +238,9 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members   TeamMember[]
-  workflows Workflow[]
+  members         TeamMember[]
+  workflows       Workflow[]
+  raciChartShares RaciChartShare[] @relation("RaciChartTeamShares")
 }
 
 model TeamMember {
@@ -799,8 +804,9 @@ model Workflow {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  stages   WorkflowStage[]
-  projects Project[]
+  stages     WorkflowStage[]
+  projects   Project[]
+  raciCharts RaciChart[]
 
   @@index([teamId])
 }
@@ -1161,6 +1167,11 @@ enum RaciRole {
   INFORMED
 }
 
+enum RaciAccessLevel {
+  VIEW
+  EDIT
+}
+
 model RaciChart {
   id           String    @id @default(cuid())
   processName  String
@@ -1170,14 +1181,41 @@ model RaciChart {
   ministryArea String?
   reviewDate   DateTime?
   isTemplate   Boolean   @default(false)
+  isPublic     Boolean   @default(true)
+  tags         String[]  @default([])
+  workflowId   String?
+  workflow     Workflow? @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  createdById  String?
+  createdBy    User?     @relation("RaciChartCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   archivedAt   DateTime?
 
   steps  RaciStep[]
   people RaciPerson[]
+  shares RaciChartShare[]
 
   @@index([archivedAt])
+  @@index([createdById])
+  @@index([workflowId])
+}
+
+model RaciChartShare {
+  id        String          @id @default(cuid())
+  chartId   String
+  chart     RaciChart       @relation(fields: [chartId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?           @relation("RaciChartUserShares", fields: [userId], references: [id], onDelete: Cascade)
+  teamId    String?
+  team      Team?           @relation("RaciChartTeamShares", fields: [teamId], references: [id], onDelete: Cascade)
+  access    RaciAccessLevel @default(VIEW)
+  createdAt DateTime        @default(now())
+
+  @@unique([chartId, userId])
+  @@unique([chartId, teamId])
+  @@index([userId])
+  @@index([teamId])
+  @@index([chartId])
 }
 
 /// A row of the matrix.

@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { Navbar } from '@/components/Navbar';
 import { Sidebar } from '@/components/Sidebar';
-import { applyNavPreferences, getVisibleNavDefs } from '@/lib/navItems';
+import { applyNavPreferences, buildNavGroups, getVisibleNavDefs } from '@/lib/navItems';
 import { ORG_NAME } from '@/lib/site';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -40,9 +40,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     prisma.navPreference.findMany({ where: { userId: session.user.id } }),
   ]);
 
-  const navItems = applyNavPreferences(getVisibleNavDefs({ isAdmin, canManageTeams }), navPreferences).filter(
-    (item) => !item.hidden
-  );
+  const visibleDefs = getVisibleNavDefs({ isAdmin, canManageTeams });
+  const navItems = applyNavPreferences(visibleDefs, navPreferences).filter((item) => !item.hidden);
+  const navGroups = buildNavGroups(visibleDefs, navPreferences)
+    .map((group) => ({
+      name: group.name,
+      items: group.items.filter((item) => !item.hidden),
+    }))
+    .filter((group) => group.items.length > 0);
 
   const accessibleProjectIds = new Set(projects.map((p) => p.id));
   const groupedProjectIds = new Set<string>();
@@ -73,7 +78,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         orgName={ORG_NAME}
       />
       <div className="flex flex-1">
-        <Sidebar folders={sidebarFolders} ungroupedProjects={ungroupedProjects} navItems={navItems} />
+        <Sidebar folders={sidebarFolders} ungroupedProjects={ungroupedProjects} navItems={navItems} navGroups={navGroups} />
         <main className="flex min-w-0 w-full flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8 print:max-w-none print:p-0">{children}</main>
       </div>
     </div>

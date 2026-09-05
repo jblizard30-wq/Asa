@@ -1,9 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { setUserManager } from '@/lib/actions/orgChart';
-import { collectDescendantIds, type OrgNode } from '@/lib/orgChart';
+import {
+  collectDescendantIds,
+  getAncestorChain,
+  findNodeInForest,
+  getDirectReportIds,
+  type OrgNode,
+  type OrgPerson,
+} from '@/lib/orgChart';
+import { OrgChartDossier, type DossierTaskItem } from '@/components/OrgChartDossier';
 
 export interface OrgChartPerson {
   id: string;
@@ -17,10 +25,45 @@ export interface PersonOption {
   name: string;
 }
 
+export interface OrgChartProcessItem {
+  id: string;
+  processName: string;
+  trigger?: string;
+  owner?: string;
+  workflowName?: string;
+}
+
 const ROLE_STYLES: Record<string, string> = {
   ADMIN: 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300',
   MANAGER: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
   USER: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+};
+
+const RACI_ROLE_PILLS: Record<string, { bg: string; text: string; label: string; desc: string }> = {
+  ACCOUNTABLE: {
+    bg: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/60 dark:text-amber-200',
+    text: 'text-amber-800 dark:text-amber-200',
+    label: 'A',
+    desc: 'Accountable (Final Owner)',
+  },
+  RESPONSIBLE: {
+    bg: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/60 dark:text-blue-200',
+    text: 'text-blue-800 dark:text-blue-200',
+    label: 'R',
+    desc: 'Responsible (Executes)',
+  },
+  CONSULTED: {
+    bg: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/60 dark:text-purple-200',
+    text: 'text-purple-800 dark:text-purple-200',
+    label: 'C',
+    desc: 'Consulted (Advises)',
+  },
+  INFORMED: {
+    bg: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300',
+    text: 'text-slate-700 dark:text-slate-300',
+    label: 'I',
+    desc: 'Informed (Kept Updated)',
+  },
 };
 
 function RolePill({ role }: { role: string }) {
@@ -44,6 +87,11 @@ function PersonCard({
   onToggleCollapse,
   isHighlighted,
   isDimmed,
+  isCurrentUser,
+  isAncestor,
+  isDescendant,
+  raciRoles,
+  onOpenDossier,
 }: {
   person: OrgChartPerson;
   isAdmin: boolean;
@@ -53,6 +101,11 @@ function PersonCard({
   onToggleCollapse?: () => void;
   isHighlighted?: boolean;
   isDimmed?: boolean;
+  isCurrentUser?: boolean;
+  isAncestor?: boolean;
+  isDescendant?: boolean;
+  raciRoles?: string[];
+  onOpenDossier?: () => void;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -72,24 +125,57 @@ function PersonCard({
     router.refresh();
   }
 
+  // Border and halo styling
+  const borderClasses = isCurrentUser
+    ? 'border-emerald-500 ring-2 ring-emerald-500/50 shadow-lg scale-[1.03] dark:border-emerald-400'
+    : isAncestor
+    ? 'border-blue-400 ring-2 ring-blue-400/40 shadow-md dark:border-blue-500'
+    : isDescendant
+    ? 'border-indigo-400 ring-2 ring-indigo-400/40 shadow-md dark:border-indigo-500'
+    : isHighlighted
+    ? 'border-brand-500 ring-2 ring-brand-500/40 shadow-md scale-[1.02] dark:border-brand-400'
+    : isDimmed
+    ? 'border-slate-200 opacity-25 dark:border-slate-800'
+    : 'border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600 hover:shadow-sm';
+
   return (
     <div
-      className={`w-52 shrink-0 rounded-xl border bg-white p-3.5 text-left shadow-sm transition-all dark:bg-slate-900 ${
-        isHighlighted
-          ? 'border-brand-500 ring-2 ring-brand-500/40 shadow-md scale-[1.02] dark:border-brand-400'
-          : isDimmed
-          ? 'border-slate-200 opacity-40 dark:border-slate-800'
-          : 'border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600'
-      }`}
+      id={`person-card-${person.id}`}
+      onClick={(e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('button') || target.closest('select') || target.closest('a')) return;
+        onOpenDossier?.();
+      }}
+      className={`w-56 shrink-0 cursor-pointer rounded-xl border bg-white p-3.5 text-left shadow-xs transition-all dark:bg-slate-900 ${borderClasses}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{person.name}</p>
-          <p className="truncate text-xs text-slate-500 dark:text-slate-400">{person.email}</p>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">{person.name}</p>
+            {isCurrentUser && (
+              <span className="rounded-full bg-emerald-600 px-1.5 py-0.2 text-[9px] font-extrabold text-white tracking-wider">
+                YOU
+              </span>
+            )}
+            {isAncestor && (
+              <span className="rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-1.5 py-0.2 text-[8px] font-bold uppercase tracking-wider">
+                Supervisor
+              </span>
+            )}
+            {isDescendant && (
+              <span className="rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.2 text-[8px] font-bold uppercase tracking-wider">
+                Report
+              </span>
+            )}
+          </div>
+          <p className="truncate text-xs text-slate-500 dark:text-slate-400 mt-0.5">{person.email}</p>
         </div>
         {typeof reportCount === 'number' && reportCount > 0 && (
           <button
-            onClick={onToggleCollapse}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollapse?.();
+            }}
             className="shrink-0 rounded p-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
             title={collapsed ? 'Expand reports' : 'Collapse reports'}
             aria-label={collapsed ? 'Expand reports' : 'Collapse reports'}
@@ -108,8 +194,30 @@ function PersonCard({
         )}
       </div>
 
+      {/* RACI Badges on card */}
+      {raciRoles && raciRoles.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-1.5 dark:border-slate-800">
+          <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mr-0.5">RACI:</span>
+          {raciRoles.map((r) => {
+            const info = RACI_ROLE_PILLS[r] ?? RACI_ROLE_PILLS.INFORMED;
+            return (
+              <span
+                key={r}
+                title={info.desc}
+                className={`flex h-4.5 w-4.5 items-center justify-center rounded border text-[9px] font-bold ${info.bg}`}
+              >
+                {info.label}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
       {isAdmin && (
-        <div className="mt-2.5 border-t border-slate-100 pt-2 dark:border-slate-800">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="mt-2.5 border-t border-slate-100 pt-2 dark:border-slate-800"
+        >
           {editing ? (
             <select
               autoFocus
@@ -148,6 +256,13 @@ function OrgTreeNode({
   searchQuery,
   collapsedNodes,
   onToggleNode,
+  currentUserId,
+  ancestorIdSet,
+  descendantIdSet,
+  chainActive,
+  selectedProcessId,
+  userRaciMap,
+  onOpenDossier,
 }: {
   node: OrgNode;
   isAdmin: boolean;
@@ -155,6 +270,13 @@ function OrgTreeNode({
   searchQuery: string;
   collapsedNodes: Set<string>;
   onToggleNode: (id: string) => void;
+  currentUserId?: string;
+  ancestorIdSet: Set<string>;
+  descendantIdSet: Set<string>;
+  chainActive: boolean;
+  selectedProcessId: string;
+  userRaciMap?: Record<string, Record<string, string[]>>;
+  onOpenDossier: (personId: string) => void;
 }) {
   const excluded = collectDescendantIds(node);
   const managerOptions = allPeople.filter((p) => !excluded.has(p.id));
@@ -166,7 +288,26 @@ function OrgTreeNode({
     (node.name.toLowerCase().includes(cleanQuery) ||
       node.email.toLowerCase().includes(cleanQuery) ||
       node.role.toLowerCase().includes(cleanQuery));
-  const isDimmed = cleanQuery.length > 0 && !isMatch;
+
+  const isCurrentUser = node.id === currentUserId;
+  const isAncestor = chainActive && ancestorIdSet.has(node.id);
+  const isDescendant = chainActive && descendantIdSet.has(node.id) && !isCurrentUser;
+
+  // Process Lens
+  const raciRoles = selectedProcessId && userRaciMap?.[node.id]?.[selectedProcessId]
+    ? userRaciMap[node.id][selectedProcessId]
+    : undefined;
+  const hasProcessRole = !!(raciRoles && raciRoles.length > 0);
+
+  // Dimming logic
+  let isDimmed = false;
+  if (cleanQuery.length > 0) {
+    isDimmed = !isMatch;
+  } else if (chainActive) {
+    isDimmed = !isCurrentUser && !isAncestor && !isDescendant;
+  } else if (selectedProcessId) {
+    isDimmed = !hasProcessRole;
+  }
 
   return (
     <li>
@@ -179,6 +320,11 @@ function OrgTreeNode({
         onToggleCollapse={() => onToggleNode(node.id)}
         isHighlighted={isMatch}
         isDimmed={isDimmed}
+        isCurrentUser={isCurrentUser}
+        isAncestor={isAncestor}
+        isDescendant={isDescendant}
+        raciRoles={raciRoles}
+        onOpenDossier={() => onOpenDossier(node.id)}
       />
       {node.children.length > 0 && !isCollapsed && (
         <ul>
@@ -191,6 +337,13 @@ function OrgTreeNode({
               searchQuery={searchQuery}
               collapsedNodes={collapsedNodes}
               onToggleNode={onToggleNode}
+              currentUserId={currentUserId}
+              ancestorIdSet={ancestorIdSet}
+              descendantIdSet={descendantIdSet}
+              chainActive={chainActive}
+              selectedProcessId={selectedProcessId}
+              userRaciMap={userRaciMap}
+              onOpenDossier={onOpenDossier}
             />
           ))}
         </ul>
@@ -216,11 +369,26 @@ export function OrgChart({
   unassigned,
   isAdmin,
   allPeople,
+  rawPeople = [],
+  currentUserId,
+  processes = [],
+  userRaciMap = {},
+  userDetailedRaci = {},
+  userTaskMap = {},
 }: {
   roots: OrgNode[];
   unassigned: OrgChartPerson[];
   isAdmin: boolean;
   allPeople: PersonOption[];
+  rawPeople?: OrgPerson[];
+  currentUserId?: string;
+  processes?: OrgChartProcessItem[];
+  userRaciMap?: Record<string, Record<string, string[]>>;
+  userDetailedRaci?: Record<
+    string,
+    Array<{ chartId: string; processName: string; designations: string[]; stepName?: string }>
+  >;
+  userTaskMap?: Record<string, DossierTaskItem[]>;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(100);
@@ -229,8 +397,38 @@ export function OrgChart({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showUnassigned, setShowUnassigned] = useState(false);
 
+  // Chain of command and process lens state
+  const [chainActive, setChainActive] = useState(false);
+  const [selectedProcessId, setSelectedProcessId] = useState('');
+  const [dossierPersonId, setDossierPersonId] = useState<string | null>(null);
+
   const collapsibleIds = useMemo(() => getAllCollapsibleNodeIds(roots), [roots]);
   const allCollapsed = collapsibleIds.length > 0 && collapsibleIds.every((id) => collapsedNodes.has(id));
+
+  // Compute chain of command sets
+  const currentUserAncestors = useMemo(() => {
+    if (!currentUserId || rawPeople.length === 0) return [];
+    return getAncestorChain(rawPeople, currentUserId);
+  }, [currentUserId, rawPeople]);
+
+  const ancestorIdSet = useMemo(() => {
+    return new Set(currentUserAncestors.map((a) => a.id));
+  }, [currentUserAncestors]);
+
+  const directReportIds = useMemo(() => {
+    if (!currentUserId || rawPeople.length === 0) return [];
+    return getDirectReportIds(rawPeople, currentUserId);
+  }, [currentUserId, rawPeople]);
+
+  const descendantIdSet = useMemo(() => {
+    if (!currentUserId) return new Set<string>();
+    const node = findNodeInForest(roots, currentUserId);
+    return node ? collectDescendantIds(node) : new Set<string>();
+  }, [currentUserId, roots]);
+
+  const selectedProcess = useMemo(() => {
+    return processes.find((p) => p.id === selectedProcessId);
+  }, [processes, selectedProcessId]);
 
   useEffect(() => {
     function handleFullscreenChange() {
@@ -266,6 +464,29 @@ export function OrgChart({
     }
   }
 
+  function handleFindMe() {
+    if (!currentUserId) return;
+    const nextState = !chainActive;
+    setChainActive(nextState);
+
+    if (nextState) {
+      // Uncollapse all ancestors so current user is visible
+      setCollapsedNodes((prev) => {
+        const next = new Set(prev);
+        ancestorIdSet.forEach((id) => next.delete(id));
+        return next;
+      });
+
+      // Smooth scroll to current user's card
+      setTimeout(() => {
+        const cardEl = document.getElementById(`person-card-${currentUserId}`);
+        if (cardEl) {
+          cardEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        }
+      }, 100);
+    }
+  }
+
   const matchCount = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return 0;
@@ -284,6 +505,22 @@ export function OrgChart({
     return count;
   }, [roots, searchQuery]);
 
+  // Dossier Person Data
+  const dossierPerson = useMemo(() => {
+    if (!dossierPersonId) return null;
+    return rawPeople.find((p) => p.id === dossierPersonId) || null;
+  }, [dossierPersonId, rawPeople]);
+
+  const dossierManager = useMemo(() => {
+    if (!dossierPerson?.managerId) return null;
+    return rawPeople.find((p) => p.id === dossierPerson.managerId) || null;
+  }, [dossierPerson, rawPeople]);
+
+  const dossierReports = useMemo(() => {
+    if (!dossierPersonId) return [];
+    return rawPeople.filter((p) => p.managerId === dossierPersonId);
+  }, [dossierPersonId, rawPeople]);
+
   return (
     <div
       ref={containerRef}
@@ -293,15 +530,15 @@ export function OrgChart({
     >
       {/* Top Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-        {/* Left: Search */}
-        <div className="flex items-center gap-2">
+        {/* Left: Search & Find Me */}
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search people..."
-              className="w-48 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:bg-slate-900 sm:w-60"
+              className="w-44 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:bg-slate-900 sm:w-56"
             />
             {searchQuery && (
               <button
@@ -317,10 +554,48 @@ export function OrgChart({
               {matchCount} match{matchCount === 1 ? '' : 'es'}
             </span>
           )}
+
+          {/* Find Me / My Chain of Command Button */}
+          {currentUserId && (
+            <button
+              onClick={handleFindMe}
+              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-all ${
+                chainActive
+                  ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300 shadow-xs'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+              title="Locate yourself and highlight your chain of command"
+            >
+              <span>🎯</span>
+              <span>{chainActive ? 'Chain Active' : 'My Chain of Command'}</span>
+            </button>
+          )}
         </div>
 
-        {/* Right: Controls (Expand/Collapse, Zoom, Fullscreen, Unassigned Toggle) */}
+        {/* Middle/Right: Process Lens Selector & Controls */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Process Lens dropdown */}
+          {processes.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <select
+                value={selectedProcessId}
+                onChange={(e) => setSelectedProcessId(e.target.value)}
+                className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium focus:outline-none transition-colors ${
+                  selectedProcessId
+                    ? 'border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-900/40 dark:text-brand-300'
+                    : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                }`}
+              >
+                <option value="">Standard Org Hierarchy</option>
+                {processes.map((proc) => (
+                  <option key={proc.id} value={proc.id}>
+                    ⚡ Process: {proc.processName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {collapsibleIds.length > 0 && (
             <button
               onClick={handleToggleAll}
@@ -411,6 +686,70 @@ export function OrgChart({
         </div>
       </div>
 
+      {/* Authority Breadcrumb Banner (When Chain of Command is Active) */}
+      {chainActive && currentUserId && (
+        <div className="flex items-center justify-between gap-3 border-b border-blue-100 bg-blue-50/70 px-4 py-2 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <span className="font-bold text-blue-700 dark:text-blue-300 shrink-0">Chain of Command:</span>
+            {currentUserAncestors.map((ancestor) => (
+              <React.Fragment key={ancestor.id}>
+                <button
+                  onClick={() => setDossierPersonId(ancestor.id)}
+                  className="font-medium hover:underline text-slate-700 dark:text-slate-200"
+                >
+                  {ancestor.name}
+                </button>
+                <span className="text-blue-400">➔</span>
+              </React.Fragment>
+            ))}
+            <span className="font-bold text-emerald-700 dark:text-emerald-400">You</span>
+            {directReportIds.length > 0 && (
+              <span className="text-slate-500 dark:text-slate-400 text-[11px]">
+                ({directReportIds.length} direct report{directReportIds.length === 1 ? '' : 's'})
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => setChainActive(false)}
+            className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 dark:text-blue-400 shrink-0"
+          >
+            Clear Highlight ✕
+          </button>
+        </div>
+      )}
+
+      {/* Process Lens Banner (When a RACI Process is Selected) */}
+      {selectedProcess && (
+        <div className="flex items-center justify-between gap-3 border-b border-amber-100 bg-amber-50/70 px-4 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-bold text-amber-800 dark:text-amber-300">
+              ⚡ Process Lens: {selectedProcess.processName}
+            </span>
+            {selectedProcess.owner && (
+              <span className="text-slate-600 dark:text-slate-400">
+                Owner: <strong className="text-slate-800 dark:text-slate-200">{selectedProcess.owner}</strong>
+              </span>
+            )}
+            {selectedProcess.trigger && (
+              <span className="text-slate-600 dark:text-slate-400">
+                Trigger: <em>{selectedProcess.trigger}</em>
+              </span>
+            )}
+            {selectedProcess.workflowName && (
+              <span className="rounded bg-indigo-50 px-1.5 py-0.2 text-indigo-700 font-mono text-[10px] dark:bg-indigo-950/50 dark:text-indigo-300">
+                Workflow: {selectedProcess.workflowName}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => setSelectedProcessId('')}
+            className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 dark:text-amber-400 shrink-0"
+          >
+            Reset Lens ✕
+          </button>
+        </div>
+      )}
+
       {/* Main Canvas Viewport */}
       <div className="org-canvas-dots relative flex flex-1 flex-col overflow-auto bg-slate-50/50 p-6 dark:bg-slate-950/40 sm:p-10">
         {roots.length > 0 ? (
@@ -432,6 +771,13 @@ export function OrgChart({
                   searchQuery={searchQuery}
                   collapsedNodes={collapsedNodes}
                   onToggleNode={handleToggleNode}
+                  currentUserId={currentUserId}
+                  ancestorIdSet={ancestorIdSet}
+                  descendantIdSet={descendantIdSet}
+                  chainActive={chainActive}
+                  selectedProcessId={selectedProcessId}
+                  userRaciMap={userRaciMap}
+                  onOpenDossier={(id) => setDossierPersonId(id)}
                 />
               ))}
             </ul>
@@ -497,12 +843,27 @@ export function OrgChart({
                   person={person}
                   isAdmin={isAdmin}
                   managerOptions={allPeople.filter((p) => p.id !== person.id)}
+                  isCurrentUser={person.id === currentUserId}
+                  onOpenDossier={() => setDossierPersonId(person.id)}
                 />
               ))}
             </div>
           )}
         </div>
       )}
+
+      {/* Person Governance & Workflow Dossier Slide-out */}
+      <OrgChartDossier
+        isOpen={dossierPersonId !== null}
+        onClose={() => setDossierPersonId(null)}
+        person={dossierPerson}
+        manager={dossierManager}
+        directReports={dossierReports}
+        raciAssignments={dossierPersonId ? userDetailedRaci[dossierPersonId] || [] : []}
+        activeTasks={dossierPersonId ? userTaskMap[dossierPersonId] || [] : []}
+        onSelectPerson={(id) => setDossierPersonId(id)}
+      />
     </div>
   );
 }
+

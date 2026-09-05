@@ -69,3 +69,36 @@ export function collectDescendantIds(node: OrgNode): Set<string> {
   }
   return ids;
 }
+
+/** Traces the ancestry path from the highest root down to the user's immediate manager. */
+export function getAncestorChain(people: OrgPerson[], userId: string): OrgPerson[] {
+  const byId = new Map(people.map((p) => [p.id, p]));
+  const chain: OrgPerson[] = [];
+  let current = byId.get(userId);
+  const visited = new Set<string>();
+
+  while (current && current.managerId && byId.has(current.managerId)) {
+    if (visited.has(current.managerId)) break; // cycle protection
+    visited.add(current.managerId);
+    const manager = byId.get(current.managerId)!;
+    chain.unshift(manager); // root first, direct manager last
+    current = manager;
+  }
+
+  return chain;
+}
+
+/** Locates an OrgNode anywhere within the tree forest. */
+export function findNodeInForest(roots: OrgNode[], targetId: string): OrgNode | null {
+  for (const root of roots) {
+    if (root.id === targetId) return root;
+    const found = findNodeInForest(root.children, targetId);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Returns the IDs of all immediate direct reports of the specified user. */
+export function getDirectReportIds(people: OrgPerson[], userId: string): string[] {
+  return people.filter((p) => p.managerId === userId).map((p) => p.id);
+}

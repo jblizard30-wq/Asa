@@ -23,20 +23,28 @@ export interface SidebarNavItem {
   href: string;
 }
 
+export interface SidebarNavGroup {
+  name: string;
+  items: SidebarNavItem[];
+}
+
 interface SidebarProps {
   folders: SidebarFolder[];
   ungroupedProjects: SidebarProject[];
-  navItems: SidebarNavItem[];
+  navItems?: SidebarNavItem[];
+  navGroups?: SidebarNavGroup[];
 }
 
 const COLLAPSED_KEY = 'sidebar-collapsed-folders';
+const COLLAPSED_NAV_GROUPS_KEY = 'sidebar-collapsed-nav-groups';
 
-export function Sidebar({ folders, ungroupedProjects, navItems }: SidebarProps) {
+export function Sidebar({ folders, ungroupedProjects, navItems = [], navGroups }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsedNavGroups, setCollapsedNavGroups] = useState<Set<string>>(new Set());
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -48,6 +56,8 @@ export function Sidebar({ folders, ungroupedProjects, navItems }: SidebarProps) 
     try {
       const stored = localStorage.getItem(COLLAPSED_KEY);
       if (stored) setCollapsed(new Set(JSON.parse(stored)));
+      const storedNav = localStorage.getItem(COLLAPSED_NAV_GROUPS_KEY);
+      if (storedNav) setCollapsedNavGroups(new Set(JSON.parse(storedNav)));
     } catch {
       // ignore malformed storage
     }
@@ -74,6 +84,14 @@ export function Sidebar({ folders, ungroupedProjects, navItems }: SidebarProps) 
     if (next.has(id)) next.delete(id);
     else next.add(id);
     persistCollapsed(next);
+  }
+
+  function toggleNavGroup(name: string) {
+    const next = new Set(collapsedNavGroups);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    setCollapsedNavGroups(next);
+    localStorage.setItem(COLLAPSED_NAV_GROUPS_KEY, JSON.stringify([...next]));
   }
 
   async function handleCreateFolder() {
@@ -176,21 +194,60 @@ export function Sidebar({ folders, ungroupedProjects, navItems }: SidebarProps) 
 
   return (
     <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-3 py-6 print:hidden dark:border-slate-800 dark:bg-slate-900 sm:block">
-      <nav className="space-y-1">
-        {navItems.map((item) => (
-          <Link
-            key={item.key}
-            href={item.href}
-            className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
-              isActive(item.href)
-                ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
+      {navGroups && navGroups.length > 0 ? (
+        <div className="space-y-4">
+          {navGroups.map((group) => {
+            const isCollapsed = collapsedNavGroups.has(group.name);
+            return (
+              <div key={group.name} className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => toggleNavGroup(group.name)}
+                  className="group flex w-full items-center justify-between px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors"
+                >
+                  <span className="truncate">{group.name}</span>
+                  <span className="text-xs text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300">
+                    {isCollapsed ? '▸' : '▾'}
+                  </span>
+                </button>
+                {!isCollapsed && (
+                  <nav className="space-y-0.5">
+                    {group.items.map((item) => (
+                      <Link
+                        key={item.key}
+                        href={item.href}
+                        className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
+                          isActive(item.href)
+                            ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
+                            : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </nav>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <nav className="space-y-1">
+          {navItems.map((item) => (
+            <Link
+              key={item.key}
+              href={item.href}
+              className={`block rounded-md px-2 py-1.5 text-sm font-medium ${
+                isActive(item.href)
+                  ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300'
                 : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-            }`}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+              }`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      )}
 
       <div className="mt-6">
         <div className="flex items-center justify-between px-2">

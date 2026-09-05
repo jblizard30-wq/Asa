@@ -18,7 +18,40 @@ export interface NavPreferenceInput {
   itemKey: string;
   order: number;
   hidden: boolean;
+  groupName?: string | null;
+  groupOrder?: number | null;
 }
+
+export interface NavGroupItem extends NavItemDef {
+  order: number;
+  hidden: boolean;
+  groupName: string;
+}
+
+export interface NavGroup {
+  name: string;
+  order: number;
+  items: NavGroupItem[];
+}
+
+export const DEFAULT_NAV_GROUPS: { name: string; itemKeys: string[] }[] = [
+  {
+    name: 'Workspace',
+    itemKeys: ['inbox', 'my-tasks', 'personal-tasks', 'calendar'],
+  },
+  {
+    name: 'Operations',
+    itemKeys: ['projects', 'inventory', 'raci'],
+  },
+  {
+    name: 'Strategy & Teams',
+    itemKeys: ['dashboard', 'teams', 'org-chart', 'xp'],
+  },
+  {
+    name: 'Administration',
+    itemKeys: ['admin-users', 'admin-workflows', 'admin-trash', 'trash'],
+  },
+];
 
 export const NAV_ITEMS: NavItemDef[] = [
   { key: 'inbox', label: 'Inbox', href: '/inbox' },
@@ -60,16 +93,64 @@ export function defaultOrderOf(itemKey: string): number {
   return index === -1 ? NAV_ITEMS.length : index;
 }
 
+export function defaultGroupFor(itemKey: string): { groupName: string; groupOrder: number } {
+  for (let gIndex = 0; gIndex < DEFAULT_NAV_GROUPS.length; gIndex++) {
+    if (DEFAULT_NAV_GROUPS[gIndex].itemKeys.includes(itemKey)) {
+      return { groupName: DEFAULT_NAV_GROUPS[gIndex].name, groupOrder: gIndex };
+    }
+  }
+  return { groupName: 'General', groupOrder: DEFAULT_NAV_GROUPS.length };
+}
+
 /** Merges the role-filtered nav defs with a user's saved preferences and sorts by effective order. */
 export function applyNavPreferences<T extends NavItemDef>(
   defs: T[],
   prefs: NavPreferenceInput[]
-): (T & { order: number; hidden: boolean })[] {
+): (T & { order: number; hidden: boolean; groupName: string })[] {
   const prefMap = new Map(prefs.map((p) => [p.itemKey, p]));
   return defs
     .map((def, index) => {
       const pref = prefMap.get(def.key);
-      return { ...def, order: pref?.order ?? index, hidden: pref?.hidden ?? false };
+      const defGroup = defaultGroupFor(def.key);
+      const groupName = pref?.groupName || defGroup.groupName;
+      return {
+        ...def,
+        order: pref?.order ?? index,
+        hidden: pref?.hidden ?? false,
+        groupName,
+      };
     })
     .sort((a, b) => a.order - b.order);
+}
+
+/** Builds collapsible, ordered groups of navigation items for the sidebar. */
+export function buildNavGroups<T extends NavItemDef>(
+  defs: T[],
+  prefs: NavPreferenceInput[]
+): NavGroup[] {
+  const applied = applyNavPreferences(defs, prefs);
+  const prefMap = new Map(prefs.map((p) => [p.itemKey, p]));
+
+  const groupMap = new Map<string, NavGroupItem[]>();
+  for (const item of applied) {
+    if (!groupMap.has(item.groupName)) {
+      groupMap.set(item.groupName, []);
+    }
+    groupMap.get(item.groupName)!.push(item as NavGroupItem);
+  }
+
+  const groups: NavGroup[] = Array.from(groupMap.entries()).map(([name, groupItems]) => {
+    groupItems.sort((a, b) => a.order - b.order);
+    const firstWithGroupOrder = prefs.find((p) => p.groupName === name && typeof p.groupOrder === 'number');
+    const defaultIndex = DEFAULT_NAV_GROUPS.findIndex((g) => g.name === name);
+    const order = firstWithGroupOrder?.groupOrder ?? (defaultIndex === -1 ? 999 : defaultIndex);
+    return {
+      name,
+      order,
+      items: groupItems,
+    };
+  });
+
+  groups.sort((a, b) => a.order - b.order);
+  return groups;
 }
