@@ -111,9 +111,12 @@ export interface CalendarMeetup {
   location: string | null;
   virtualUrl: string | null;
   isPotluck: boolean;
+  isAllChurch: boolean;
+  teamIds: string[];
+  userIds: string[];
 }
 
-/** Finalized meetups occurring within [startISO, endISO] if the meetups module is enabled. */
+/** Finalized meetups occurring within [startISO, endISO] if the meetups module is enabled and shared with the viewer. */
 export async function getMeetupsInRange(startISO: string, endISO: string): Promise<CalendarMeetup[]> {
   const session = await getServerSession(authOptions);
   if (!session?.user) return [];
@@ -121,10 +124,33 @@ export async function getMeetupsInRange(startISO: string, endISO: string): Promi
   const { isModuleEnabled } = await import('@/lib/modules');
   if (!isModuleEnabled('meetups')) return [];
 
+  const isAdmin = session.user.role === 'ADMIN';
+
+  const userTeams = await prisma.teamMember.findMany({
+    where: { userId: session.user.id },
+    select: { teamId: true },
+  });
+  const userTeamIds = userTeams.map((t) => t.teamId);
+
   const meetups = await prisma.meetup.findMany({
     where: {
       archivedAt: null,
       startsAt: { gte: new Date(startISO), lte: new Date(endISO) },
+      ...(isAdmin
+        ? {}
+        : {
+            OR: [
+              { isAllChurch: true },
+              { createdById: session.user.id },
+              { shares: { some: { userId: session.user.id } } },
+              ...(userTeamIds.length > 0
+                ? [{ shares: { some: { teamId: { in: userTeamIds } } } }]
+                : []),
+            ],
+          }),
+    },
+    include: {
+      shares: true,
     },
     orderBy: { startsAt: 'asc' },
   });
@@ -138,5 +164,8 @@ export async function getMeetupsInRange(startISO: string, endISO: string): Promi
     location: m.location,
     virtualUrl: m.virtualUrl,
     isPotluck: m.isPotluck,
+    isAllChurch: m.isAllChurch,
+    teamIds: m.shares.filter((s) => s.teamId).map((s) => s.teamId!),
+    userIds: m.shares.filter((s) => s.userId).map((s) => s.userId!),
   }));
 }

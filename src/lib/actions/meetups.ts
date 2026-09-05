@@ -7,7 +7,7 @@ import { getServerSession } from 'next-auth';
 import { createHash, randomBytes } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
-import { requireManagerOrAdmin } from '@/lib/permissions';
+import { requireSession, requireManagerOrAdmin } from '@/lib/permissions';
 import { isModuleEnabled } from '@/lib/modules';
 import { MeetupCategory, VoteChoice } from '@prisma/client';
 
@@ -17,6 +17,19 @@ export type ActionResult<T = unknown> =
 
 function requireMeetupsModule(): string | null {
   return isModuleEnabled('meetups') ? null : 'The Meetups module is not enabled for this deployment.';
+}
+
+export async function canUserManageMeetup(
+  userId: string,
+  userRole: string,
+  meetupId: string
+): Promise<boolean> {
+  if (userRole === 'ADMIN' || userRole === 'MANAGER') return true;
+  const meetup = await prisma.meetup.findUnique({
+    where: { id: meetupId },
+    select: { createdById: true },
+  });
+  return meetup?.createdById === userId;
 }
 
 function safeRevalidatePath(path: string) {
@@ -75,13 +88,16 @@ const createMeetupSchema = z.object({
       })
     )
     .optional(),
+  isAllChurch: z.boolean().default(false),
+  targetUserIds: z.array(z.string().trim()).default([]),
+  targetTeamIds: z.array(z.string().trim()).default([]),
 });
 
 export async function createMeetup(rawInput: unknown): Promise<ActionResult<{ meetupId: string }>> {
   const gate = requireMeetupsModule();
   if (gate) return { success: false, error: gate };
 
-  const session = await requireManagerOrAdmin();
+  const session = await requireSession();
 
   const parsed = createMeetupSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -89,6 +105,9 @@ export async function createMeetup(rawInput: unknown): Promise<ActionResult<{ me
   }
 
   const { data } = parsed;
+
+  const userIds = Array.from(new Set(data.targetUserIds.filter(Boolean)));
+  const teamIds = Array.from(new Set(data.targetTeamIds.filter(Boolean)));
 
   const meetup = await prisma.meetup.create({
     data: {
@@ -101,9 +120,19 @@ export async function createMeetup(rawInput: unknown): Promise<ActionResult<{ me
       minQuorum: data.minQuorum || null,
       isPotluck: data.isPotluck,
       hasRolesRoster: data.hasRolesRoster,
+      isAllChurch: data.isAllChurch,
       startsAt: data.startsAt || null,
       endsAt: data.endsAt || null,
       createdById: session.user.id,
+      shares:
+        !data.isAllChurch && (userIds.length > 0 || teamIds.length > 0)
+          ? {
+              create: [
+                ...userIds.map((userId) => ({ userId })),
+                ...teamIds.map((teamId) => ({ teamId })),
+              ],
+            }
+          : undefined,
       timeSlots:
         data.timeSlots && data.timeSlots.length > 0
           ? {
@@ -142,6 +171,7 @@ export async function createMeetup(rawInput: unknown): Promise<ActionResult<{ me
   });
 
   safeRevalidatePath('/meetups');
+  safeRevalidatePath('/calendar');
   return { success: true, meetupId: meetup.id };
 }
 
@@ -154,6 +184,12 @@ export async function getMeetupDetails(meetupId: string) {
     include: {
       createdBy: {
         select: { id: true, name: true, email: true },
+      },
+      shares: {
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+          team: { select: { id: true, name: true } },
+        },
       },
       timeSlots: {
         orderBy: { startsAt: 'asc' },
@@ -324,7 +360,11 @@ export async function finalizeMeetup(
   const gate = requireMeetupsModule();
   if (gate) return { success: false, error: gate };
 
-  await requireManagerOrAdmin();
+  const session = await requireSession();
+  const canManage = await canUserManageMeetup(session.user.id, session.user.role, meetupId);
+  if (!canManage) {
+    return { success: false, error: 'Only managers, administrators, or the meetup organizer can perform this action' };
+  }
 
   await prisma.$transaction(async (tx) => {
     const slot = await tx.meetupTimeSlot.findUnique({
@@ -363,7 +403,11 @@ export async function generateShareLink(meetupId: string, label?: string): Promi
   const gate = requireMeetupsModule();
   if (gate) return { success: false, error: gate };
 
-  const session = await requireManagerOrAdmin();
+  const session = await requireSession();
+  const canManage = await canUserManageMeetup(session.user.id, session.user.role, meetupId);
+  if (!canManage) {
+    return { success: false, error: 'Only managers, administrators, or the meetup organizer can perform this action' };
+  }
 
   const token = randomBytes(24).toString('base64url');
   const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -392,7 +436,11 @@ export async function convertActionItemsToTasks(
   const gate = requireMeetupsModule();
   if (gate) return { success: false, error: gate };
 
-  await requireManagerOrAdmin();
+  const session = await requireSession();
+  const canManage = await canUserManageMeetup(session.user.id, session.user.role, meetupId);
+  if (!canManage) {
+    return { success: false, error: 'Only managers, administrators, or the meetup organizer can perform this action' };
+  }
 
   const defaultProject = await prisma.project.findFirst({
     orderBy: { createdAt: 'asc' },
@@ -437,4 +485,61 @@ export async function convertActionItemsToTasks(
 
   safeRevalidatePath('/tasks');
   return { success: true, taskCount: count };
+}
+
+const updateAudienceSchema = z.object({
+  isAllChurch: z.boolean().default(false),
+  targetUserIds: z.array(z.string().trim()).default([]),
+  targetTeamIds: z.array(z.string().trim()).default([]),
+});
+
+export async function updateMeetupAudience(
+  meetupId: string,
+  rawInput: unknown
+): Promise<ActionResult> {
+  const gate = requireMeetupsModule();
+  if (gate) return { success: false, error: gate };
+
+  const session = await requireSession();
+  const canManage = await canUserManageMeetup(session.user.id, session.user.role, meetupId);
+  if (!canManage) {
+    return { success: false, error: 'Only managers, administrators, or the meetup organizer can perform this action' };
+  }
+
+  const parsed = updateAudienceSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  }
+
+  const { data } = parsed;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.meetup.update({
+      where: { id: meetupId },
+      data: { isAllChurch: data.isAllChurch },
+    });
+
+    await tx.meetupShare.deleteMany({
+      where: { meetupId },
+    });
+
+    if (!data.isAllChurch) {
+      const userIds = Array.from(new Set(data.targetUserIds.filter(Boolean)));
+      const teamIds = Array.from(new Set(data.targetTeamIds.filter(Boolean)));
+
+      if (userIds.length > 0 || teamIds.length > 0) {
+        await tx.meetupShare.createMany({
+          data: [
+            ...userIds.map((userId) => ({ meetupId, userId })),
+            ...teamIds.map((teamId) => ({ meetupId, teamId })),
+          ],
+        });
+      }
+    }
+  });
+
+  safeRevalidatePath('/meetups');
+  safeRevalidatePath(`/meetups/${meetupId}`);
+  safeRevalidatePath('/calendar');
+  return { success: true };
 }

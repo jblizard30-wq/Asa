@@ -18,6 +18,7 @@ import { MeetingRosterCard } from '@/components/meetups/MeetingRosterCard';
 import { ActionItemsSection } from '@/components/meetups/ActionItemsSection';
 import { CalendarExportBar } from '@/components/meetups/CalendarExportBar';
 import { ShareLinkButton } from '@/components/meetups/ShareLinkButton';
+import { AudienceSection } from '@/components/meetups/AudienceSection';
 
 export default async function MeetupDetailPage({ params }: { params: { id: string } }) {
   if (!isModuleEnabled('meetups')) {
@@ -29,40 +30,72 @@ export default async function MeetupDetailPage({ params }: { params: { id: strin
     redirect('/sign-in');
   }
 
-  const meetup = await prisma.meetup.findUnique({
-    where: { id: params.id },
-    include: {
-      createdBy: {
-        select: { id: true, name: true, email: true },
-      },
-      timeSlots: {
-        orderBy: { startsAt: 'asc' },
-        include: {
-          votes: {
-            include: {
-              voterUser: { select: { id: true, name: true } },
+  const [meetup, userTeams, availableTeams, availableUsers] = await Promise.all([
+    prisma.meetup.findUnique({
+      where: { id: params.id },
+      include: {
+        createdBy: {
+          select: { id: true, name: true, email: true },
+        },
+        shares: {
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+            team: { select: { id: true, name: true } },
+          },
+        },
+        timeSlots: {
+          orderBy: { startsAt: 'asc' },
+          include: {
+            votes: {
+              include: {
+                voterUser: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+        signupSlots: {
+          orderBy: { order: 'asc' },
+          include: {
+            claims: {
+              include: {
+                user: { select: { id: true, name: true } },
+              },
             },
           },
         },
       },
-      signupSlots: {
-        orderBy: { order: 'asc' },
-        include: {
-          claims: {
-            include: {
-              user: { select: { id: true, name: true } },
-            },
-          },
-        },
-      },
-    },
-  });
+    }),
+    prisma.teamMember.findMany({
+      where: { userId: session.user.id },
+      select: { teamId: true },
+    }),
+    prisma.team.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.user.findMany({
+      select: { id: true, name: true, email: true },
+      orderBy: { name: 'asc' },
+    }),
+  ]);
 
   if (!meetup || meetup.archivedAt) {
     notFound();
   }
 
-  const canManage = session.user.role === 'ADMIN' || session.user.role === 'MANAGER';
+  const isAdmin = session.user.role === 'ADMIN';
+  const isManager = session.user.role === 'MANAGER';
+  const isCreator = meetup.createdById === session.user.id;
+  const isDirectlyShared = meetup.shares.some((s) => s.userId === session.user.id);
+  const userTeamIdSet = new Set(userTeams.map((t) => t.teamId));
+  const isTeamShared = meetup.shares.some((s) => s.teamId && userTeamIdSet.has(s.teamId));
+
+  const isVisible = isAdmin || meetup.isAllChurch || isCreator || isDirectlyShared || isTeamShared;
+  if (!isVisible) {
+    notFound();
+  }
+
+  const canManage = isAdmin || isManager || isCreator;
   const categoryMeta = CATEGORY_MAP[meetup.category] || CATEGORY_MAP.GENERAL;
   const isFinalized = Boolean(meetup.startsAt && meetup.finalizedTimeSlotId);
 
@@ -179,6 +212,16 @@ export default async function MeetupDetailPage({ params }: { params: { id: strin
           )}
         </div>
       </div>
+
+      {/* Audience & Sharing Section */}
+      <AudienceSection
+        meetupId={meetup.id}
+        isAllChurch={meetup.isAllChurch}
+        canManage={canManage}
+        shares={meetup.shares}
+        availableTeams={availableTeams}
+        availableUsers={availableUsers}
+      />
 
       {/* Agenda Section */}
       {meetup.agenda && (

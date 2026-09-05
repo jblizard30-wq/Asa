@@ -23,13 +23,21 @@ import {
 } from '@/components/MeetupIcons';
 import { createMeetup } from '@/lib/actions/meetups';
 
-export function NewMeetupModal({ onClose }: { onClose: () => void }) {
+export function NewMeetupModal({
+  onClose,
+  availableTeams = [],
+  availableUsers = [],
+}: {
+  onClose: () => void;
+  availableTeams?: Array<{ id: string; name: string }>;
+  availableUsers?: Array<{ id: string; name: string | null; email: string }>;
+}) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Step 1: Basics
+  // Step 1: Basics & Audience
   const [displayName, setDisplayName] = useState('');
   const [category, setCategory] = useState<MeetupCategory>('STAFF_MEETING');
   const [description, setDescription] = useState('');
@@ -37,6 +45,9 @@ export function NewMeetupModal({ onClose }: { onClose: () => void }) {
   const [virtualUrl, setVirtualUrl] = useState('');
   const [agenda, setAgenda] = useState('');
   const [minQuorum, setMinQuorum] = useState<number | undefined>(undefined);
+  const [isAllChurch, setIsAllChurch] = useState(false);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   // Step 2: Time Slots & Duration
   const [durationMinutes, setDurationMinutes] = useState(60);
@@ -142,6 +153,9 @@ export function NewMeetupModal({ onClose }: { onClose: () => void }) {
       minQuorum: minQuorum || undefined,
       isPotluck: isPotluckEnabled,
       hasRolesRoster: hasRolesEnabled,
+      isAllChurch,
+      targetTeamIds: isAllChurch ? [] : selectedTeamIds,
+      targetUserIds: isAllChurch ? [] : selectedUserIds,
       timeSlots: formattedSlots,
       rosterItems:
         (isPotluckEnabled || hasRolesEnabled)
@@ -303,6 +317,136 @@ export function NewMeetupModal({ onClose }: { onClose: () => void }) {
                   onChange={(e) => setAgenda(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 />
+              </div>
+
+              {/* Audience & Visibility */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-850/60 space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                    Audience & Visibility
+                  </label>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Choose who can see this meetup on the calendar and attend
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAllChurch(false)}
+                    className={`flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all ${
+                      !isAllChurch
+                        ? 'border-brand-500 bg-white shadow-sm ring-1 ring-brand-500/20 dark:border-brand-500 dark:bg-slate-800'
+                        : 'border-slate-200 bg-white/60 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="text-xl">👥</span>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                        Teams & Specific People
+                      </p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Private & targeted to selected groups or members
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAllChurch(true)}
+                    className={`flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all ${
+                      isAllChurch
+                        ? 'border-brand-500 bg-white shadow-sm ring-1 ring-brand-500/20 dark:border-brand-500 dark:bg-slate-800'
+                        : 'border-slate-200 bg-white/60 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="text-xl">🌐</span>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                        Church-Wide Invitation
+                      </p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Visible to all church members on their calendar
+                      </p>
+                    </div>
+                  </button>
+                </div>
+
+                {!isAllChurch && (
+                  <div className="space-y-3 pt-2 border-t border-slate-200/80 dark:border-slate-800">
+                    {/* Teams selector */}
+                    {availableTeams.length > 0 && (
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Invite Specific Teams ({selectedTeamIds.length} selected)
+                        </label>
+                        <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                          {availableTeams.map((team) => {
+                            const isSelected = selectedTeamIds.includes(team.id);
+                            return (
+                              <button
+                                key={team.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedTeamIds((prev) =>
+                                    isSelected ? prev.filter((id) => id !== team.id) : [...prev, team.id]
+                                  );
+                                }}
+                                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium border transition-all ${
+                                  isSelected
+                                    ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300 dark:border-brand-500'
+                                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                }`}
+                              >
+                                <span>{isSelected ? '✓' : '+'}</span>
+                                <span>{team.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* People selector */}
+                    {availableUsers.length > 0 && (
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Invite Specific Members ({selectedUserIds.length} selected)
+                        </label>
+                        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                          {availableUsers.map((user) => {
+                            const isSelected = selectedUserIds.includes(user.id);
+                            return (
+                              <button
+                                key={user.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedUserIds((prev) =>
+                                    isSelected ? prev.filter((id) => id !== user.id) : [...prev, user.id]
+                                  );
+                                }}
+                                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium border transition-all ${
+                                  isSelected
+                                    ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300 dark:border-brand-500'
+                                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                }`}
+                              >
+                                <span>{isSelected ? '✓' : '+'}</span>
+                                <span>{user.name || user.email}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedTeamIds.length === 0 && selectedUserIds.length === 0 && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                        ℹ️ No teams or people selected yet. This meetup will be private to you (as organizer) until shared.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

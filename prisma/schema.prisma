@@ -203,10 +203,11 @@ model User {
   raciChartShares   RaciChartShare[] @relation("RaciChartUserShares")
 
   // Meetups module (add-on — gated by ENABLED_MODULES, see src/lib/modules.ts).
-  meetupsCreated    Meetup[]          @relation("MeetupCreatedBy")
-  timeVotes         TimeVote[]        @relation("TimeVoteUser")
-  signupClaims      SignupClaim[]     @relation("SignupClaimUser")
-  meetupShares      MeetupShareLink[] @relation("MeetupShareCreatedBy")
+  meetupsCreated          Meetup[]          @relation("MeetupCreatedBy")
+  timeVotes               TimeVote[]        @relation("TimeVoteUser")
+  signupClaims            SignupClaim[]     @relation("SignupClaimUser")
+  meetupShareLinksCreated MeetupShareLink[] @relation("MeetupShareCreatedBy")
+  meetupShares            MeetupShare[]     @relation("MeetupUserShares")
 
   @@index([managerId])
 }
@@ -247,6 +248,7 @@ model Team {
   members         TeamMember[]
   workflows       Workflow[]
   raciChartShares RaciChartShare[] @relation("RaciChartTeamShares")
+  meetupShares    MeetupShare[]    @relation("MeetupTeamShares")
 }
 
 model TeamMember {
@@ -1398,6 +1400,7 @@ model Meetup {
   status              String         @default("ACTIVE")
   isPotluck           Boolean        @default(false)
   hasRolesRoster      Boolean        @default(false)
+  isAllChurch         Boolean        @default(false)
   virtualUrl          String?
   agenda              String?
   minQuorum           Int?
@@ -1419,10 +1422,12 @@ model Meetup {
   venueOptions        VenueOption[]
   signupSlots         SignupSlot[]
   shareLinks          MeetupShareLink[]
+  shares              MeetupShare[]
 
   @@index([startsAt])
   @@index([category])
   @@index([archivedAt])
+  @@index([isAllChurch])
 }
 
 model MeetupTimeSlot {
@@ -1524,5 +1529,22 @@ model MeetupShareLink {
 
   @@index([meetupId, revokedAt])
   @@index([expiresAt])
+}
+
+model MeetupShare {
+  id        String   @id @default(cuid())
+  meetupId  String
+  meetup    Meetup   @relation(fields: [meetupId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation("MeetupUserShares", fields: [userId], references: [id], onDelete: Cascade)
+  teamId    String?
+  team      Team?    @relation("MeetupTeamShares", fields: [teamId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([meetupId, userId])
+  @@unique([meetupId, teamId])
+  @@index([userId])
+  @@index([teamId])
+  @@index([meetupId])
 }
 

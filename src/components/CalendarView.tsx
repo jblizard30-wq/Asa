@@ -91,16 +91,25 @@ export function CalendarView() {
     return map;
   }, [filteredTasks]);
 
+  const filteredMeetups = useMemo(() => {
+    return meetups.filter((m) => {
+      if (filters.teamIds && filters.teamIds.length > 0) {
+        return m.isAllChurch || filters.teamIds.some((id) => m.teamIds.includes(id));
+      }
+      return true;
+    });
+  }, [meetups, filters.teamIds]);
+
   const meetupsByDay = useMemo(() => {
     const map = new Map<string, CalendarMeetup[]>();
-    for (const m of meetups) {
+    for (const m of filteredMeetups) {
       const key = m.startsAt.slice(0, 10);
       const list = map.get(key) ?? [];
       list.push(m);
       map.set(key, list);
     }
     return map;
-  }, [meetups]);
+  }, [filteredMeetups]);
 
   return (
     <div>
