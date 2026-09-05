@@ -197,6 +197,9 @@ model User {
   submittedInventoryCounts StockCount[]   @relation("InventoryStockCountSubmittedBy")
   orderedRestockOrders     RestockOrder[] @relation("InventoryRestockOrderedBy")
 
+  // RACI module (add-on — gated by ENABLED_MODULES, see src/lib/modules.ts).
+  raciPersonLinks RaciPerson[] @relation("RaciPersonUser")
+
   @@index([managerId])
 }
 
@@ -1135,4 +1138,170 @@ model RestockOrderItem {
   quantityOrdered  Int
   quantityReceived Int          @default(0)
   unitPrice        Decimal?     @db.Decimal(10, 2)
+}
+
+// ============================================================================
+// RACI module (add-on — gated by ENABLED_MODULES, see src/lib/modules.ts).
+// Ported from the standalone "Raci Repository" app, which is really an executive
+// pastor toolbox: 18 Drizzle tables, of which only these four carry the RACI
+// concept. The other 14 (initiatives, a 30-framework tool registry, an entity
+// ledger, a strategy library, meeting packets) are a separate product.
+//
+// The shape is a matrix: a chart owns ordered steps (rows) and ordered people
+// (columns), and RaciAssignment is the cell at each intersection. Asa-HQ-New's
+// blueprint modelled this as a single flat row carrying one role, which cannot
+// express "who is Accountable for step 3 of this process" — so this port follows
+// the source app's shape rather than the blueprint's.
+// ============================================================================
+
+enum RaciRole {
+  RESPONSIBLE
+  ACCOUNTABLE
+  CONSULTED
+  INFORMED
+}
+
+model RaciChart {
+  id           String    @id @default(cuid())
+  processName  String
+  trigger      String    @default("")
+  owner        String    @default("")
+  description  String    @default("")
+  ministryArea String?
+  reviewDate   DateTime?
+  isTemplate   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  archivedAt   DateTime?
+
+  steps  RaciStep[]
+  people RaciPerson[]
+
+  @@index([archivedAt])
+}
+
+/// A row of the matrix.
+model RaciStep {
+  id        String    @id @default(cuid())
+  chartId   String
+  chart     RaciChart @relation(fields: [chartId], references: [id], onDelete: Cascade)
+  stepName  String
+  stepOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  assignments RaciAssignment[]
+
+  @@index([chartId, stepOrder])
+}
+
+/// A column of the matrix. `userId` optionally links the free-text name to a real
+/// CPCana user; the source app kept these as free text with an optional directory
+/// link, and that stays optional here so a chart can name people with no login.
+model RaciPerson {
+  id          String    @id @default(cuid())
+  chartId     String
+  chart       RaciChart @relation(fields: [chartId], references: [id], onDelete: Cascade)
+  name        String
+  roleTitle   String    @default("")
+  personOrder Int       @default(0)
+  userId      String?
+  user        User?     @relation("RaciPersonUser", fields: [userId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  assignments RaciAssignment[]
+
+  @@index([chartId, personOrder])
+  @@index([userId])
+}
+
+/// One matrix cell. Composite PK mirrors the source schema's (step_id, person_id).
+/// `designations` is a list, not a single value, because one cell legitimately
+/// carries more than one letter — a process owner is often both R and A.
+model RaciAssignment {
+  stepId       String
+  step         RaciStep   @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  personId     String
+  person       RaciPerson @relation(fields: [personId], references: [id], onDelete: Cascade)
+  designations RaciRole[]
+  updatedAt    DateTime   @updatedAt
+
+  @@id([stepId, personId])
+  @@index([personId])
+}
+
+// ============================================================================
+// XP module (add-on — gated by ENABLED_MODULES, see src/lib/modules.ts).
+// "XP" is Executive Pastor. Ported from Asa-HQ-New's prisma/schema/xp.prisma,
+// re-keyed: every model there was `entityId String @id` against an `Entity`
+// model that exists only in Asa-HQ-New's core schema, so each model gets its own
+// cuid() id here. BoardPacket lives in XP rather than RACI — board decks are the
+// executive pastor's deliverable, and keeping it here lets a customer enable
+// either module without the other.
+//
+// FinancialSnapshot comes from the standalone "XP Skills" app's financial
+// calculator; its drills, templates and SQL-reference pages are static content
+// with no state and are deliberately not modelled, and its restock calculator is
+// already covered by the Inventory module.
+//
+// Invariant 8 (§7.1) carried over from the blueprint: zero individual salary PII.
+// The monetary models below deliberately carry NO userId foreign key, which is
+// why this module adds no User back-relation at all.
+// ============================================================================
+
+model BudgetLine {
+  id              String   @id @default(cuid())
+  fiscalYear      Int
+  category        String
+  allocatedAmount Decimal  @db.Decimal(12, 2)
+  spentAmount     Decimal  @default(0.00) @db.Decimal(12, 2)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([fiscalYear, category])
+}
+
+/// Why a line moved, captured per quarter. Threshold is the variance that
+/// triggered the memo, so a reader can tell a $50 swing from a $50,000 one.
+model VarianceMemo {
+  id              String   @id @default(cuid())
+  fiscalQuarter   String
+  category        String?
+  amountThreshold Decimal  @db.Decimal(12, 2)
+  explanation     String
+  mitigationPlan  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([fiscalQuarter])
+}
+
+model BoardPacket {
+  id           String    @id @default(cuid())
+  title        String
+  meetingDate  DateTime
+  packetUrl    String?
+  summaryNotes String?
+  status       String    @default("upcoming")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([meetingDate])
+}
+
+/// Inputs to the XP Skills financial calculator. The three health ratios
+/// (program efficiency, months of reserve, personnel cost) are derived on read,
+/// not stored, so a change to the formula never leaves stale numbers behind.
+model FinancialSnapshot {
+  id               String   @id @default(cuid())
+  periodDate       DateTime
+  unrestrictedCash Decimal  @db.Decimal(14, 2)
+  annualRevenue    Decimal  @db.Decimal(14, 2)
+  annualExpense    Decimal  @db.Decimal(14, 2)
+  programExpense   Decimal  @db.Decimal(14, 2)
+  personnelCost    Decimal  @db.Decimal(14, 2)
+  varianceNote     String?
+  createdAt        DateTime @default(now())
+
+  @@index([periodDate])
 }

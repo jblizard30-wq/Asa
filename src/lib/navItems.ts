@@ -28,6 +28,8 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'projects', label: 'All Projects', href: '/projects' },
   { key: 'calendar', label: 'Calendar', href: '/calendar' },
   { key: 'inventory', label: 'Inventory', href: '/inventory', module: 'inventory' },
+  { key: 'raci', label: 'RACI Charts', href: '/raci', module: 'raci' },
+  { key: 'xp', label: 'XP Hub', href: '/xp', module: 'xp' },
   { key: 'trash', label: 'Trash', href: '/trash' },
   { key: 'org-chart', label: 'Org Chart', href: '/org-chart' },
   { key: 'teams', label: 'Teams', href: '/teams', requires: 'canManageTeams' },
