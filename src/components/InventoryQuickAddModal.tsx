@@ -56,7 +56,7 @@ export function InventoryQuickAddModal({
         inventoryTypeId: selectedTrack || undefined,
       });
 
-      if (res.success && res.item) {
+      if (res.success) {
         onItemCreated({
           id: res.item.id,
           name: res.item.name,

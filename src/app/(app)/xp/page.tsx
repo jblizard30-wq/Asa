@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { isModuleEnabled } from '@/lib/modules';
+import { listToolDefinitions } from '@/lib/tools/registry';
 import { XpClient } from '@/components/XpClient';
 
 export default async function XpPage() {
@@ -52,6 +53,7 @@ export default async function XpPage() {
         status: p.status,
         summaryNotes: p.summaryNotes,
       }))}
+      tools={listToolDefinitions()}
     />
   );
 }

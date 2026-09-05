@@ -141,3 +141,82 @@ export async function createBoardPacket(input: {
     return { success: false, error: 'Could not create the board packet.' };
   }
 }
+
+export async function requestPacketPrintTask(input: {
+  packetId: string;
+  packetTitle: string;
+  copies: number;
+  paperStock: string;
+  bindingType: string;
+  dueDateTime: string;
+  deliverTo: string;
+  notes?: string;
+}): Promise<ActionResult<{ taskId: string }>> {
+  try {
+    const gate = requireXpModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireManagerOrAdmin();
+
+    let project = await prisma.project.findFirst({
+      where: {
+        OR: [
+          { name: { contains: 'Administration', mode: 'insensitive' } },
+          { name: { contains: 'Operations', mode: 'insensitive' } },
+          { name: { contains: 'Staff', mode: 'insensitive' } },
+        ],
+      },
+      include: { sections: true },
+    });
+
+    if (!project) {
+      project = await prisma.project.findFirst({ include: { sections: true } });
+    }
+
+    if (!project) {
+      return { success: false, error: 'No active project found to assign task to' };
+    }
+
+    const todoSection =
+      project.sections.find((s) => s.name.toUpperCase() === 'TODO' || s.name.toUpperCase() === 'TO DO') ||
+      project.sections[0];
+
+    if (!todoSection) {
+      return { success: false, error: 'No section found in project' };
+    }
+
+    const taskTitle = `Print & Bind Elder Packet: ${input.packetTitle} (${input.copies} Copies)`;
+
+    const description = `**Elder Board Packet Print Order**
+Requested by: **${session.user.name || session.user.email}**
+
+### Production Specifications:
+- **Quantity:** ${input.copies} copies
+- **Paper Stock:** ${input.paperStock}
+- **Binding / Finishing:** ${input.bindingType}
+- **Deliver To:** ${input.deliverTo}
+- **Deadline:** ${input.dueDateTime}
+${input.notes ? `\n**Special Instructions:**\n${input.notes}\n` : ''}
+---
+[View Board Packet in XP Hub](/xp)`;
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        sectionId: todoSection.id,
+        title: taskTitle,
+        description,
+        priority: 'HIGH',
+        status: 'TODO',
+        dueDate: input.dueDateTime ? new Date(input.dueDateTime) : undefined,
+      },
+    });
+
+    revalidatePath('/xp');
+    revalidatePath('/inbox');
+    revalidatePath('/dashboard');
+
+    return { success: true, taskId: task.id };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to create print task' };
+  }
+}

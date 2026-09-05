@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
-import { requireManagerOrAdmin, requireSession } from '@/lib/actions/inventory';
+import { requireManagerOrAdmin, requireSession } from '@/lib/permissions';
 import { isModuleEnabled } from '@/lib/modules';
 import {
   cleanVendor,

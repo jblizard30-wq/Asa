@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { isModuleEnabled } from '@/lib/modules';
-import { requireManagerOrAdmin } from '@/lib/actions/inventory';
+import { requireManagerOrAdmin } from '@/lib/permissions';
 import { CSVImporter } from '@/components/CSVImporter';
 
 export const metadata = {

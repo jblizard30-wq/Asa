@@ -3,6 +3,9 @@
 import { useState, useTransition } from 'react';
 import { createFinancialSnapshot, createBudgetLine, createBoardPacket } from '@/lib/actions/xp';
 import { allRatios } from '@/lib/xpRatios';
+import { ElderPacketPrintModal } from '@/components/ElderPacketPrintModal';
+import { StrategicFrameworksCatalog } from '@/components/StrategicFrameworksCatalog';
+import type { ToolDefinition } from '@/lib/tools/schema';
 
 interface Snapshot {
   id: string; periodDate: string; unrestrictedCash: number; annualRevenue: number;
@@ -26,17 +29,24 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export function XpClient({
-  canManage, snapshots, budgetLines, packets,
-}: { canManage: boolean; snapshots: Snapshot[]; budgetLines: BudgetLine[]; packets: Packet[] }) {
+  canManage, snapshots, budgetLines, packets, tools = [],
+}: {
+  canManage: boolean;
+  snapshots: Snapshot[];
+  budgetLines: BudgetLine[];
+  packets: Packet[];
+  tools?: ToolDefinition[];
+}) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'financial' | 'budget' | 'packets'>('financial');
+  const [tab, setTab] = useState<'financial' | 'budget' | 'packets' | 'tools'>('financial');
   const [form, setForm] = useState({
     periodDate: '', unrestrictedCash: '', annualRevenue: '',
     annualExpense: '', programExpense: '', personnelCost: '', varianceNote: '',
   });
   const [budget, setBudget] = useState({ fiscalYear: '', category: '', allocatedAmount: '', spentAmount: '' });
   const [packet, setPacket] = useState({ title: '', meetingDate: '', summaryNotes: '' });
+  const [selectedPrintPacket, setSelectedPrintPacket] = useState<Packet | null>(null);
 
   const latest = snapshots[0];
   const ratios = latest ? allRatios(latest) : [];
@@ -76,16 +86,22 @@ export function XpClient({
         </div>
       )}
 
-      <div className="flex gap-2 border-b border-slate-200">
-        {(['financial', 'budget', 'packets'] as const).map((t) => (
+      <div className="flex flex-wrap gap-2 border-b border-slate-200">
+        {(['financial', 'budget', 'packets', 'tools'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-3 py-2 text-sm font-medium ${
-              tab === t ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-500'
+            className={`px-3 py-2 text-sm font-medium transition-colors ${
+              tab === t ? 'border-b-2 border-slate-900 font-bold text-slate-900' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            {t === 'financial' ? 'Financial snapshots' : t === 'budget' ? 'Budget lines' : 'Board packets'}
+            {t === 'financial'
+              ? 'Financial snapshots'
+              : t === 'budget'
+              ? 'Budget lines'
+              : t === 'packets'
+              ? 'Board packets'
+              : `🛠️ Strategic Frameworks (${tools.length})`}
           </button>
         ))}
       </div>
@@ -289,13 +305,35 @@ export function XpClient({
               {packets.map((p) => (
                 <li key={p.id} className="flex items-center justify-between px-4 py-3 text-sm">
                   <span className="font-medium text-slate-800">{p.title}</span>
-                  <span className="text-slate-500">{p.meetingDate.slice(0, 10)} · {p.status}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-slate-500">{p.meetingDate.slice(0, 10)} · {p.status}</span>
+                    {canManage && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPrintPacket(p)}
+                        className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      >
+                        🖨️ Request Print Run
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </section>
       )}
+
+      {tab === 'tools' && <StrategicFrameworksCatalog tools={tools} />}
+
+      {selectedPrintPacket && (
+        <ElderPacketPrintModal
+          isOpen={Boolean(selectedPrintPacket)}
+          onClose={() => setSelectedPrintPacket(null)}
+          packetId={selectedPrintPacket.id}
+          packetTitle={selectedPrintPacket.title}
+        />
+      )}
     </div>
-  );
+);
 }
