@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { requireSession, requireManagerOrAdmin } from '@/lib/permissions';
 import { isModuleEnabled } from '@/lib/modules';
 import { Prisma } from '@prisma/client';
+import { onStockCountsSubmitted, onOrderReceived } from '@/lib/workflows/inventoryWorkflowBridge';
 
 export type ActionResult<T = unknown> =
   | ({ success: true } & T)
@@ -1077,5 +1078,65 @@ export async function deleteRestockOrder(orderId: string): Promise<ActionResult>
     return { success: true };
   } catch (err: unknown) {
     return { success: false, error: err instanceof Error ? err.message : 'Failed to delete order' };
+  }
+}
+
+export async function quickCreateInventoryItem(input: {
+  name: string;
+  unit?: string;
+  idealQty: number;
+  onHandQty?: number;
+  roomId: string;
+  shelfLocation?: string;
+  inventoryTypeId?: string;
+}): Promise<ActionResult<{ item: { id: string; name: string; unit: string; idealQty: number; onHandQty: number; reorderThreshold: number; shelfLocation: string | null } }>> {
+  try {
+    requireInventoryModule();
+    const session = await requireSession();
+    if (!input.name.trim() || !input.roomId) {
+      return { success: false, error: 'Name and Room are required' };
+    }
+
+    const item = await prisma.$transaction(async (tx) => {
+      const created = await tx.inventoryItem.create({
+        data: {
+          name: input.name.trim(),
+          unit: input.unit || 'Units',
+          idealQty: Math.max(1, input.idealQty || 5),
+          onHandQty: Math.max(0, input.onHandQty || 0),
+          roomId: input.roomId,
+          shelfLocation: input.shelfLocation?.trim() || null,
+          inventoryTypeId: input.inventoryTypeId || null,
+        },
+      });
+
+      if ((input.onHandQty || 0) > 0) {
+        await tx.stockCount.create({
+          data: {
+            itemId: created.id,
+            qty: input.onHandQty || 0,
+            submittedById: session.user.id,
+          },
+        });
+      }
+
+      return created;
+    });
+
+    revalidateAllInventory();
+    return {
+      success: true,
+      item: {
+        id: item.id,
+        name: item.name,
+        unit: item.unit,
+        idealQty: item.idealQty,
+        onHandQty: item.onHandQty,
+        reorderThreshold: item.reorderThreshold,
+        shelfLocation: item.shelfLocation,
+      },
+    };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to quick create item' };
   }
 }

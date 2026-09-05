@@ -270,6 +270,34 @@ export function RestockOrderDetailClient({
     document.body.removeChild(link);
   };
 
+
+  const isAmazon =
+    order.vendor.name.toLowerCase().includes('amazon') ||
+    Boolean(order.vendor.url && order.vendor.url.toLowerCase().includes('amazon'));
+
+  function extractAsin(text: string | null | undefined): string | null {
+    if (!text) return null;
+    const match = text.match(/\b(B0[A-Z0-9]{8})\b/i) || text.match(/\/dp\/([A-Z0-9]{10})/i);
+    return match ? match[1].toUpperCase() : null;
+  }
+
+  const amazonItemsWithAsin = order.items
+    .map((item) => ({
+      asin: extractAsin(item.shelfLocation) || extractAsin(item.itemName),
+      qty: item.quantityOrdered,
+    }))
+    .filter((item): item is { asin: string; qty: number } => Boolean(item.asin));
+
+  const amazonMultiCartUrl =
+    amazonItemsWithAsin.length > 0
+      ? 'https://www.amazon.com/gp/aws/cart/add.html?' +
+        amazonItemsWithAsin
+          .map((item, idx) => `ASIN.${idx + 1}=${item.asin}&Quantity.${idx + 1}=${item.qty}`)
+          .join('&')
+      : isAmazon
+      ? `https://www.amazon.com/s?k=${encodeURIComponent(order.items[0]?.itemName || '')}`
+      : null;
+
   return (
     <div className="space-y-8">
       {/* Top Back Nav & Actions */}
@@ -291,6 +319,19 @@ export function RestockOrderDetailClient({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+                    {/* 1-Click Amazon Multi-Cart */}
+          {isAmazon && amazonMultiCartUrl && (
+            <a
+              href={amazonMultiCartUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 px-3.5 py-2 text-xs font-semibold text-slate-950 shadow-sm transition-colors"
+              title="Add all items into your Amazon Cart in 1 click"
+            >
+              <ShoppingCartIcon className="h-4 w-4" /> 1-Click Amazon Cart ({amazonItemsWithAsin.length}/{order.items.length})
+            </a>
+          )}
+
           {/* Email Export */}
           {order.vendor.email && (
             <a
