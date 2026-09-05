@@ -29,3 +29,19 @@ These hold across the grid view, recurring tasks, and reminders features. Preser
 ## Known gaps (as of 2026-08-11)
 
 - Push/SMS reminder channels aren't implemented (`ReminderChannel` is EMAIL-only) — deferred intentionally, not an oversight.
+
+## Architectural Boundaries & Cross-Repo Contract
+
+1. **Role & Domain**:
+   - `CPCana` is the **single-church operations tenant** (the live production application for church staff and volunteers).
+   - Source of truth for all operational features: Tasks, Projects, Inventory, Meetups, RACI, Liturgical Calendar, and Forms.
+   - **ID Convention**: Standard Prisma `cuid()` identifiers.
+   - **Role Hierarchy**: 3-tier Role enum (`ADMIN`, `MANAGER`, `USER`).
+
+2. **Boundary with Asa-HQ (Control Plane)**:
+   - Do **NOT** import or pollute this repository with the control plane's generic `Entity` ledger or `uuid(7)` schemas.
+   - All cross-boundary communication with `Asa-HQ-New` occurs strictly over signed HTTP boundaries:
+     - **Emergency Support Login**: Verified via HMAC-SHA256 tokens signed with per-deployment `HQ_SUPPORT_SECRET` (`src/lib/supportLogin.ts` / `/support-login`).
+     - **Health & Heartbeats**: Lightweight `/api/health` endpoint responding to control plane status checks.
+     - **Opaque IDs**: Any external ID passed across repos must be treated as an opaque string.
+
