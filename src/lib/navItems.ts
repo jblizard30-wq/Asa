@@ -1,8 +1,11 @@
+import { isModuleEnabled, type ModuleKey } from './modules';
+
 export interface NavItemDef {
   key: string;
   label: string;
   href: string;
   requires?: 'admin' | 'canManageTeams';
+  module?: ModuleKey;
   keywords?: string[];
 }
 
@@ -24,6 +27,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'personal-tasks', label: 'Personal Tasks', href: '/personal-tasks' },
   { key: 'projects', label: 'All Projects', href: '/projects' },
   { key: 'calendar', label: 'Calendar', href: '/calendar' },
+  { key: 'inventory', label: 'Inventory', href: '/inventory', module: 'inventory' },
   { key: 'trash', label: 'Trash', href: '/trash' },
   { key: 'org-chart', label: 'Org Chart', href: '/org-chart' },
   { key: 'teams', label: 'Teams', href: '/teams', requires: 'canManageTeams' },
@@ -42,6 +46,7 @@ export const SETTINGS_NAV_ITEM: NavItemDef = {
 
 export function getVisibleNavDefs(role: RoleFlags): NavItemDef[] {
   return NAV_ITEMS.filter((item) => {
+    if (item.module && !isModuleEnabled(item.module)) return false;
     if (item.requires === 'admin') return role.isAdmin;
     if (item.requires === 'canManageTeams') return role.canManageTeams;
     return true;
