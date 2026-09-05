@@ -202,6 +202,12 @@ model User {
   raciChartsCreated RaciChart[]      @relation("RaciChartCreator")
   raciChartShares   RaciChartShare[] @relation("RaciChartUserShares")
 
+  // Meetups module (add-on — gated by ENABLED_MODULES, see src/lib/modules.ts).
+  meetupsCreated    Meetup[]          @relation("MeetupCreatedBy")
+  timeVotes         TimeVote[]        @relation("TimeVoteUser")
+  signupClaims      SignupClaim[]     @relation("SignupClaimUser")
+  meetupShares      MeetupShareLink[] @relation("MeetupShareCreatedBy")
+
   @@index([managerId])
 }
 
@@ -1344,3 +1350,179 @@ model FinancialSnapshot {
 
   @@index([periodDate])
 }
+
+// ============================================================================
+// Meetups module (add-on — gated by ENABLED_MODULES, see src/lib/modules.ts).
+// Flattened into CPCana's standard cuid-keyed schema convention.
+// ============================================================================
+
+enum MeetupCategory {
+  STAFF_MEETING
+  ONE_ON_ONE
+  BOARD_COMMITTEE
+  STRATEGY_PLANNING
+  WORKING_SESSION
+  MINISTRY_HANGOUT
+  VOLUNTEER_TRAINING
+  WORSHIP_REHEARSAL
+  RETREAT_OFFSITE
+  POTLUCK_SOCIAL
+  GENERAL
+  WORSHIP
+  FELLOWSHIP
+  STUDY
+  MISSION
+  COMMITTEE
+  RETREAT
+  TRAINING
+}
+
+enum VoteChoice {
+  YES
+  NO
+  IF_NEED_BE
+  IF_NEEDED
+}
+
+enum ShareCapability {
+  VIEW
+  VOTE
+  SIGNUP
+  COMMENT
+}
+
+model Meetup {
+  id                  String         @id @default(cuid())
+  title               String
+  category            MeetupCategory @default(GENERAL)
+  status              String         @default("ACTIVE")
+  isPotluck           Boolean        @default(false)
+  hasRolesRoster      Boolean        @default(false)
+  virtualUrl          String?
+  agenda              String?
+  minQuorum           Int?
+  finalizedTimeSlotId String?
+  finalizedVenueId    String?
+
+  startsAt            DateTime?
+  endsAt              DateTime?
+  location            String?
+  description         String?
+  createdById         String?
+  createdBy           User?          @relation("MeetupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  archivedAt          DateTime?
+
+  timeSlots           MeetupTimeSlot[]
+  timeVotes           TimeVote[]
+  venueOptions        VenueOption[]
+  signupSlots         SignupSlot[]
+  shareLinks          MeetupShareLink[]
+
+  @@index([startsAt])
+  @@index([category])
+  @@index([archivedAt])
+}
+
+model MeetupTimeSlot {
+  id        String     @id @default(cuid())
+  meetupId  String
+  meetup    Meetup     @relation(fields: [meetupId], references: [id], onDelete: Cascade)
+  startsAt  DateTime
+  endsAt    DateTime
+  label     String?
+  order     Int        @default(0)
+  createdAt DateTime   @default(now())
+
+  votes     TimeVote[]
+
+  @@index([meetupId])
+}
+
+model TimeVote {
+  id           String          @id @default(cuid())
+  meetupId     String
+  meetup       Meetup          @relation(fields: [meetupId], references: [id], onDelete: Cascade)
+  timeSlotId   String?
+  timeSlot     MeetupTimeSlot? @relation(fields: [timeSlotId], references: [id], onDelete: SetNull)
+  proposedTime DateTime
+  choice       VoteChoice      @default(YES)
+  voterUserId  String?
+  voterUser    User?           @relation("TimeVoteUser", fields: [voterUserId], references: [id], onDelete: SetNull)
+  voterName    String?
+  shareLinkId  String?
+  shareLink    MeetupShareLink? @relation(fields: [shareLinkId], references: [id], onDelete: SetNull)
+
+  @@index([meetupId])
+  @@index([timeSlotId])
+}
+
+model VenueOption {
+  id        String   @id @default(cuid())
+  meetupId  String
+  meetup    Meetup   @relation(fields: [meetupId], references: [id], onDelete: Cascade)
+  name      String
+  address   String?
+  mapUrl    String?
+  notes     String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([meetupId])
+}
+
+model SignupSlot {
+  id           String        @id @default(cuid())
+  meetupId     String
+  meetup       Meetup        @relation(fields: [meetupId], references: [id], onDelete: Cascade)
+  title        String
+  category     String        @default("General")
+  capacity     Int           @default(1)
+  claimedCount Int           @default(0)
+  order        Int           @default(0)
+  createdAt    DateTime      @default(now())
+
+  claims       SignupClaim[]
+
+  @@index([meetupId])
+}
+
+model SignupClaim {
+  id          String           @id @default(cuid())
+  slotId      String
+  slot        SignupSlot       @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?            @relation("SignupClaimUser", fields: [userId], references: [id], onDelete: SetNull)
+  shareLinkId String?
+  shareLink   MeetupShareLink? @relation(fields: [shareLinkId], references: [id], onDelete: SetNull)
+  claimerName String
+  notes       String?
+  createdAt   DateTime         @default(now())
+
+  @@index([slotId])
+}
+
+model MeetupShareLink {
+  id           String            @id @default(cuid())
+  token        String            @unique
+  tokenHash    String            @unique
+  meetupId     String
+  meetup       Meetup            @relation(fields: [meetupId], references: [id], onDelete: Cascade)
+  capabilities ShareCapability[]
+  label        String?
+  createdById  String
+  createdBy    User              @relation("MeetupShareCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime          @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  maxUses      Int?
+  useCount     Int               @default(0)
+
+  timeVotes    TimeVote[]
+  signupClaims SignupClaim[]
+
+  @@index([meetupId, revokedAt])
+  @@index([expiresAt])
+}
+

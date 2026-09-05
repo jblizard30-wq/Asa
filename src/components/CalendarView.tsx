@@ -13,7 +13,7 @@ import {
   startOfWeek,
   subMonths,
 } from 'date-fns';
-import { getTasksInRange, type CalendarTask } from '@/lib/actions/calendar';
+import { getTasksInRange, getMeetupsInRange, type CalendarTask, type CalendarMeetup } from '@/lib/actions/calendar';
 import { PRIORITY_LABELS, PRIORITY_STYLES, STATUS_LABELS } from '@/lib/format';
 import { TaskDetailModal } from '@/components/TaskDetailModal';
 import { TaskFilterBar } from '@/components/TaskFilterBar';
@@ -27,6 +27,7 @@ const PRIORITY_OPTIONS = Object.entries(PRIORITY_LABELS).map(([id, label]) => ({
 export function CalendarView() {
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [tasks, setTasks] = useState<CalendarTask[]>([]);
+  const [meetups, setMeetups] = useState<CalendarMeetup[]>([]);
   const [teams, setTeams] = useState<{ id: string; name: string }[]>([]);
   const [teamIdsByUserId, setTeamIdsByUserId] = useState<Record<string, string[]>>({});
   const [isPending, startTransition] = useTransition();
@@ -43,6 +44,9 @@ export function CalendarView() {
         setTasks(result.tasks);
         setTeams(result.teams);
         setTeamIdsByUserId(result.teamIdsByUserId);
+      });
+      getMeetupsInRange(gridStart.toISOString(), gridEnd.toISOString()).then((res) => {
+        setMeetups(res);
       });
     });
     // gridStart/gridEnd are derived from `month`, so re-fetching on month change alone is sufficient.
@@ -86,6 +90,17 @@ export function CalendarView() {
     }
     return map;
   }, [filteredTasks]);
+
+  const meetupsByDay = useMemo(() => {
+    const map = new Map<string, CalendarMeetup[]>();
+    for (const m of meetups) {
+      const key = m.startsAt.slice(0, 10);
+      const list = map.get(key) ?? [];
+      list.push(m);
+      map.set(key, list);
+    }
+    return map;
+  }, [meetups]);
 
   return (
     <div>
@@ -146,6 +161,7 @@ export function CalendarView() {
         {days.map((day) => {
           const key = format(day, 'yyyy-MM-dd');
           const dayTasks = tasksByDay.get(key) ?? [];
+          const dayMeetups = meetupsByDay.get(key) ?? [];
           const inMonth = isSameMonth(day, month);
           return (
             <div
@@ -166,6 +182,16 @@ export function CalendarView() {
                 {format(day, 'd')}
               </p>
               <div className="mt-1 space-y-1">
+                {dayMeetups.map((m) => (
+                  <a
+                    key={m.id}
+                    href={`/meetups/${m.id}`}
+                    className="block w-full truncate rounded px-1.5 py-0.5 text-left text-[11px] font-medium bg-purple-100 text-purple-800 hover:bg-purple-200 dark:bg-purple-950/70 dark:text-purple-300 dark:hover:bg-purple-900/60 transition-colors"
+                    title={`Meetup: ${m.title}${m.location ? ` @ ${m.location}` : ''}`}
+                  >
+                    🗓️ {m.title}
+                  </a>
+                ))}
                 {dayTasks.slice(0, MAX_VISIBLE_PER_DAY).map((t) => (
                   <button
                     key={t.id}

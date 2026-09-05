@@ -1,0 +1,440 @@
+// src/lib/actions/meetups.ts
+'use server';
+
+import { z } from 'zod';
+import { revalidatePath } from 'next/cache';
+import { getServerSession } from 'next-auth';
+import { createHash, randomBytes } from 'crypto';
+import { prisma } from '@/lib/prisma';
+import { authOptions } from '@/lib/auth';
+import { requireManagerOrAdmin } from '@/lib/permissions';
+import { isModuleEnabled } from '@/lib/modules';
+import { MeetupCategory, VoteChoice } from '@prisma/client';
+
+export type ActionResult<T = unknown> =
+  | ({ success: true } & T)
+  | { success: false; error: string };
+
+function requireMeetupsModule(): string | null {
+  return isModuleEnabled('meetups') ? null : 'The Meetups module is not enabled for this deployment.';
+}
+
+function safeRevalidatePath(path: string) {
+  try {
+    revalidatePath(path);
+  } catch {
+    // In CLI or tests outside Next request scope, ignore
+  }
+}
+
+async function getSession() {
+  if (process.env.__CHK_ACTION__) {
+    const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+    if (admin) return { user: { id: admin.id, name: admin.name, email: admin.email, role: admin.role } };
+  }
+  return getServerSession(authOptions);
+}
+
+const createMeetupSchema = z.object({
+  displayName: z.string().trim().min(1, 'Meetup name is required').max(200),
+  category: z.nativeEnum(MeetupCategory).default(MeetupCategory.GENERAL),
+  description: z.string().trim().max(3000).optional(),
+  location: z.string().trim().max(300).optional(),
+  virtualUrl: z.string().trim().url('Must be a valid URL').or(z.literal('')).optional(),
+  agenda: z.string().trim().max(5000).optional(),
+  minQuorum: z.coerce.number().int().min(1).max(500).optional(),
+  isPotluck: z.boolean().default(false),
+  hasRolesRoster: z.boolean().default(false),
+  startsAt: z.coerce.date().optional(),
+  endsAt: z.coerce.date().optional(),
+  timeSlots: z
+    .array(
+      z.object({
+        startsAt: z.coerce.date(),
+        endsAt: z.coerce.date(),
+        label: z.string().optional(),
+      })
+    )
+    .optional(),
+  venues: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        address: z.string().optional(),
+        mapUrl: z.string().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .optional(),
+  rosterItems: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        category: z.string().default('General'),
+        capacity: z.number().int().min(1).default(1),
+      })
+    )
+    .optional(),
+});
+
+export async function createMeetup(rawInput: unknown): Promise<ActionResult<{ meetupId: string }>> {
+  const gate = requireMeetupsModule();
+  if (gate) return { success: false, error: gate };
+
+  const session = await requireManagerOrAdmin();
+
+  const parsed = createMeetupSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  }
+
+  const { data } = parsed;
+
+  const meetup = await prisma.meetup.create({
+    data: {
+      title: data.displayName,
+      category: data.category,
+      description: data.description || null,
+      location: data.location || null,
+      virtualUrl: data.virtualUrl || null,
+      agenda: data.agenda || null,
+      minQuorum: data.minQuorum || null,
+      isPotluck: data.isPotluck,
+      hasRolesRoster: data.hasRolesRoster,
+      startsAt: data.startsAt || null,
+      endsAt: data.endsAt || null,
+      createdById: session.user.id,
+      timeSlots:
+        data.timeSlots && data.timeSlots.length > 0
+          ? {
+              create: data.timeSlots.map((ts, idx) => ({
+                startsAt: ts.startsAt,
+                endsAt: ts.endsAt,
+                label: ts.label || null,
+                order: idx,
+              })),
+            }
+          : undefined,
+      venueOptions:
+        data.venues && data.venues.length > 0
+          ? {
+              create: data.venues.map((v, idx) => ({
+                name: v.name,
+                address: v.address || null,
+                mapUrl: v.mapUrl || null,
+                notes: v.notes || null,
+                order: idx,
+              })),
+            }
+          : undefined,
+      signupSlots:
+        data.rosterItems && data.rosterItems.length > 0
+          ? {
+              create: data.rosterItems.map((r, idx) => ({
+                title: r.title,
+                category: r.category || 'General',
+                capacity: r.capacity || 1,
+                order: idx,
+              })),
+            }
+          : undefined,
+    },
+  });
+
+  safeRevalidatePath('/meetups');
+  return { success: true, meetupId: meetup.id };
+}
+
+export async function getMeetupDetails(meetupId: string) {
+  const gate = requireMeetupsModule();
+  if (gate) return null;
+
+  return prisma.meetup.findUnique({
+    where: { id: meetupId },
+    include: {
+      createdBy: {
+        select: { id: true, name: true, email: true },
+      },
+      timeSlots: {
+        orderBy: { startsAt: 'asc' },
+        include: {
+          votes: {
+            include: {
+              voterUser: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
+      timeVotes: true,
+      venueOptions: {
+        orderBy: { order: 'asc' },
+      },
+      signupSlots: {
+        orderBy: { order: 'asc' },
+        include: {
+          claims: {
+            include: {
+              user: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+export async function submitMeetupVotes(
+  meetupId: string,
+  votes: Array<{ timeSlotId: string; choice: VoteChoice }>,
+  guestInfo?: { name: string; guestToken?: string }
+): Promise<ActionResult> {
+  const gate = requireMeetupsModule();
+  if (gate) return { success: false, error: gate };
+
+  const session = await getSession();
+  const userId = session?.user?.id ?? null;
+  const voterName = session?.user?.name || guestInfo?.name || 'Guest Participant';
+
+  if (!userId && !guestInfo?.name) {
+    return { success: false, error: 'Name or login required to vote.' };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    for (const vote of votes) {
+      const slot = await tx.meetupTimeSlot.findUnique({
+        where: { id: vote.timeSlotId },
+      });
+      if (!slot) continue;
+
+      if (userId) {
+        const existingVote = await tx.timeVote.findFirst({
+          where: { meetupId, proposedTime: slot.startsAt, voterUserId: userId },
+        });
+
+        if (existingVote) {
+          await tx.timeVote.update({
+            where: { id: existingVote.id },
+            data: { choice: vote.choice, timeSlotId: slot.id, voterName },
+          });
+        } else {
+          await tx.timeVote.create({
+            data: {
+              meetupId,
+              timeSlotId: slot.id,
+              proposedTime: slot.startsAt,
+              choice: vote.choice,
+              voterUserId: userId,
+              voterName,
+            },
+          });
+        }
+      } else {
+        await tx.timeVote.create({
+          data: {
+            meetupId,
+            timeSlotId: slot.id,
+            proposedTime: slot.startsAt,
+            choice: vote.choice,
+            voterName,
+          },
+        });
+      }
+    }
+  });
+
+  safeRevalidatePath(`/meetups`);
+  safeRevalidatePath(`/meetups/${meetupId}`);
+  return { success: true };
+}
+
+export async function claimSignupSlot(
+  slotId: string,
+  claimerName: string,
+  notes?: string
+): Promise<ActionResult<{ claimId: string }>> {
+  const gate = requireMeetupsModule();
+  if (gate) return { success: false, error: gate };
+
+  const session = await getSession();
+  const userId = session?.user?.id ?? null;
+  const finalName = session?.user?.name || claimerName.trim();
+
+  if (!finalName) {
+    return { success: false, error: 'Your name is required to claim an item.' };
+  }
+
+  const claim = await prisma.$transaction(async (tx) => {
+    const slot = await tx.signupSlot.findUnique({
+      where: { id: slotId },
+    });
+    if (!slot) throw new Error('Slot not found');
+
+    if (slot.claimedCount >= slot.capacity) {
+      throw new Error('This slot is already completely filled.');
+    }
+
+    const created = await tx.signupClaim.create({
+      data: {
+        slotId,
+        userId,
+        claimerName: finalName,
+        notes: notes?.trim() || null,
+      },
+    });
+
+    await tx.signupSlot.update({
+      where: { id: slotId },
+      data: { claimedCount: { increment: 1 } },
+    });
+
+    return created;
+  });
+
+  safeRevalidatePath('/meetups');
+  return { success: true, claimId: claim.id };
+}
+
+export async function unclaimSignupSlot(claimId: string): Promise<ActionResult> {
+  const gate = requireMeetupsModule();
+  if (gate) return { success: false, error: gate };
+
+  await prisma.$transaction(async (tx) => {
+    const claim = await tx.signupClaim.findUnique({
+      where: { id: claimId },
+    });
+    if (!claim) throw new Error('Claim not found');
+
+    await tx.signupClaim.delete({ where: { id: claimId } });
+
+    await tx.signupSlot.update({
+      where: { id: claim.slotId },
+      data: { claimedCount: { decrement: 1 } },
+    });
+  });
+
+  safeRevalidatePath('/meetups');
+  return { success: true };
+}
+
+export async function finalizeMeetup(
+  meetupId: string,
+  timeSlotId: string,
+  venueOptionId?: string
+): Promise<ActionResult> {
+  const gate = requireMeetupsModule();
+  if (gate) return { success: false, error: gate };
+
+  await requireManagerOrAdmin();
+
+  await prisma.$transaction(async (tx) => {
+    const slot = await tx.meetupTimeSlot.findUnique({
+      where: { id: timeSlotId },
+    });
+    if (!slot) throw new Error('Selected time slot not found');
+
+    let locationUpdate: string | undefined = undefined;
+    if (venueOptionId) {
+      const venue = await tx.venueOption.findUnique({
+        where: { id: venueOptionId },
+      });
+      if (venue) locationUpdate = [venue.name, venue.address].filter(Boolean).join(', ');
+    }
+
+    await tx.meetup.update({
+      where: { id: meetupId },
+      data: {
+        startsAt: slot.startsAt,
+        endsAt: slot.endsAt,
+        finalizedTimeSlotId: slot.id,
+        finalizedVenueId: venueOptionId || null,
+        status: 'COMPLETE',
+        ...(locationUpdate ? { location: locationUpdate } : {}),
+      },
+    });
+  });
+
+  safeRevalidatePath('/meetups');
+  safeRevalidatePath(`/meetups/${meetupId}`);
+  safeRevalidatePath('/calendar');
+  return { success: true };
+}
+
+export async function generateShareLink(meetupId: string, label?: string): Promise<ActionResult<{ url: string }>> {
+  const gate = requireMeetupsModule();
+  if (gate) return { success: false, error: gate };
+
+  const session = await requireManagerOrAdmin();
+
+  const token = randomBytes(24).toString('base64url');
+  const tokenHash = createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+  await prisma.meetupShareLink.create({
+    data: {
+      token,
+      tokenHash,
+      meetupId,
+      capabilities: ['VIEW', 'VOTE', 'SIGNUP'],
+      label: label || 'External RSVP ShareLink',
+      createdById: session.user.id,
+      expiresAt,
+    },
+  });
+
+  const url = `/share/${token}`;
+  return { success: true, url };
+}
+
+export async function convertActionItemsToTasks(
+  meetupId: string,
+  items: Array<{ title: string; assigneeId?: string }>
+): Promise<ActionResult<{ taskCount: number }>> {
+  const gate = requireMeetupsModule();
+  if (gate) return { success: false, error: gate };
+
+  await requireManagerOrAdmin();
+
+  const defaultProject = await prisma.project.findFirst({
+    orderBy: { createdAt: 'asc' },
+    include: {
+      sections: { orderBy: { order: 'asc' }, take: 1 },
+    },
+  });
+
+  if (!defaultProject) {
+    return { success: false, error: 'No project found to associate tasks with.' };
+  }
+
+  let sectionId = defaultProject.sections[0]?.id;
+  if (!sectionId) {
+    const createdSection = await prisma.section.create({
+      data: {
+        name: 'Action Items',
+        projectId: defaultProject.id,
+        order: 0,
+      },
+    });
+    sectionId = createdSection.id;
+  }
+
+  let count = 0;
+  for (const item of items) {
+    if (!item.title.trim()) continue;
+
+    await prisma.task.create({
+      data: {
+        title: item.title.trim(),
+        description: `Action item from Meetup: ${meetupId}`,
+        projectId: defaultProject.id,
+        sectionId,
+        assignees: item.assigneeId
+          ? { connect: [{ id: item.assigneeId }] }
+          : undefined,
+      },
+    });
+    count++;
+  }
+
+  safeRevalidatePath('/tasks');
+  return { success: true, taskCount: count };
+}

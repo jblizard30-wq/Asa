@@ -41,7 +41,7 @@ export const DEFAULT_NAV_GROUPS: { name: string; itemKeys: string[] }[] = [
   },
   {
     name: 'Operations',
-    itemKeys: ['projects', 'inventory', 'raci'],
+    itemKeys: ['projects', 'inventory', 'meetups', 'raci'],
   },
   {
     name: 'Strategy & Teams',
@@ -61,6 +61,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'projects', label: 'All Projects', href: '/projects' },
   { key: 'calendar', label: 'Calendar', href: '/calendar' },
   { key: 'inventory', label: 'Inventory', href: '/inventory', module: 'inventory' },
+  { key: 'meetups', label: 'Meetups', href: '/meetups', module: 'meetups' },
   { key: 'raci', label: 'RACI Charts', href: '/raci', module: 'raci' },
   { key: 'xp', label: 'XP Hub', href: '/xp', module: 'xp' },
   { key: 'trash', label: 'Trash', href: '/trash' },

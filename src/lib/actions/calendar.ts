@@ -101,3 +101,42 @@ export async function getTasksInRange(startISO: string, endISO: string): Promise
 
   return { tasks: resultTasks, teams, teamIdsByUserId: Object.fromEntries(teamIdsByUserId) };
 }
+
+export interface CalendarMeetup {
+  id: string;
+  title: string;
+  category: string;
+  startsAt: string;
+  endsAt: string | null;
+  location: string | null;
+  virtualUrl: string | null;
+  isPotluck: boolean;
+}
+
+/** Finalized meetups occurring within [startISO, endISO] if the meetups module is enabled. */
+export async function getMeetupsInRange(startISO: string, endISO: string): Promise<CalendarMeetup[]> {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return [];
+
+  const { isModuleEnabled } = await import('@/lib/modules');
+  if (!isModuleEnabled('meetups')) return [];
+
+  const meetups = await prisma.meetup.findMany({
+    where: {
+      archivedAt: null,
+      startsAt: { gte: new Date(startISO), lte: new Date(endISO) },
+    },
+    orderBy: { startsAt: 'asc' },
+  });
+
+  return meetups.map((m) => ({
+    id: m.id,
+    title: m.title,
+    category: m.category,
+    startsAt: m.startsAt!.toISOString(),
+    endsAt: m.endsAt ? m.endsAt.toISOString() : null,
+    location: m.location,
+    virtualUrl: m.virtualUrl,
+    isPotluck: m.isPotluck,
+  }));
+}
