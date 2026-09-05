@@ -3,6 +3,7 @@
 import { useState, useTransition, useMemo } from 'react';
 import Link from 'next/link';
 import {
+  QrCodeIcon,
   CheckIcon,
   ChevronRightIcon,
   ChevronLeftIcon,
@@ -17,6 +18,8 @@ import {
   LayersIcon,
 } from '@/components/InventoryIcons';
 import { submitBatchStockCounts } from '@/lib/actions/inventory';
+import { InventoryQrScannerModal } from './InventoryQrScannerModal';
+import { InventoryQuickAddModal } from './InventoryQuickAddModal';
 
 export interface CountingItem {
   id: string;
@@ -63,9 +66,41 @@ export function InventoryCountClient({
 }: InventoryCountClientProps) {
   const [selectedTrack, setSelectedTrack] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'walk' | 'list'>('list');
+  const [currentItems, setCurrentItems] = useState<CountingItem[]>(items);
   const [counts, setCounts] = useState<Record<string, number>>(() =>
     Object.fromEntries(items.map((i) => [i.id, i.onHandQty]))
   );
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [prefilledCode, setPrefilledCode] = useState('');
+
+  const handleScanned = (code: string) => {
+    const trimmed = code.trim();
+    if (!trimmed) return;
+
+    const matchIdx = currentItems.findIndex(
+      (i) =>
+        i.id === trimmed ||
+        i.name.toLowerCase() === trimmed.toLowerCase() ||
+        (i.shelfLocation && i.shelfLocation.toLowerCase().includes(trimmed.toLowerCase()))
+    );
+
+    setIsQrModalOpen(false);
+    if (matchIdx !== -1) {
+      setActiveIdx(matchIdx);
+      setViewMode('walk');
+    } else {
+      setPrefilledCode(trimmed);
+      setIsQuickAddOpen(true);
+    }
+  };
+
+  const handleItemCreated = (newItem: CountingItem) => {
+    setCurrentItems((prev) => [...prev, newItem]);
+    setCounts((prev) => ({ ...prev, [newItem.id]: newItem.onHandQty }));
+    setActiveIdx(currentItems.length);
+    setViewMode('walk');
+  };
   const [activeIdx, setActiveIdx] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -73,9 +108,9 @@ export function InventoryCountClient({
 
   // Filter items by selected track
   const filteredItems = useMemo(() => {
-    if (selectedTrack === 'all') return items;
-    return items.filter((i) => i.inventoryTypeId === selectedTrack);
-  }, [items, selectedTrack]);
+    if (selectedTrack === 'all') return currentItems;
+    return currentItems.filter((i) => i.inventoryTypeId === selectedTrack);
+  }, [currentItems, selectedTrack]);
 
   const currentItem = filteredItems[activeIdx] || filteredItems[0];
   const currentVal = currentItem ? counts[currentItem.id] ?? 0 : 0;
@@ -117,7 +152,7 @@ export function InventoryCountClient({
     });
   };
 
-  const itemsBelowPar = items.filter((i) => (counts[i.id] ?? 0) < i.idealQty).length;
+  const itemsBelowPar = currentItems.filter((i) => (counts[i.id] ?? 0) < i.idealQty).length;
 
   return (
     <div className="mx-auto max-w-3xl pb-24">
@@ -146,6 +181,31 @@ export function InventoryCountClient({
           </div>
 
           <div className="flex items-center gap-2">
+                        {/* Scan QR Button */}
+            <button
+              type="button"
+              onClick={() => setIsQrModalOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-200"
+              title="Scan QR code or Barcode"
+            >
+              <QrCodeIcon className="h-3.5 w-3.5 text-brand-600 dark:text-brand-400" />
+              <span className="hidden sm:inline">Scan Code</span>
+            </button>
+
+            {/* Quick Add Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setPrefilledCode('');
+                setIsQuickAddOpen(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-200"
+              title="Quick-add new item to this room"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Add Item</span>
+            </button>
+
             {/* View Mode Toggle */}
             <div className="flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
               <button
@@ -489,6 +549,21 @@ export function InventoryCountClient({
           )}
         </div>
       )}
+          <InventoryQrScannerModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        onScanned={handleScanned}
+      />
+
+      <InventoryQuickAddModal
+        isOpen={isQuickAddOpen}
+        onClose={() => setIsQuickAddOpen(false)}
+        roomId={roomId}
+        roomName={roomName}
+        prefilledCode={prefilledCode}
+        inventoryTypes={inventoryTypes}
+        onItemCreated={handleItemCreated}
+      />
     </div>
   );
 }

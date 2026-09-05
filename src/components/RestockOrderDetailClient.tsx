@@ -27,6 +27,7 @@ import {
   receiveRestockOrder,
   deleteRestockOrder,
 } from '@/lib/actions/inventory';
+import { formatCalendarDate } from '@/lib/dateUtils';
 
 export interface OrderDetailItem {
   id: string;
@@ -199,7 +200,7 @@ export function RestockOrderDetailClient({
     `Hi ${order.vendor.contactPerson || order.vendor.name},\n\n` +
     `Please place an order for church supplies:\n` +
     `Purchase Order: ${order.poNumber}\n` +
-    `Order Date: ${order.orderDate ? new Date(order.orderDate).toLocaleDateString() : new Date().toLocaleDateString()}\n\n` +
+    `Order Date: ${formatCalendarDate(order.orderDate) ?? formatCalendarDate(new Date())}\n\n` +
     `Items:\n` +
     order.items
       .map(
@@ -269,6 +270,34 @@ export function RestockOrderDetailClient({
     document.body.removeChild(link);
   };
 
+
+  const isAmazon =
+    order.vendor.name.toLowerCase().includes('amazon') ||
+    Boolean(order.vendor.url && order.vendor.url.toLowerCase().includes('amazon'));
+
+  function extractAsin(text: string | null | undefined): string | null {
+    if (!text) return null;
+    const match = text.match(/\b(B0[A-Z0-9]{8})\b/i) || text.match(/\/dp\/([A-Z0-9]{10})/i);
+    return match ? match[1].toUpperCase() : null;
+  }
+
+  const amazonItemsWithAsin = order.items
+    .map((item) => ({
+      asin: extractAsin(item.shelfLocation) || extractAsin(item.itemName),
+      qty: item.quantityOrdered,
+    }))
+    .filter((item): item is { asin: string; qty: number } => Boolean(item.asin));
+
+  const amazonMultiCartUrl =
+    amazonItemsWithAsin.length > 0
+      ? 'https://www.amazon.com/gp/aws/cart/add.html?' +
+        amazonItemsWithAsin
+          .map((item, idx) => `ASIN.${idx + 1}=${item.asin}&Quantity.${idx + 1}=${item.qty}`)
+          .join('&')
+      : isAmazon
+      ? `https://www.amazon.com/s?k=${encodeURIComponent(order.items[0]?.itemName || '')}`
+      : null;
+
   return (
     <div className="space-y-8">
       {/* Top Back Nav & Actions */}
@@ -290,6 +319,19 @@ export function RestockOrderDetailClient({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+                    {/* 1-Click Amazon Multi-Cart */}
+          {isAmazon && amazonMultiCartUrl && (
+            <a
+              href={amazonMultiCartUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 px-3.5 py-2 text-xs font-semibold text-slate-950 shadow-sm transition-colors"
+              title="Add all items into your Amazon Cart in 1 click"
+            >
+              <ShoppingCartIcon className="h-4 w-4" /> 1-Click Amazon Cart ({amazonItemsWithAsin.length}/{order.items.length})
+            </a>
+          )}
+
           {/* Email Export */}
           {order.vendor.email && (
             <a
@@ -422,15 +464,13 @@ export function RestockOrderDetailClient({
               <div>
                 <span className="text-slate-400">Order Date:</span>{' '}
                 <strong className="text-slate-800 dark:text-slate-200">
-                  {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 'Not recorded'}
+                  {formatCalendarDate(order.orderDate) ?? 'Not recorded'}
                 </strong>
               </div>
               <div>
                 <span className="text-slate-400">Expected Delivery:</span>{' '}
                 <strong className="text-slate-800 dark:text-slate-200">
-                  {order.expectedDelivery
-                    ? new Date(order.expectedDelivery).toLocaleDateString()
-                    : 'Not specified'}
+                  {formatCalendarDate(order.expectedDelivery) ?? 'Not specified'}
                 </strong>
               </div>
               <div>

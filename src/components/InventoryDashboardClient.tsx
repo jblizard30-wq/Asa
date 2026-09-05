@@ -839,6 +839,9 @@ function ItemFormModal({
   onSubmit: (data: ItemFormData) => Promise<void>;
 }) {
   const [loading, setLoading] = useState(false);
+  // updateInventoryItem accepts no onHandQty, so an edited value here was silently
+  // dropped. Only createInventoryItem takes an opening quantity.
+  const isEdit = initialData !== undefined;
   const [name, setName] = useState(initialData?.name || '');
   const [unit, setUnit] = useState(initialData?.unit || 'Boxes');
   const [idealQty, setIdealQty] = useState(initialData?.idealQty ?? 10);
@@ -929,15 +932,22 @@ function ItemFormModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                Current On Hand Qty
+                {isEdit ? 'Current On Hand Qty (count to change)' : 'Current On Hand Qty'}
               </label>
               <input
                 type="number"
                 min="0"
                 value={onHandQty}
+                disabled={isEdit}
                 onChange={(e) => setOnHandQty(parseInt(e.target.value) || 0)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-900 dark:disabled:text-slate-400"
               />
+              {isEdit && (
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  On hand changes through a stock count, so it stays attributable — use the
+                  count controls on the item row.
+                </p>
+              )}
             </div>
 
             <div>

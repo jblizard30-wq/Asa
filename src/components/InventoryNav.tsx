@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { PackageIcon, ShoppingCartIcon, TruckIcon, SettingsIcon } from '@/components/InventoryIcons';
+import { PackageIcon, ShoppingCartIcon, TruckIcon, SettingsIcon, SparklesIcon } from '@/components/InventoryIcons';
 
 export function InventoryNav({ canManage }: { canManage: boolean }) {
   const pathname = usePathname();
@@ -12,7 +12,10 @@ export function InventoryNav({ canManage }: { canManage: boolean }) {
     { href: '/inventory/orders', label: 'Restock Orders', icon: ShoppingCartIcon, exact: false },
     { href: '/inventory/vendors', label: 'Vendors', icon: TruckIcon, exact: false },
     ...(canManage
-      ? [{ href: '/inventory/settings', label: 'Catalog & Settings', icon: SettingsIcon, exact: false }]
+      ? [
+          { href: '/inventory/import', label: 'Import CSV', icon: SparklesIcon, exact: false },
+          { href: '/inventory/settings', label: 'Catalog & Settings', icon: SettingsIcon, exact: false },
+        ]
       : []),
   ];
 

@@ -18,6 +18,10 @@ import {
   createRestockOrder,
   quickRestockVendorItemsToPar,
 } from '@/lib/actions/inventory';
+import { formatCalendarDate, getChicagoToday } from '@/lib/dateUtils';
+
+/** Synthetic grouping key used by the orders page for items with no vendor. */
+const UNASSIGNED_VENDOR_ID = 'unassigned';
 
 export interface VendorNeededGroup {
   vendorId: string;
@@ -111,7 +115,11 @@ export function RestockOrdersListClient({
 
   const handleQuickRestockVendor = async (vendorId: string, vendorName: string) => {
     if (!confirm(`Mark all items from "${vendorName}" as restocked to par level?`)) return;
-    const res = await quickRestockVendorItemsToPar(vendorId);
+    // 'unassigned' is a synthetic grouping key for items with no vendor (see the orders
+    // page), not a real Vendor id. Passing it through matched nothing and reported success.
+    const res = await quickRestockVendorItemsToPar(
+      vendorId === UNASSIGNED_VENDOR_ID ? null : vendorId
+    );
     if (!res.success) {
       alert(res.error);
     } else {
@@ -120,6 +128,15 @@ export function RestockOrdersListClient({
   };
 
   const handleCreateDraftFromGroup = async (group: VendorNeededGroup) => {
+    // A purchase order requires a real vendor (RestockOrder.vendorId is a non-null FK), so
+    // the synthetic "Unassigned Supplier" group cannot become one — sending the sentinel
+    // through produced a raw foreign-key error in an alert box.
+    if (group.vendorId === UNASSIGNED_VENDOR_ID) {
+      alert(
+        'These items have no vendor assigned. Assign a vendor to them first, then create a purchase order.'
+      );
+      return;
+    }
     const res = await createRestockOrder({
       vendorId: group.vendorId,
       items: group.items.map((i) => ({
@@ -467,7 +484,7 @@ export function RestockOrdersListClient({
                     </td>
                     <td className="px-4 py-3">{getStatusBadge(order.status)}</td>
                     <td className="px-4 py-3 text-xs text-slate-500">
-                      {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : '—'}
+                      {formatCalendarDate(order.orderDate) ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-slate-600 dark:text-slate-300">
                       {order.itemCount}
@@ -541,7 +558,7 @@ function CreateOrderModal({
 }) {
   const [loading, setLoading] = useState(false);
   const [vendorId, setVendorId] = useState(vendors[0]?.id ?? '');
-  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [orderDate, setOrderDate] = useState(getChicagoToday());
   const [expectedDelivery, setExpectedDelivery] = useState('');
   const [notes, setNotes] = useState('');
 
