@@ -103,5 +103,15 @@ describe('authTokens', () => {
     expect(result.valid).toBe(false);
     expect(result.error).toMatch(/user not found/i);
   });
+
+  it('accepts tokens with trailing punctuation from copy-paste', async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(mockUser as any);
+
+    const token = generateAuthToken(mockUser, 'INVITE', 3600);
+    const tokenWithPeriod = `${token}.`;
+    const result = await verifyAuthToken(tokenWithPeriod, 'INVITE');
+    expect(result.valid).toBe(true);
+    expect(result.user?.id).toBe(mockUser.id);
+  });
 });
 

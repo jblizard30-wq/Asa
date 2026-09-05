@@ -102,12 +102,20 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
 
   async function handleCopyLink() {
     if (!linkModal?.link) return;
+    let copied = false;
     try {
       await navigator.clipboard.writeText(linkModal.link);
+      copied = true;
+    } catch {
+      const input = document.getElementById('linkModalInput') as HTMLInputElement | null;
+      if (input) {
+        input.select();
+        copied = document.execCommand('copy');
+      }
+    }
+    if (copied) {
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2500);
-    } catch {
-      // ignore clipboard failure
     }
   }
 
@@ -365,9 +373,11 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
 
             <div className="mt-4 flex gap-2">
               <input
+                id="linkModalInput"
                 type="text"
                 readOnly
                 value={linkModal.link}
+                onClick={(e) => (e.target as HTMLInputElement).select()}
                 className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-mono select-all focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
               />
               <button

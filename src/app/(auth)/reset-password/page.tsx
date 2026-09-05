@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { ORG_NAME } from '@/lib/site';
 import { SetPasswordForm } from '../set-password/SetPasswordForm';
 
@@ -8,6 +9,14 @@ interface ResetPasswordPageProps {
 }
 
 export default function ResetPasswordPage({ searchParams }: ResetPasswordPageProps) {
-  return <SetPasswordForm token={searchParams.token || ''} orgName={ORG_NAME} />;
+  return (
+    <Suspense fallback={null}>
+      <SetPasswordForm
+        token={searchParams.token || ''}
+        initialToken={searchParams.token || ''}
+        orgName={ORG_NAME}
+      />
+    </Suspense>
+  );
 }
 

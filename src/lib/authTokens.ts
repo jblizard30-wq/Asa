@@ -77,7 +77,8 @@ export async function verifyAuthToken(
     return { valid: false, error: 'Missing or invalid token.' };
   }
 
-  const parts = token.split('.');
+  const cleanToken = token.trim().replace(/[.,;:)\s]+$/, '');
+  const parts = cleanToken.split('.');
   if (parts.length !== 2) {
     return { valid: false, error: 'Malformed token.' };
   }
