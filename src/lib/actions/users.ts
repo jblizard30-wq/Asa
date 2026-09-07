@@ -356,7 +356,7 @@ export interface CsvUserPreviewResult {
   invalidCount: number;
 }
 
-export function parseCsvRecords(text: string): string[][] {
+export async function parseCsvRecords(text: string): Promise<string[][]> {
   const records: string[][] = [];
   let row: string[] = [];
   let field = '';
@@ -427,7 +427,7 @@ export function parseCsvRecords(text: string): string[][] {
 export async function parseAndPreviewUsersCsv(csvContent: string): Promise<CsvUserPreviewResult> {
   await requireAdmin();
 
-  const records = parseCsvRecords(csvContent);
+  const records = await parseCsvRecords(csvContent);
   if (records.length === 0) {
     return {
       rows: [],

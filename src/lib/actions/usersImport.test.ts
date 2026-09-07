@@ -68,18 +68,18 @@ describe('User CSV Import', () => {
   });
 
   describe('parseCsvRecords', () => {
-    it('correctly splits simple comma-delimited lines', () => {
+    it('correctly splits simple comma-delimited lines', async () => {
       const csv = 'Name,Email,Role\nAlice,alice@example.com,USER\nBob,bob@example.com,MANAGER';
-      const records = parseCsvRecords(csv);
+      const records = await parseCsvRecords(csv);
       expect(records).toHaveLength(3);
       expect(records[0]).toEqual(['Name', 'Email', 'Role']);
       expect(records[1]).toEqual(['Alice', 'alice@example.com', 'USER']);
       expect(records[2]).toEqual(['Bob', 'bob@example.com', 'MANAGER']);
     });
 
-    it('handles quoted fields with commas and double quotes', () => {
+    it('handles quoted fields with commas and double quotes', async () => {
       const csv = '"Smith, John",john@example.com,"USER"\n"Jane ""JJ"" Doe",jane@example.com,ADMIN';
-      const records = parseCsvRecords(csv);
+      const records = await parseCsvRecords(csv);
       expect(records[0]).toEqual(['Smith, John', 'john@example.com', 'USER']);
       expect(records[1]).toEqual(['Jane "JJ" Doe', 'jane@example.com', 'ADMIN']);
     });

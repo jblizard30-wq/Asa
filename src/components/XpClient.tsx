@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { createFinancialSnapshot, createBudgetLine, createBoardPacket } from '@/lib/actions/xp';
 import { allRatios } from '@/lib/xpRatios';
 import { ElderPacketPrintModal } from '@/components/ElderPacketPrintModal';
-import { StrategicFrameworksCatalog } from '@/components/StrategicFrameworksCatalog';
+import { StrategicFrameworksCatalog, type BuiltFrameworkSummary } from '@/components/StrategicFrameworksCatalog';
 import type { ToolDefinition } from '@/lib/tools/schema';
 
 interface Snapshot {
@@ -17,6 +18,7 @@ interface BudgetLine {
 }
 interface Packet {
   id: string; title: string; meetingDate: string; status: string; summaryNotes: string | null;
+  itemsCount?: number;
 }
 
 const money = (n: number) =>
@@ -29,13 +31,14 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export function XpClient({
-  canManage, snapshots, budgetLines, packets, tools = [],
+  canManage, snapshots, budgetLines, packets, tools = [], strategicFrameworks = [],
 }: {
   canManage: boolean;
   snapshots: Snapshot[];
   budgetLines: BudgetLine[];
   packets: Packet[];
   tools?: ToolDefinition[];
+  strategicFrameworks?: BuiltFrameworkSummary[];
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -303,10 +306,23 @@ export function XpClient({
           ) : (
             <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
               {packets.map((p) => (
-                <li key={p.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                  <span className="font-medium text-slate-800">{p.title}</span>
-                  <div className="flex items-center gap-3">
+                <li key={p.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-3 text-sm gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-slate-800 dark:text-white">{p.title}</span>
+                    {p.itemsCount !== undefined && p.itemsCount > 0 && (
+                      <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800">
+                        {p.itemsCount} {p.itemsCount === 1 ? 'framework' : 'frameworks'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
                     <span className="text-slate-500">{p.meetingDate.slice(0, 10)} · {p.status}</span>
+                    <Link
+                      href={`/xp/packets/${p.id}`}
+                      className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    >
+                      View Deck &amp; Slides →
+                    </Link>
                     {canManage && (
                       <button
                         type="button"
@@ -324,7 +340,13 @@ export function XpClient({
         </section>
       )}
 
-      {tab === 'tools' && <StrategicFrameworksCatalog tools={tools} />}
+      {tab === 'tools' && (
+        <StrategicFrameworksCatalog
+          tools={tools}
+          builtFrameworks={strategicFrameworks}
+          packets={packets}
+        />
+      )}
 
       {selectedPrintPacket && (
         <ElderPacketPrintModal

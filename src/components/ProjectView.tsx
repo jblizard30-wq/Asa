@@ -35,6 +35,7 @@ const PRIORITY_OPTIONS = Object.entries(PRIORITY_LABELS).map(([id, label]) => ({
 import { TimelineView } from '@/components/TimelineView';
 import { useProjectLiveSync } from '@/hooks/useProjectLiveSync';
 import { ServiceTemplatesManager } from '@/components/ServiceTemplatesManager';
+import { SectionsManager } from '@/components/SectionsManager';
 
 export function ProjectView({
   projectId,
@@ -69,6 +70,7 @@ export function ProjectView({
   const [showFields, setShowFields] = useState(false);
   const [showTags, setShowTags] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showSections, setShowSections] = useState(false);
   const [filters, setFilters] = useState<TaskFilters>(EMPTY_TASK_FILTERS);
 
   const [togglingManagerId, setTogglingManagerId] = useState<string | null>(null);
@@ -213,6 +215,12 @@ export function ProjectView({
           >
             Manage tags
           </button>
+          <button
+            onClick={() => setShowSections(true)}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Manage columns
+          </button>
           {isAdmin && (
             <button
               onClick={() => setShowInvite(true)}
@@ -337,6 +345,9 @@ export function ProjectView({
       )}
 
       {showTags && <TagsManager projectId={projectId} tags={tags} onClose={() => setShowTags(false)} />}
+      {showSections && (
+        <SectionsManager projectId={projectId} sections={sections} onClose={() => setShowSections(false)} />
+      )}
     </div>
   );
 }

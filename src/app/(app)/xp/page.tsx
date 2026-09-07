@@ -18,10 +18,19 @@ export default async function XpPage() {
 
   const canManage = session.user.role === 'ADMIN' || session.user.role === 'MANAGER';
 
-  const [snapshots, budgetLines, packets] = await Promise.all([
+  const [snapshots, budgetLines, packets, strategicFrameworks] = await Promise.all([
     prisma.financialSnapshot.findMany({ orderBy: { periodDate: 'desc' }, take: 12 }),
     prisma.budgetLine.findMany({ orderBy: [{ fiscalYear: 'desc' }, { category: 'asc' }], take: 50 }),
-    prisma.boardPacket.findMany({ orderBy: { meetingDate: 'desc' }, take: 12 }),
+    prisma.boardPacket.findMany({ orderBy: { meetingDate: 'desc' }, take: 20 }),
+    prisma.strategicFramework.findMany({
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+      include: {
+        packet: {
+          select: { id: true, title: true },
+        },
+      },
+    }),
   ]);
 
   // Decimal columns do not survive the server/client boundary — send numbers.
@@ -46,12 +55,25 @@ export default async function XpPage() {
         spentAmount: Number(b.spentAmount),
         notes: b.notes,
       }))}
-      packets={packets.map((p) => ({
-        id: p.id,
-        title: p.title,
-        meetingDate: p.meetingDate.toISOString(),
-        status: p.status,
-        summaryNotes: p.summaryNotes,
+      packets={packets.map((p) => {
+        const items = Array.isArray(p.items) ? (p.items as unknown as Array<{ id: string }>) : [];
+        return {
+          id: p.id,
+          title: p.title,
+          meetingDate: p.meetingDate.toISOString(),
+          status: p.status,
+          summaryNotes: p.summaryNotes,
+          itemsCount: items.length,
+        };
+      })}
+      strategicFrameworks={strategicFrameworks.map((f) => ({
+        id: f.id,
+        toolId: f.toolId,
+        title: f.title,
+        status: f.status,
+        updatedAt: f.updatedAt.toISOString(),
+        packetId: f.packetId,
+        packet: f.packet,
       }))}
       tools={listToolDefinitions()}
     />

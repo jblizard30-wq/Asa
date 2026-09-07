@@ -8,6 +8,7 @@ import { TaskDetailModal } from '@/components/TaskDetailModal';
 import { TagBadge } from '@/components/TagPicker';
 import { AssigneePicker } from '@/components/AssigneePicker';
 import { bulkDeleteTasks, bulkUpdateTasks } from '@/lib/actions/tasks';
+import { createSection, updateSection, deleteSection } from '@/lib/actions/sections';
 import type { KanbanSection, CustomFieldDef } from '@/components/KanbanBoard';
 import type { ProjectMemberInfo } from '@/components/ProjectView';
 
@@ -29,6 +30,56 @@ export function ListView({
   const [assignToIds, setAssignToIds] = useState<string[]>([]);
   const [isBulkPending, startBulkTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [isAddingSection, setIsAddingSection] = useState(false);
+  const [newSectionName, setNewSectionName] = useState('');
+  const [sectionSaving, setSectionSaving] = useState(false);
+  const [sectionDeletingId, setSectionDeletingId] = useState<string | null>(null);
+  const [sectionDeleteTargetId, setSectionDeleteTargetId] = useState<string>('');
+
+  async function handleAddSection(e: React.FormEvent) {
+    e.preventDefault();
+    const name = newSectionName.trim();
+    if (!name) return;
+    setSectionSaving(true);
+    const res = await createSection(projectId, name);
+    setSectionSaving(false);
+    if (!res.success) {
+      setError(res.error ?? 'Could not add section');
+      return;
+    }
+    setNewSectionName('');
+    setIsAddingSection(false);
+    router.refresh();
+  }
+
+  async function handleRenameSection(sectionId: string, originalName: string) {
+    const trimmed = editingName.trim();
+    setEditingSectionId(null);
+    if (!trimmed || trimmed === originalName) return;
+    const res = await updateSection(sectionId, trimmed);
+    if (!res.success) {
+      setError(res.error ?? 'Could not rename section');
+      return;
+    }
+    router.refresh();
+  }
+
+  async function handleDeleteSectionConfirm() {
+    if (!sectionDeletingId) return;
+    setSectionSaving(true);
+    const res = await deleteSection(sectionDeletingId, sectionDeleteTargetId || undefined);
+    setSectionSaving(false);
+    if (!res.success) {
+      setError(res.error ?? 'Could not delete section');
+      return;
+    }
+    setSectionDeletingId(null);
+    setSectionDeleteTargetId('');
+    router.refresh();
+  }
 
   const allTaskIds = useMemo(() => sections.flatMap((s) => s.tasks.map((t) => t.id)), [sections]);
   const allSelected = allTaskIds.length > 0 && selectedIds.size === allTaskIds.length;
@@ -177,10 +228,65 @@ export function ListView({
 
       {sections.map((section) => (
         <div key={section.id} className="rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 dark:border-slate-800">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{section.name}</h3>
-            <span className="text-xs text-slate-400 dark:text-slate-500">{section.tasks.length}</span>
-          </div>
+          {editingSectionId === section.id ? (
+            <div className="flex items-center gap-1 border-b border-slate-100 px-4 py-2 dark:border-slate-800">
+              <input
+                type="text"
+                autoFocus
+                defaultValue={section.name}
+                onChange={(e) => setEditingName(e.target.value)}
+                onBlur={() => handleRenameSection(section.id, section.name)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleRenameSection(section.id, section.name);
+                  if (e.key === 'Escape') setEditingSectionId(null);
+                }}
+                className="rounded border border-slate-300 bg-white px-2 py-0.5 text-sm font-semibold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+              />
+            </div>
+          ) : (
+            <div className="group flex items-center justify-between border-b border-slate-100 px-4 py-2 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <h3
+                  onClick={() => {
+                    setEditingSectionId(section.id);
+                    setEditingName(section.name);
+                  }}
+                  title="Click to rename"
+                  className="cursor-pointer text-sm font-semibold text-slate-700 hover:text-brand-600 dark:text-slate-200 dark:hover:text-brand-400"
+                >
+                  {section.name}
+                </h3>
+                <span className="text-xs text-slate-400 dark:text-slate-500">{section.tasks.length}</span>
+              </div>
+              <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingSectionId(section.id);
+                    setEditingName(section.name);
+                  }}
+                  className="rounded p-0.5 text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  title="Rename section"
+                >
+                  ✏️
+                </button>
+                {sections.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSectionDeletingId(section.id);
+                      const other = sections.find((s) => s.id !== section.id);
+                      setSectionDeleteTargetId(other?.id ?? '');
+                    }}
+                    className="rounded p-0.5 text-xs text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+                    title="Delete section"
+                  >
+                    🗑️
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {section.tasks.length === 0 ? (
             <p className="px-4 py-4 text-sm text-slate-400 dark:text-slate-500">
@@ -250,6 +356,106 @@ export function ListView({
           </div>
         </div>
       ))}
+
+      {/* Add section in list view */}
+      {isAddingSection ? (
+        <form onSubmit={handleAddSection} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+          <input
+            type="text"
+            autoFocus
+            placeholder="New section name…"
+            value={newSectionName}
+            onChange={(e) => setNewSectionName(e.target.value)}
+            className="flex-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+          <button
+            type="submit"
+            disabled={sectionSaving || !newSectionName.trim()}
+            className="rounded-md bg-brand-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            {sectionSaving ? 'Adding…' : 'Add section'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsAddingSection(false);
+              setNewSectionName('');
+            }}
+            className="rounded-md px-3 py-1.5 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400"
+          >
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setIsAddingSection(true)}
+          className="flex w-full items-center justify-center rounded-lg border-2 border-dashed border-slate-200 py-3 text-sm font-medium text-slate-500 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-brand-400 dark:hover:text-brand-300"
+        >
+          + Add section
+        </button>
+      )}
+
+      {sectionDeletingId && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl dark:bg-slate-900">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              Delete &ldquo;{sections.find((s) => s.id === sectionDeletingId)?.name}&rdquo;?
+            </h3>
+            {(() => {
+              const sec = sections.find((s) => s.id === sectionDeletingId);
+              const remaining = sections.filter((s) => s.id !== sectionDeletingId);
+              const taskCount = sec?.tasks.length ?? 0;
+              return (
+                <div className="mt-3 space-y-3">
+                  {taskCount > 0 ? (
+                    <>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        This section contains <strong>{taskCount}</strong> task{taskCount === 1 ? '' : 's'}. Choose where to move them:
+                      </p>
+                      <select
+                        value={sectionDeleteTargetId || remaining[0]?.id}
+                        onChange={(e) => setSectionDeleteTargetId(e.target.value)}
+                        className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      >
+                        {remaining.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            Move to: {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  ) : (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      This empty section will be permanently removed.
+                    </p>
+                  )}
+                  <div className="mt-4 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSectionDeletingId(null);
+                        setSectionDeleteTargetId('');
+                      }}
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={sectionSaving}
+                      onClick={handleDeleteSectionConfirm}
+                      className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {sectionSaving ? 'Deleting…' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {openTaskId && <TaskDetailModal taskId={openTaskId} onClose={() => setOpenTaskId(null)} />}
     </div>
