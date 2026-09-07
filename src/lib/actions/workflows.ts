@@ -549,3 +549,13 @@ export async function getBranchMapData(projectId: string) {
     })),
   };
 }
+
+export async function seedDemoWorkflowsAndTasksAction() {
+  await requireAdmin();
+  const { populateDemoData } = await import('@/lib/demoData');
+  const result = await populateDemoData();
+  revalidatePath('/admin/workflows');
+  revalidatePath('/projects');
+  revalidatePath('/my-tasks');
+  return { success: true, ...result };
+}

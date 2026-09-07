@@ -6,6 +6,7 @@ import { bulkDeleteUsers, bulkUpdateUserRole, deleteUser, sendUserInvite, update
 import { NewUserModal } from './NewUserModal';
 import { EditUserModal } from './EditUserModal';
 import { ResetPasswordModal } from './ResetPasswordModal';
+import { UserCsvImportModal } from './UserCsvImportModal';
 
 export interface ManagedUser {
   id: string;
@@ -30,6 +31,7 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showNewUser, setShowNewUser] = useState(false);
+  const [showCsvImport, setShowCsvImport] = useState(false);
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
   const [resetUser, setResetUser] = useState<ManagedUser | null>(null);
   const [linkModal, setLinkModal] = useState<LinkModalState | null>(null);
@@ -170,12 +172,21 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
             Manage staff accounts, send login invitations, and reset passwords. Only administrators can access this section.
           </p>
         </div>
-        <button
-          onClick={() => setShowNewUser(true)}
-          className="shrink-0 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          + New user
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setShowCsvImport(true)}
+            className="shrink-0 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 flex items-center gap-1.5"
+          >
+            <span>📥</span> Import CSV
+          </button>
+          <button
+            onClick={() => setShowNewUser(true)}
+            className="shrink-0 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            + New user
+          </button>
+        </div>
       </div>
 
       {error && <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
@@ -404,6 +415,8 @@ export function UserManagement({ currentUserId, users }: { currentUserId: string
           </div>
         </div>
       )}
+
+      {showCsvImport && <UserCsvImportModal onClose={() => setShowCsvImport(false)} />}
     </div>
   );
 }

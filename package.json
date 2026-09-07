@@ -12,6 +12,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
+    "seed:demo": "tsx prisma/seed-demo.ts",
     "seed:bulletin": "tsx prisma/seed-bulletin.ts",
     "seed:inventory": "tsx prisma/seed-inventory.ts",
     "backfill:org-chart": "tsx prisma/backfill-org-chart.ts",

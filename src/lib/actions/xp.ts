@@ -5,6 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireManagerOrAdmin } from '@/lib/permissions';
 import { isModuleEnabled } from '@/lib/modules';
+import { getToolDefinition } from '@/lib/tools/registry';
+import { getStarterDataForTool, getDefaultDataForPrimitive } from '@/lib/tools/starterTemplates';
+import type { Prisma } from '@prisma/client';
 
 export type ActionResult<T = unknown> =
   | ({ success: true } & T)
@@ -220,3 +223,326 @@ ${input.notes ? `\n**Special Instructions:**\n${input.notes}\n` : ''}
     return { success: false, error: err instanceof Error ? err.message : 'Failed to create print task' };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Strategic Frameworks Lifecycle & Packet Bundling
+// ---------------------------------------------------------------------------
+
+export interface BoardPacketItemRef {
+  id: string;
+  type: 'framework' | 'cover' | 'raci' | 'note';
+  frameworkId?: string;
+  toolId?: string;
+  title: string;
+  notes?: string | null;
+  order: number;
+}
+
+export async function createStrategicFramework(input: {
+  toolId: string;
+  title?: string;
+  useTemplate?: boolean;
+  packetId?: string;
+}): Promise<ActionResult<{ frameworkId: string }>> {
+  try {
+    const gate = requireXpModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireManagerOrAdmin();
+
+    const def = getToolDefinition(input.toolId);
+    if (!def) {
+      return { success: false, error: `Unknown strategic framework: ${input.toolId}` };
+    }
+
+    const title = input.title?.trim() || `New ${def.name}`;
+    let initialData: unknown = null;
+
+    if (input.useTemplate) {
+      initialData = getStarterDataForTool(input.toolId);
+    }
+    if (!initialData) {
+      initialData = getDefaultDataForPrimitive(def.primitive, def.config);
+    }
+
+    const framework = await prisma.strategicFramework.create({
+      data: {
+        toolId: input.toolId,
+        title,
+        data: initialData as Prisma.InputJsonValue,
+        status: 'draft',
+        packetId: input.packetId || null,
+        createdById: session.user.id,
+      },
+    });
+
+    // If attached to a packet directly on creation, update the packet's items list
+    if (input.packetId) {
+      const packet = await prisma.boardPacket.findUnique({
+        where: { id: input.packetId },
+      });
+      if (packet) {
+        const items = Array.isArray(packet.items) ? (packet.items as unknown as BoardPacketItemRef[]) : [];
+        const newItem: BoardPacketItemRef = {
+          id: framework.id,
+          type: 'framework',
+          frameworkId: framework.id,
+          toolId: framework.toolId,
+          title: framework.title,
+          notes: null,
+          order: items.length,
+        };
+        await prisma.boardPacket.update({
+          where: { id: packet.id },
+          data: { items: [...items, newItem] as unknown as Prisma.InputJsonValue },
+        });
+        revalidatePath(`/xp/packets/${packet.id}`);
+      }
+    }
+
+    revalidatePath('/xp');
+    revalidatePath(`/xp/frameworks/${framework.id}`);
+    return { success: true, frameworkId: framework.id };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Could not create framework' };
+  }
+}
+
+export async function updateStrategicFramework(input: {
+  id: string;
+  title?: string;
+  status?: string;
+  data?: unknown;
+}): Promise<ActionResult> {
+  try {
+    const gate = requireXpModule();
+    if (gate) return { success: false, error: gate };
+    await requireManagerOrAdmin();
+
+    const updateData: Prisma.StrategicFrameworkUpdateInput = {};
+    if (input.title !== undefined) updateData.title = input.title.trim();
+    if (input.status !== undefined) updateData.status = input.status;
+    if (input.data !== undefined) updateData.data = input.data as Prisma.InputJsonValue;
+
+    const framework = await prisma.strategicFramework.update({
+      where: { id: input.id },
+      data: updateData,
+    });
+
+    // If title changed and framework is in a packet, update title in packet items as well
+    if (input.title !== undefined && framework.packetId) {
+      const packet = await prisma.boardPacket.findUnique({ where: { id: framework.packetId } });
+      if (packet && Array.isArray(packet.items)) {
+        const items = (packet.items as unknown as BoardPacketItemRef[]).map((item) =>
+          item.frameworkId === framework.id ? { ...item, title: framework.title } : item
+        );
+        await prisma.boardPacket.update({
+          where: { id: packet.id },
+          data: { items: items as unknown as Prisma.InputJsonValue },
+        });
+        revalidatePath(`/xp/packets/${packet.id}`);
+      }
+    }
+
+    revalidatePath('/xp');
+    revalidatePath(`/xp/frameworks/${framework.id}`);
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Could not update framework' };
+  }
+}
+
+export async function deleteStrategicFramework(id: string): Promise<ActionResult> {
+  try {
+    const gate = requireXpModule();
+    if (gate) return { success: false, error: gate };
+    await requireManagerOrAdmin();
+
+    const framework = await prisma.strategicFramework.findUnique({ where: { id } });
+    if (!framework) return { success: false, error: 'Framework not found' };
+
+    if (framework.packetId) {
+      const packet = await prisma.boardPacket.findUnique({ where: { id: framework.packetId } });
+      if (packet && Array.isArray(packet.items)) {
+        const items = (packet.items as unknown as BoardPacketItemRef[]).filter(
+          (item) => item.frameworkId !== framework.id
+        );
+        await prisma.boardPacket.update({
+          where: { id: packet.id },
+          data: { items: items as unknown as Prisma.InputJsonValue },
+        });
+        revalidatePath(`/xp/packets/${packet.id}`);
+      }
+    }
+
+    await prisma.strategicFramework.delete({ where: { id } });
+
+    revalidatePath('/xp');
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Could not delete framework' };
+  }
+}
+
+export async function addFrameworkToBoardPacket(input: {
+  frameworkId: string;
+  packetId: string;
+  notes?: string;
+}): Promise<ActionResult> {
+  try {
+    const gate = requireXpModule();
+    if (gate) return { success: false, error: gate };
+    await requireManagerOrAdmin();
+
+    const framework = await prisma.strategicFramework.findUnique({ where: { id: input.frameworkId } });
+    if (!framework) return { success: false, error: 'Strategic framework not found' };
+
+    const packet = await prisma.boardPacket.findUnique({ where: { id: input.packetId } });
+    if (!packet) return { success: false, error: 'Board packet not found' };
+
+    const items = Array.isArray(packet.items) ? (packet.items as unknown as BoardPacketItemRef[]) : [];
+    const alreadyExists = items.some((i) => i.frameworkId === framework.id);
+
+    let updatedItems = items;
+    if (!alreadyExists) {
+      const newItem: BoardPacketItemRef = {
+        id: framework.id,
+        type: 'framework',
+        frameworkId: framework.id,
+        toolId: framework.toolId,
+        title: framework.title,
+        notes: input.notes?.trim() || null,
+        order: items.length,
+      };
+      updatedItems = [...items, newItem];
+    } else if (input.notes) {
+      updatedItems = items.map((i) =>
+        i.frameworkId === framework.id ? { ...i, notes: input.notes?.trim() || null } : i
+      );
+    }
+
+    await Promise.all([
+      prisma.boardPacket.update({
+        where: { id: packet.id },
+        data: { items: updatedItems as unknown as Prisma.InputJsonValue },
+      }),
+      prisma.strategicFramework.update({
+        where: { id: framework.id },
+        data: { packetId: packet.id },
+      }),
+    ]);
+
+    revalidatePath('/xp');
+    revalidatePath(`/xp/packets/${packet.id}`);
+    revalidatePath(`/xp/frameworks/${framework.id}`);
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Could not add framework to packet' };
+  }
+}
+
+export async function removeFrameworkFromBoardPacket(input: {
+  packetId: string;
+  frameworkId: string;
+}): Promise<ActionResult> {
+  try {
+    const gate = requireXpModule();
+    if (gate) return { success: false, error: gate };
+    await requireManagerOrAdmin();
+
+    const packet = await prisma.boardPacket.findUnique({ where: { id: input.packetId } });
+    if (!packet) return { success: false, error: 'Board packet not found' };
+
+    const items = Array.isArray(packet.items) ? (packet.items as unknown as BoardPacketItemRef[]) : [];
+    const updatedItems = items
+      .filter((i) => i.frameworkId !== input.frameworkId && i.id !== input.frameworkId)
+      .map((item, idx) => ({ ...item, order: idx }));
+
+    await Promise.all([
+      prisma.boardPacket.update({
+        where: { id: packet.id },
+        data: { items: updatedItems as unknown as Prisma.InputJsonValue },
+      }),
+      prisma.strategicFramework.updateMany({
+        where: { id: input.frameworkId, packetId: input.packetId },
+        data: { packetId: null },
+      }),
+    ]);
+
+    revalidatePath('/xp');
+    revalidatePath(`/xp/packets/${packet.id}`);
+    revalidatePath(`/xp/frameworks/${input.frameworkId}`);
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Could not remove framework from packet' };
+  }
+}
+
+export async function createBoardPacketWithFramework(input: {
+  packetTitle: string;
+  meetingDate: string;
+  frameworkId: string;
+  notes?: string;
+}): Promise<ActionResult<{ packetId: string }>> {
+  try {
+    const gate = requireXpModule();
+    if (gate) return { success: false, error: gate };
+    await requireManagerOrAdmin();
+
+    const framework = await prisma.strategicFramework.findUnique({ where: { id: input.frameworkId } });
+    if (!framework) return { success: false, error: 'Framework not found' };
+
+    const item: BoardPacketItemRef = {
+      id: framework.id,
+      type: 'framework',
+      frameworkId: framework.id,
+      toolId: framework.toolId,
+      title: framework.title,
+      notes: input.notes?.trim() || null,
+      order: 0,
+    };
+
+    const packet = await prisma.boardPacket.create({
+      data: {
+        title: input.packetTitle.trim(),
+        meetingDate: new Date(input.meetingDate),
+        items: [item] as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    await prisma.strategicFramework.update({
+      where: { id: framework.id },
+      data: { packetId: packet.id },
+    });
+
+    revalidatePath('/xp');
+    revalidatePath(`/xp/packets/${packet.id}`);
+    revalidatePath(`/xp/frameworks/${framework.id}`);
+    return { success: true, packetId: packet.id };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Could not create packet with framework' };
+  }
+}
+
+export async function listBoardPackets(): Promise<
+  Array<{ id: string; title: string; meetingDate: string; status: string; itemsCount: number }>
+> {
+  const gate = requireXpModule();
+  if (gate) return [];
+
+  const packets = await prisma.boardPacket.findMany({
+    orderBy: { meetingDate: 'desc' },
+    take: 50,
+  });
+
+  return packets.map((p) => {
+    const items = Array.isArray(p.items) ? (p.items as unknown as BoardPacketItemRef[]) : [];
+    return {
+      id: p.id,
+      title: p.title,
+      meetingDate: p.meetingDate.toISOString(),
+      status: p.status,
+      itemsCount: items.length,
+    };
+  });
+}
+

@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { NewWorkflowModal, type WorkflowTeamOption } from '@/components/NewWorkflowModal';
 import { WorkflowBuilderPanel } from '@/components/WorkflowBuilderPanel';
 import { WorkflowAutomationsConfig } from '@/components/WorkflowAutomationsConfig';
+import { seedDemoWorkflowsAndTasksAction } from '@/lib/actions/workflows';
 
 export interface WorkflowSummary {
   id: string;
@@ -27,9 +29,12 @@ export function WorkflowsManager({
   users?: Array<{ id: string; name: string | null; email: string; role: string }>;
   projects?: Array<{ id: string; name: string }>;
 }) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'workflows' | 'automations'>('workflows');
   const [showNewWorkflow, setShowNewWorkflow] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [seedMessage, setSeedMessage] = useState<string | null>(null);
 
   const templates = workflows.filter((w) => w.isTemplate);
 
@@ -44,14 +49,50 @@ export function WorkflowsManager({
         </div>
 
         {activeTab === 'workflows' && (
-          <button
-            onClick={() => setShowNewWorkflow(true)}
-            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 shadow-sm"
-          >
-            + New workflow
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={isSeeding}
+              onClick={async () => {
+                setIsSeeding(true);
+                setSeedMessage(null);
+                try {
+                  const res = await seedDemoWorkflowsAndTasksAction();
+                  if (res.success) {
+                    setSeedMessage(`Loaded ${res.workflowsCount} workflows and ${res.projectsCreatedCount} demo projects!`);
+                    router.refresh();
+                  }
+                } catch {
+                  setSeedMessage('Failed to seed demo workflows.');
+                } finally {
+                  setIsSeeding(false);
+                }
+              }}
+              className="rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <span>{isSeeding ? '⏳' : '✨'}</span> {isSeeding ? 'Loading…' : 'Load Demo Workflows & Tasks'}
+            </button>
+            <button
+              onClick={() => setShowNewWorkflow(true)}
+              className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 shadow-sm"
+            >
+              + New workflow
+            </button>
+          </div>
         )}
       </div>
+
+      {seedMessage && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300 flex items-center justify-between">
+          <span>✓ {seedMessage}</span>
+          <button
+            onClick={() => setSeedMessage(null)}
+            className="text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 font-bold ml-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-1">

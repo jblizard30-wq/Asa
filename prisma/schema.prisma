@@ -209,6 +209,9 @@ model User {
   meetupShareLinksCreated MeetupShareLink[] @relation("MeetupShareCreatedBy")
   meetupShares            MeetupShare[]     @relation("MeetupUserShares")
 
+  // XP module strategic frameworks
+  frameworksCreated StrategicFramework[] @relation("FrameworkCreatedBy")
+
   @@index([managerId])
 }
 
@@ -388,7 +391,6 @@ model Section {
   extraHomedTasks     TaskProject[]
 }
 
-
 model Task {
   id          String     @id @default(cuid())
   title       String
@@ -502,13 +504,13 @@ model TaskRecurrence {
 
 /// The recipe for a repeatable batch of tasks — e.g. "Sunday Service".
 model ServiceTemplate {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
   projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdById String
-  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdBy   User    @relation(fields: [createdById], references: [id])
 
   rrule     String?
   timezone  String    @default("America/Chicago")
@@ -584,7 +586,6 @@ model AvailabilityException {
   @@unique([userId, date])
   @@index([userId])
 }
-
 
 model CustomField {
   id        String          @id @default(cuid())
@@ -704,7 +705,6 @@ model AutomationRule {
   @@index([sourceTaskId])
   @@index([targetTaskId])
 }
-
 
 model AutomationRun {
   id        String              @id @default(cuid())
@@ -961,7 +961,6 @@ model TaskGuestLink {
   @@index([taskId])
 }
 
-
 /// A comment left by an unauthenticated guest through a TaskGuestLink — kept separate from
 /// Comment (whose userId is a required real User) rather than making that field nullable.
 model GuestComment {
@@ -1114,13 +1113,13 @@ model InventoryItem {
 /// Append-only log — submitting a count also updates the parent item's onHandQty
 /// (application logic, see src/lib/actions/inventory.ts), it does not overwrite history.
 model StockCount {
-  id            String   @id @default(cuid())
+  id            String        @id @default(cuid())
   itemId        String
   item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   qty           Int
   submittedById String?
-  submittedBy   User?    @relation("InventoryStockCountSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
-  submittedAt   DateTime @default(now())
+  submittedBy   User?         @relation("InventoryStockCountSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  submittedAt   DateTime      @default(now())
 
   @@index([itemId, submittedAt(sort: Desc)])
 }
@@ -1145,14 +1144,14 @@ model RestockOrder {
 }
 
 model RestockOrderItem {
-  id               String       @id @default(cuid())
+  id               String        @id @default(cuid())
   orderId          String
-  order            RestockOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order            RestockOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
   itemId           String
   item             InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   quantityOrdered  Int
-  quantityReceived Int          @default(0)
-  unitPrice        Decimal?     @db.Decimal(10, 2)
+  quantityReceived Int           @default(0)
+  unitPrice        Decimal?      @db.Decimal(10, 2)
 }
 
 // ============================================================================
@@ -1324,16 +1323,37 @@ model VarianceMemo {
 }
 
 model BoardPacket {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   title        String
   meetingDate  DateTime
   packetUrl    String?
   summaryNotes String?
-  status       String    @default("upcoming")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  status       String   @default("upcoming")
+  items        Json     @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  frameworks StrategicFramework[]
 
   @@index([meetingDate])
+}
+
+model StrategicFramework {
+  id          String       @id @default(cuid())
+  toolId      String
+  title       String
+  data        Json         @default("{}")
+  status      String       @default("draft")
+  packetId    String?
+  packet      BoardPacket? @relation(fields: [packetId], references: [id], onDelete: SetNull)
+  createdById String?
+  createdBy   User?        @relation("FrameworkCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([toolId])
+  @@index([packetId])
+  @@index([createdById])
 }
 
 /// Inputs to the XP Skills financial calculator. The three health ratios
@@ -1407,22 +1427,22 @@ model Meetup {
   finalizedTimeSlotId String?
   finalizedVenueId    String?
 
-  startsAt            DateTime?
-  endsAt              DateTime?
-  location            String?
-  description         String?
-  createdById         String?
-  createdBy           User?          @relation("MeetupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  archivedAt          DateTime?
+  startsAt    DateTime?
+  endsAt      DateTime?
+  location    String?
+  description String?
+  createdById String?
+  createdBy   User?     @relation("MeetupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  archivedAt  DateTime?
 
-  timeSlots           MeetupTimeSlot[]
-  timeVotes           TimeVote[]
-  venueOptions        VenueOption[]
-  signupSlots         SignupSlot[]
-  shareLinks          MeetupShareLink[]
-  shares              MeetupShare[]
+  timeSlots    MeetupTimeSlot[]
+  timeVotes    TimeVote[]
+  venueOptions VenueOption[]
+  signupSlots  SignupSlot[]
+  shareLinks   MeetupShareLink[]
+  shares       MeetupShare[]
 
   @@index([startsAt])
   @@index([category])
@@ -1431,30 +1451,30 @@ model Meetup {
 }
 
 model MeetupTimeSlot {
-  id        String     @id @default(cuid())
+  id        String   @id @default(cuid())
   meetupId  String
-  meetup    Meetup     @relation(fields: [meetupId], references: [id], onDelete: Cascade)
+  meetup    Meetup   @relation(fields: [meetupId], references: [id], onDelete: Cascade)
   startsAt  DateTime
   endsAt    DateTime
   label     String?
-  order     Int        @default(0)
-  createdAt DateTime   @default(now())
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
 
-  votes     TimeVote[]
+  votes TimeVote[]
 
   @@index([meetupId])
 }
 
 model TimeVote {
-  id           String          @id @default(cuid())
+  id           String           @id @default(cuid())
   meetupId     String
-  meetup       Meetup          @relation(fields: [meetupId], references: [id], onDelete: Cascade)
+  meetup       Meetup           @relation(fields: [meetupId], references: [id], onDelete: Cascade)
   timeSlotId   String?
-  timeSlot     MeetupTimeSlot? @relation(fields: [timeSlotId], references: [id], onDelete: SetNull)
+  timeSlot     MeetupTimeSlot?  @relation(fields: [timeSlotId], references: [id], onDelete: SetNull)
   proposedTime DateTime
-  choice       VoteChoice      @default(YES)
+  choice       VoteChoice       @default(YES)
   voterUserId  String?
-  voterUser    User?           @relation("TimeVoteUser", fields: [voterUserId], references: [id], onDelete: SetNull)
+  voterUser    User?            @relation("TimeVoteUser", fields: [voterUserId], references: [id], onDelete: SetNull)
   voterName    String?
   shareLinkId  String?
   shareLink    MeetupShareLink? @relation(fields: [shareLinkId], references: [id], onDelete: SetNull)
@@ -1478,17 +1498,17 @@ model VenueOption {
 }
 
 model SignupSlot {
-  id           String        @id @default(cuid())
+  id           String   @id @default(cuid())
   meetupId     String
-  meetup       Meetup        @relation(fields: [meetupId], references: [id], onDelete: Cascade)
+  meetup       Meetup   @relation(fields: [meetupId], references: [id], onDelete: Cascade)
   title        String
-  category     String        @default("General")
-  capacity     Int           @default(1)
-  claimedCount Int           @default(0)
-  order        Int           @default(0)
-  createdAt    DateTime      @default(now())
+  category     String   @default("General")
+  capacity     Int      @default(1)
+  claimedCount Int      @default(0)
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
 
-  claims       SignupClaim[]
+  claims SignupClaim[]
 
   @@index([meetupId])
 }
@@ -1547,4 +1567,3 @@ model MeetupShare {
   @@index([teamId])
   @@index([meetupId])
 }
-
