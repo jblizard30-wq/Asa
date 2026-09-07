@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useTransition, useMemo, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/Toast';
 import {
   createRaciChart,
   updateRaciChart,
@@ -15,6 +17,7 @@ import {
   updateRaciPerson,
   deleteRaciPerson,
   setRaciCell,
+  instantiateRaciAsProject,
 } from '@/lib/actions/raci';
 
 const LETTERS = [
@@ -201,6 +204,31 @@ export function RaciClient({
 
   // Paste multiple steps
   const [pasteContent, setPasteContent] = useState('');
+
+  const router = useRouter();
+  const toast = useToast();
+  const [isInstantiating, setIsInstantiating] = useState(false);
+
+  const handleInstantiateProject = async () => {
+    if (!open) return;
+    setIsInstantiating(true);
+    try {
+      const res = await instantiateRaciAsProject(open.id);
+      if (res.success && 'projectId' in res) {
+        toast.success(
+          'Project Created',
+          `Created project from "${open.processName}" with RACI steps and assignments.`
+        );
+        router.push(`/projects/${res.projectId}`);
+      } else {
+        toast.error('Instantiation Failed', res.error || 'Failed to instantiate project.');
+      }
+    } catch (err: any) {
+      toast.error('Error', err.message || 'Something went wrong.');
+    } finally {
+      setIsInstantiating(false);
+    }
+  };
 
   // Keyboard navigation active cell
   const [focusedCell, setFocusedCell] = useState<{ stepIndex: number; personIndex: number } | null>(null);
@@ -845,6 +873,19 @@ export function RaciClient({
                   </span>
                 )}
               </button>
+
+              {/* Instantiate as Project */}
+              {open.canEdit && (
+                <button
+                  onClick={handleInstantiateProject}
+                  disabled={isInstantiating}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/60 dark:text-brand-300 shadow-sm transition-colors disabled:opacity-50"
+                  title="Materialize this RACI matrix into an active project with tasks and assignees"
+                >
+                  <span>🚀</span>
+                  <span>{isInstantiating ? 'Creating Project...' : 'Instantiate as Project'}</span>
+                </button>
+              )}
 
               {/* Paste Multiple Steps */}
               {open.canEdit && (

@@ -6,6 +6,7 @@ import {
   finalizeMeetup,
   generateShareLink,
   updateMeetupAudience,
+  deleteMeetup,
 } from './meetups';
 import { prisma } from '@/lib/prisma';
 import { isModuleEnabled } from '@/lib/modules';
@@ -249,5 +250,72 @@ describe('Meetups Server Actions', () => {
     const res = await generateShareLink('m-123', 'Youth Night');
     expect(res.success).toBe(true);
     expect((res as any).url).toMatch(/^\/share\/.+/);
+  });
+
+  it('refuses to delete a meetup if the module is disabled', async () => {
+    (isModuleEnabled as any).mockReturnValue(false);
+    const res = await deleteMeetup('m-123');
+    expect(res.success).toBe(false);
+    expect((res as any).error).toContain('not enabled');
+  });
+
+  it('allows the creator (role USER) to delete their own meetup', async () => {
+    (requireSession as any).mockResolvedValue({
+      user: { id: 'u-regular', name: 'Regular Member', email: 'user@church.org', role: 'USER' },
+    });
+    (prisma.meetup.findUnique as any).mockResolvedValue({
+      id: 'm-123',
+      createdById: 'u-regular',
+    });
+    (prisma.meetup.update as any).mockResolvedValue({
+      id: 'm-123',
+      archivedAt: new Date(),
+    });
+
+    const res = await deleteMeetup('m-123');
+    expect(res.success).toBe(true);
+    expect(prisma.meetup.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'm-123' },
+        data: expect.objectContaining({
+          archivedAt: expect.any(Date),
+        }),
+      })
+    );
+  });
+
+  it('rejects a non-creator USER from deleting someone elses meetup', async () => {
+    (requireSession as any).mockResolvedValue({
+      user: { id: 'u-stranger', name: 'Other User', email: 'other@church.org', role: 'USER' },
+    });
+    (prisma.meetup.findUnique as any).mockResolvedValue({
+      id: 'm-123',
+      createdById: 'u-organizer',
+    });
+
+    const res = await deleteMeetup('m-123');
+    expect(res.success).toBe(false);
+    expect((res as any).error).toContain('Only managers, administrators, or the meetup organizer');
+  });
+
+  it('allows an ADMIN to delete any meetup', async () => {
+    (requireSession as any).mockResolvedValue({
+      user: { id: 'u-admin', name: 'Admin User', email: 'admin@church.org', role: 'ADMIN' },
+    });
+    (prisma.meetup.update as any).mockResolvedValue({
+      id: 'm-123',
+      archivedAt: new Date(),
+    });
+
+    const res = await deleteMeetup('m-123');
+    expect(res.success).toBe(true);
+    expect(prisma.meetup.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'm-123' },
+        data: expect.objectContaining({
+          archivedAt: expect.any(Date),
+        }),
+      })
+    );
   });
 });

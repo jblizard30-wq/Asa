@@ -41,6 +41,7 @@ export default async function DashboardPage() {
       upcomingTasks={data.upcomingTasks}
       recentlyCompleted={data.recentlyCompleted}
       adminExtras={data.role === 'ADMIN' ? data.adminExtras : undefined}
+      telemetry={data.telemetry}
     />
   );
 }

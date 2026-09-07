@@ -1,7 +1,7 @@
 // src/components/NewMeetupModal.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, addDays } from 'date-fns';
 import { MeetupCategory } from '@prisma/client';
@@ -10,7 +10,13 @@ import {
   CATEGORY_MAP,
   DEFAULT_WORK_ROLES,
   DEFAULT_POTLUCK_ITEMS,
+  DEFAULT_SUNDAY_WORSHIP_ROLES,
 } from '@/lib/meetupCategories';
+import {
+  getLiturgicalSeason,
+  LITURGICAL_SEASON_DETAILS,
+  getNextSunday,
+} from '@/lib/liturgicalCalendar';
 import {
   getCategoryIcon,
   VideoIcon,
@@ -27,10 +33,12 @@ export function NewMeetupModal({
   onClose,
   availableTeams = [],
   availableUsers = [],
+  initialPreset,
 }: {
   onClose: () => void;
   availableTeams?: Array<{ id: string; name: string }>;
   availableUsers?: Array<{ id: string; name: string | null; email: string }>;
+  initialPreset?: 'SUNDAY_WORSHIP';
 }) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -92,6 +100,39 @@ export function NewMeetupModal({
       setRosterItems(DEFAULT_WORK_ROLES.map((item, i) => ({ ...item, id: `${i}` })));
     }
   };
+
+  const applySundayWorshipPreset = () => {
+    const nextSunday = getNextSunday();
+    const season = getLiturgicalSeason(nextSunday);
+    const seasonMeta = LITURGICAL_SEASON_DETAILS[season];
+    const sundayDateStr = format(nextSunday, 'yyyy-MM-dd');
+
+    setDisplayName(`Sunday Worship - ${seasonMeta.name} (${format(nextSunday, 'MMM d')})`);
+    setCategory('GENERAL');
+    setDescription(
+      `Congregational Sunday morning worship service. Liturgical Season: ${seasonMeta.name} (Paraments / Liturgical Color: ${seasonMeta.colorName}).`
+    );
+    setLocation('Sanctuary');
+    setIsAllChurch(true);
+    setDurationMinutes(75);
+    setTimeSlots([
+      {
+        id: '1',
+        date: sundayDateStr,
+        time: '10:00',
+        label: 'Sunday 10:00 AM Worship',
+      },
+    ]);
+    setIsPotluckEnabled(false);
+    setHasRolesEnabled(true);
+    setRosterItems(DEFAULT_SUNDAY_WORSHIP_ROLES.map((item, i) => ({ ...item, id: `${i}` })));
+  };
+
+  useEffect(() => {
+    if (initialPreset === 'SUNDAY_WORSHIP') {
+      applySundayWorshipPreset();
+    }
+  }, [initialPreset]);
 
   const addTimeSlot = () => {
     const nextDate = addDays(new Date(), timeSlots.length + 2);
@@ -218,6 +259,28 @@ export function NewMeetupModal({
           {/* STEP 1: Details & Categories */}
           {step === 1 && (
             <div className="space-y-4">
+              {/* Preset Quick Action */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-purple-50 p-3.5 border border-purple-200 dark:bg-purple-950/40 dark:border-purple-800">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">⛪</span>
+                  <div>
+                    <p className="text-xs font-bold text-purple-900 dark:text-purple-200">
+                      Sunday Worship Generator
+                    </p>
+                    <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                      Auto-align with the liturgical calendar, season paraments, and volunteer roster.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={applySundayWorshipPreset}
+                  className="inline-flex items-center justify-center rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-purple-500 transition-colors shrink-0"
+                >
+                  Apply Preset
+                </button>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                   Meeting Title *

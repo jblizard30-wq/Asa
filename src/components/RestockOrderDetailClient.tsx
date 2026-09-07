@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/Toast';
 import {
   ArrowLeftIcon,
   ShoppingCartIcon,
@@ -91,6 +92,7 @@ export function RestockOrderDetailClient({
   availableVendorItems,
 }: RestockOrderDetailClientProps) {
   const router = useRouter();
+  const toast = useToast();
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<OrderDetailItem | null>(null);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -151,25 +153,40 @@ export function RestockOrderDetailClient({
         'Mark order as received?\n\nClick OK to also update on-hand stock counts in inventory for all received items, or Cancel to update order status only.'
       );
       setStatusLoading(true);
-      await receiveRestockOrder(order.id, updateStock);
+      const res = await receiveRestockOrder(order.id, updateStock);
       setStatusLoading(false);
+      if (res.success) {
+        toast.success('Order marked as received', updateStock ? 'Inventory on-hand counts updated' : undefined);
+      } else {
+        toast.error('Status update failed', res.error);
+      }
       router.refresh();
       return;
     }
 
     setStatusLoading(true);
-    await updateRestockOrderStatus(order.id, newStatus);
+    const res = await updateRestockOrderStatus(order.id, newStatus);
     setStatusLoading(false);
+    if (res.success) {
+      toast.success(`Order status updated to ${newStatus}`);
+    } else {
+      toast.error('Status update failed', res.error);
+    }
     router.refresh();
   };
 
   const handleSaveDatesAndNotes = async () => {
-    await updateRestockOrder(order.id, {
+    const res = await updateRestockOrder(order.id, {
       orderDate: orderDateValue || null,
       expectedDelivery: deliveryDateValue || null,
       notes: notesValue.trim() || null,
     });
     setIsEditingNotes(false);
+    if (res.success) {
+      toast.success('Order details updated');
+    } else {
+      toast.error('Update failed', res.error);
+    }
     router.refresh();
   };
 
@@ -179,8 +196,9 @@ export function RestockOrderDetailClient({
     }
     const res = await deleteRestockOrder(order.id);
     if (!res.success) {
-      alert(res.error);
+      toast.error('Delete failed', res.error);
     } else {
+      toast.success('Purchase order deleted');
       router.push('/inventory/orders');
     }
   };
@@ -189,8 +207,9 @@ export function RestockOrderDetailClient({
     if (!confirm(`Remove "${itemName}" from this order?`)) return;
     const res = await deleteRestockOrderItem(orderItemId);
     if (!res.success) {
-      alert(res.error);
+      toast.error('Remove failed', res.error);
     } else {
+      toast.success(`Removed "${itemName}"`);
       router.refresh();
     }
   };

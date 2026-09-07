@@ -7,6 +7,11 @@ import { requireSession, requireManagerOrAdmin } from '@/lib/permissions';
 import { isModuleEnabled } from '@/lib/modules';
 import { Prisma } from '@prisma/client';
 import { onStockCountsSubmitted, onOrderReceived } from '@/lib/workflows/inventoryWorkflowBridge';
+import {
+  getSurgedParLevel as computeSurgedParLevel,
+  type ItemForParSurge,
+  type ParSurgeResult,
+} from '@/lib/liturgicalCalendar';
 
 export type ActionResult<T = unknown> =
   | ({ success: true } & T)
@@ -158,21 +163,26 @@ export async function submitBatchStockCounts(input: {
 }
 
 /**
- * 1-click quick restock: updates a single item's on-hand count to match its idealQty (par level).
+ * 1-click quick restock: updates a single item's on-hand count to match its par level (or elevated surged par level if active).
  */
 export async function quickRestockItemToPar(itemId: string): Promise<ActionResult> {
   try {
     requireInventoryModule();
     const session = await requireSession();
-    const item = await prisma.inventoryItem.findUnique({ where: { id: itemId } });
+    const item = await prisma.inventoryItem.findUnique({
+      where: { id: itemId },
+      include: { inventoryType: true },
+    });
     if (!item) {
       return { success: false, error: 'Item not found' };
     }
 
+    const surge = computeSurgedParLevel(item);
+    const targetPar = surge.surgedParLevel;
+
     // Only ever raise stock to par, never lower it. Without this an overstocked item
-    // (onHand 50, par 20) would be "restocked" down to 20, discarding 30 units of real
-    // stock — quickRestockVendorItemsToPar already filters to under-par items this way.
-    if (item.onHandQty >= item.idealQty) {
+    // (onHand 50, par 20) would be "restocked" down to 20, discarding 30 units of real stock.
+    if (item.onHandQty >= targetPar) {
       return { success: true };
     }
 
@@ -180,14 +190,14 @@ export async function quickRestockItemToPar(itemId: string): Promise<ActionResul
       await tx.stockCount.create({
         data: {
           itemId,
-          qty: item.idealQty,
+          qty: targetPar,
           submittedById: session.user.id,
         },
       });
 
       await tx.inventoryItem.update({
         where: { id: itemId },
-        data: { onHandQty: item.idealQty },
+        data: { onHandQty: targetPar },
       });
     });
 
@@ -201,7 +211,7 @@ export async function quickRestockItemToPar(itemId: string): Promise<ActionResul
 }
 
 /**
- * 1-click quick restock for a vendor: brings all items under par for this vendor up to idealQty.
+ * 1-click quick restock for a vendor: brings all items under par (or under surged par) for this vendor up to par level.
  */
 export async function quickRestockVendorItemsToPar(
   vendorId: string | null
@@ -211,26 +221,33 @@ export async function quickRestockVendorItemsToPar(
     const session = await requireSession();
     const items = await prisma.inventoryItem.findMany({
       where: { vendorId },
+      include: { inventoryType: true },
     });
 
-    const neededItems = items.filter((i) => i.onHandQty < i.idealQty);
+    const neededItems = items
+      .map((item) => {
+        const surge = computeSurgedParLevel(item);
+        return { item, targetPar: surge.surgedParLevel };
+      })
+      .filter(({ item, targetPar }) => item.onHandQty < targetPar);
+
     if (neededItems.length === 0) {
       return { success: true, count: 0 };
     }
 
     await prisma.$transaction(async (tx) => {
-      for (const item of neededItems) {
+      for (const { item, targetPar } of neededItems) {
         await tx.stockCount.create({
           data: {
             itemId: item.id,
-            qty: item.idealQty,
+            qty: targetPar,
             submittedById: session.user.id,
           },
         });
 
         await tx.inventoryItem.update({
           where: { id: item.id },
-          data: { onHandQty: item.idealQty },
+          data: { onHandQty: targetPar },
         });
       }
     });
@@ -241,6 +258,16 @@ export async function quickRestockVendorItemsToPar(
     console.error('Failed to quick restock vendor items:', err);
     return { success: false, error: err instanceof Error ? err.message : 'Failed to quick restock vendor items' };
   }
+}
+
+/**
+ * Server action to calculate the surged par level for an item on an optional target date.
+ */
+export async function getSurgedParLevel(
+  item: ItemForParSurge,
+  targetDate?: Date | string
+): Promise<ParSurgeResult> {
+  return computeSurgedParLevel(item, targetDate);
 }
 
 // ============================================================================

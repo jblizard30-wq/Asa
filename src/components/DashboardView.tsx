@@ -1,6 +1,13 @@
+'use client';
+
+import React, { useState } from 'react';
 import Link from 'next/link';
+import { useToast } from '@/components/Toast';
+import { claimSignupSlot } from '@/lib/actions/meetups';
+import { quickRestockItemToPar } from '@/lib/actions/inventory';
 import { PRIORITY_BAR_COLORS, PRIORITY_LABELS, PRIORITY_STYLES, STATUS_BAR_COLORS, STATUS_LABELS } from '@/lib/format';
 import type { CountBreakdown, MemberStats, ProjectStats, TaskListEntry, TeamStats, TopLineStats } from '@/lib/dashboard';
+import type { DashboardModuleTelemetry } from '@/lib/actions/dashboard';
 
 export interface DashboardViewProps {
   role: 'ADMIN' | 'MANAGER';
@@ -15,6 +22,7 @@ export interface DashboardViewProps {
   upcomingTasks: TaskListEntry[];
   recentlyCompleted: TaskListEntry[];
   adminExtras?: { teamCount: number; projectCount: number; unassignedCount: number };
+  telemetry?: DashboardModuleTelemetry;
 }
 
 export function DashboardView({
@@ -30,13 +38,223 @@ export function DashboardView({
   upcomingTasks,
   recentlyCompleted,
   adminExtras,
+  telemetry,
 }: DashboardViewProps) {
-  return (
-    <div>
-      <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Dashboard</h1>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{scopeDescription}</p>
+  const toast = useToast();
+  const [criticalItems, setCriticalItems] = useState(telemetry?.criticalInventoryItems || []);
+  const [openSlots, setOpenSlots] = useState(telemetry?.openVolunteerSlots || []);
+  const [claimingSlotId, setClaimingSlotId] = useState<string | null>(null);
+  const [restockingItemId, setRestockingItemId] = useState<string | null>(null);
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+  const handleQuickClaim = async (slotId: string, slotTitle: string, meetupTitle: string) => {
+    setClaimingSlotId(slotId);
+    try {
+      const res = await claimSignupSlot(slotId, 'Self');
+      if (res.success) {
+        toast.success('Role Claimed!', `You're signed up for "${slotTitle}" at ${meetupTitle}.`);
+        setOpenSlots((prev) => prev.filter((s) => s.id !== slotId));
+      } else {
+        toast.error('Claim Failed', res.error || 'Could not claim this role.');
+      }
+    } catch (err: any) {
+      toast.error('Error', err.message || 'Something went wrong.');
+    } finally {
+      setClaimingSlotId(null);
+    }
+  };
+
+  const handleQuickRestock = async (itemId: string, name: string) => {
+    setRestockingItemId(itemId);
+    try {
+      const res = await quickRestockItemToPar(itemId);
+      if (res.success) {
+        toast.success('Restocked to Par', `"${name}" stock level has been replenished to ideal par.`);
+        setCriticalItems((prev) => prev.filter((i) => i.id !== itemId));
+      } else {
+        toast.error('Restock Failed', res.error || 'Failed to restock item.');
+      }
+    } catch (err: any) {
+      toast.error('Error', err.message || 'Something went wrong.');
+    } finally {
+      setRestockingItemId(null);
+    }
+  };
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Church Operations Cockpit</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{scopeDescription}</p>
+      </div>
+
+      {/* Financial Runway Ratios (if XP enabled) */}
+      {telemetry?.financialRatios && telemetry.financialRatios.length > 0 && (
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 dark:border-indigo-900/40 dark:bg-indigo-950/20">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+              📊 Financial Runway & Health Ratios (XP Hub)
+            </span>
+            <Link href="/xp" className="text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400">
+              View Financials →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {telemetry.financialRatios.map((r) => (
+              <div
+                key={r.label}
+                className={`rounded-lg border p-3 bg-white dark:bg-slate-900 ${
+                  r.status === 'healthy'
+                    ? 'border-emerald-200 dark:border-emerald-800'
+                    : r.status === 'watch'
+                    ? 'border-amber-200 dark:border-amber-800'
+                    : 'border-rose-200 dark:border-rose-800'
+                }`}
+              >
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{r.label}</p>
+                <p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">{r.display}</p>
+                <p className="text-[11px] text-slate-400 mt-1">{r.hint}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Operational Rhythms & Urgent Alerts */}
+      {telemetry && (telemetry.upcomingMeetups.length > 0 || telemetry.criticalInventoryItems.length > 0 || telemetry.openVolunteerSlots.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* Upcoming Gatherings */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 shadow-xs">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <span>🗓️</span>
+                <span>Upcoming Church Gatherings</span>
+              </h3>
+              <Link href="/meetups" className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400">
+                View All →
+              </Link>
+            </div>
+            {telemetry.upcomingMeetups.length === 0 ? (
+              <p className="text-xs text-slate-400 py-3">No meetups or services scheduled in the next 7 days.</p>
+            ) : (
+              <div className="space-y-2">
+                {telemetry.upcomingMeetups.map((m) => (
+                  <Link
+                    key={m.id}
+                    href={`/meetups/${m.id}`}
+                    className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 hover:border-slate-200 bg-slate-50/50 hover:bg-slate-100/60 dark:border-slate-800 dark:bg-slate-800/40 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <div className="truncate">
+                      <p className="font-medium text-xs text-slate-800 dark:text-slate-200 truncate">{m.title}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {m.startsAt ? new Date(m.startsAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Time voting active'}
+                        {m.location ? ` · ${m.location}` : ''}
+                      </p>
+                    </div>
+                    {m.unfilledSlotCount > 0 ? (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                        ⚠️ {m.unfilledSlotCount} open role{m.unfilledSlotCount === 1 ? '' : 's'}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                        {m.category}
+                      </span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Critical Supply & Volunteer Alerts */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 shadow-xs">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <span>⚠️</span>
+                <span>Operational Alerts</span>
+              </h3>
+              <span className="text-xs text-slate-400">Action required</span>
+            </div>
+
+            <div className="space-y-2.5">
+              {/* Critical Inventory */}
+              {criticalItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between p-2.5 rounded-lg border border-rose-100 bg-rose-50/50 dark:border-rose-950/60 dark:bg-rose-950/20"
+                >
+                  <div>
+                    <p className="text-xs font-semibold text-rose-900 dark:text-rose-200">
+                      Restock Par Alert: {item.name}
+                    </p>
+                    <p className="text-[11px] text-rose-700/80 dark:text-rose-400">
+                      {item.onHandQty} {item.unit} on hand (Threshold: {item.reorderThreshold}) · Room: {item.roomName}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickRestock(item.id, item.name)}
+                      disabled={restockingItemId === item.id}
+                      className="text-xs font-semibold px-2 py-1 rounded border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-300 dark:hover:bg-rose-900/60 shadow-xs transition-colors disabled:opacity-50"
+                      title="Instantly replenish to par level"
+                    >
+                      {restockingItemId === item.id ? 'Restocking...' : 'Restock to Par'}
+                    </button>
+                    <Link
+                      href="/inventory/orders"
+                      className="text-xs font-semibold px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white shadow-xs"
+                    >
+                      Order
+                    </Link>
+                  </div>
+                </div>
+              ))}
+
+              {/* Volunteer Gaps */}
+              {openSlots.map((slot) => (
+                <div
+                  key={slot.id}
+                  className="flex items-center justify-between p-2.5 rounded-lg border border-amber-100 bg-amber-50/50 dark:border-amber-950/60 dark:bg-amber-950/20"
+                >
+                  <div>
+                    <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+                      Unfilled Volunteer Role: {slot.slotTitle}
+                    </p>
+                    <p className="text-[11px] text-amber-700/80 dark:text-amber-400">
+                      {slot.neededCount} opening{slot.neededCount === 1 ? '' : 's'} for &ldquo;{slot.meetupTitle}&rdquo;
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickClaim(slot.id, slot.slotTitle, slot.meetupTitle)}
+                      disabled={claimingSlotId === slot.id}
+                      className="text-xs font-semibold px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white shadow-xs transition-colors disabled:opacity-50"
+                      title="Claim this volunteer role directly"
+                    >
+                      {claimingSlotId === slot.id ? 'Claiming...' : 'Claim Role'}
+                    </button>
+                    <Link
+                      href={`/meetups/${slot.meetupId}`}
+                      className="text-xs font-medium px-2 py-1 rounded border border-amber-200 bg-white hover:bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300 shadow-xs"
+                    >
+                      Roster →
+                    </Link>
+                  </div>
+                </div>
+              ))}
+
+              {criticalItems.length === 0 && openSlots.length === 0 && (
+                <div className="py-6 text-center text-xs text-slate-400">
+                  ✓ All supplies above par level & volunteer roles covered.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Topline KPI Cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatTile label={role === 'ADMIN' ? 'Total Users' : 'Team Members'} value={topLine.peopleCount} />
         <StatTile label="Open Tasks" value={topLine.openCount} />
         <StatTile label="Overdue" value={topLine.overdueCount} tone={topLine.overdueCount > 0 ? 'danger' : 'default'} />
@@ -45,7 +263,7 @@ export function DashboardView({
       </div>
 
       {adminExtras && (
-        <div className="mt-3 grid grid-cols-3 gap-3 sm:max-w-xl">
+        <div className="grid grid-cols-3 gap-3 sm:max-w-xl">
           <StatTile label="Teams" value={adminExtras.teamCount} compact />
           <StatTile label="Projects" value={adminExtras.projectCount} compact />
           <StatTile

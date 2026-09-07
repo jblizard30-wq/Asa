@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/Toast';
 import {
   BuildingIcon,
   RoomIcon,
@@ -87,6 +88,7 @@ export function InventorySettingsClient({
   vendors,
 }: InventorySettingsClientProps) {
   const router = useRouter();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<'locations' | 'tracks' | 'catalog'>('locations');
 
   // Locations state
@@ -116,6 +118,7 @@ export function InventorySettingsClient({
       b.rooms.map((r) => ({
         id: r.id,
         name: `${b.name} — ${r.name}`,
+        buildingId: b.id,
       }))
     );
   }, [buildings]);
@@ -140,8 +143,9 @@ export function InventorySettingsClient({
     if (!newBuildingName.trim()) return;
     const res = await createBuilding({ name: newBuildingName.trim() });
     if (!res.success) {
-      alert(res.error);
+      toast.error('Building Creation Failed', res.error);
     } else {
+      toast.success(`Created building "${newBuildingName.trim()}"`);
       setNewBuildingName('');
       router.refresh();
     }
@@ -154,8 +158,9 @@ export function InventorySettingsClient({
     }
     const res = await updateBuilding(id, { name: renameBuildingValue.trim() });
     if (!res.success) {
-      alert(res.error);
+      toast.error('Rename Failed', res.error);
     } else {
+      toast.success('Building renamed');
       setRenamingBuildingId(null);
       router.refresh();
     }
@@ -171,8 +176,9 @@ export function InventorySettingsClient({
     }
     const res = await deleteBuilding(id);
     if (!res.success) {
-      alert(res.error);
+      toast.error('Delete Failed', res.error);
     } else {
+      toast.success(`Deleted building "${name}"`);
       router.refresh();
     }
   };
@@ -181,8 +187,9 @@ export function InventorySettingsClient({
     if (!newRoomName.trim()) return;
     const res = await createRoom({ buildingId, name: newRoomName.trim() });
     if (!res.success) {
-      alert(res.error);
+      toast.error('Room Creation Failed', res.error);
     } else {
+      toast.success(`Created room "${newRoomName.trim()}"`);
       setNewRoomName('');
       setAddingRoomBuildingId(null);
       router.refresh();
@@ -193,8 +200,9 @@ export function InventorySettingsClient({
     if (!confirm(`Delete room "${name}" and all its items? This action cannot be undone.`)) return;
     const res = await deleteRoom(id);
     if (!res.success) {
-      alert(res.error);
+      toast.error('Delete Failed', res.error);
     } else {
+      toast.success(`Deleted room "${name}"`);
       router.refresh();
     }
   };
@@ -213,7 +221,9 @@ export function InventorySettingsClient({
     });
     if (!res.success) {
       setModalError(res.error);
+      toast.error('Track Creation Failed', res.error);
     } else {
+      toast.success(`Created category track "${trackName.trim()}"`);
       setIsTrackModalOpen(false);
       setTrackName('');
       setTrackSlug('');
@@ -226,8 +236,9 @@ export function InventorySettingsClient({
     if (!confirm(`Delete category track "${name}"? Items will become uncategorized.`)) return;
     const res = await deleteInventoryType(id);
     if (!res.success) {
-      alert(res.error);
+      toast.error('Delete Failed', res.error);
     } else {
+      toast.success(`Deleted track "${name}"`);
       router.refresh();
     }
   };
@@ -237,8 +248,9 @@ export function InventorySettingsClient({
     if (!confirm(`Delete item "${name}" from the catalog?`)) return;
     const res = await deleteInventoryItem(id);
     if (!res.success) {
-      alert(res.error);
+      toast.error('Delete Failed', res.error);
     } else {
+      toast.success(`Deleted item "${name}"`);
       router.refresh();
     }
   };

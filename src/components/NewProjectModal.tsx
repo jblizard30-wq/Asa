@@ -4,7 +4,13 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createProject } from '@/lib/actions/projects';
 
-export function NewProjectModal({ onClose }: { onClose: () => void }) {
+export function NewProjectModal({
+  onClose,
+  onOpenPlaybooks,
+}: {
+  onClose: () => void;
+  onOpenPlaybooks?: () => void;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -26,7 +32,19 @@ export function NewProjectModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900 dark:shadow-slate-950/50" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">New project</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">New project</h2>
+          {onOpenPlaybooks && (
+            <button
+              type="button"
+              onClick={onOpenPlaybooks}
+              className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 flex items-center gap-1"
+            >
+              <span>📚</span>
+              <span>Use Playbook</span>
+            </button>
+          )}
+        </div>
         <form action={handleSubmit} className="mt-4 space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-200" htmlFor="name">

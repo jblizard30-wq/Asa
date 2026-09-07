@@ -7,6 +7,7 @@ import { PRIORITY_STYLES, formatDueDate } from '@/lib/format';
 import { QuickAddTask } from '@/components/QuickAddTask';
 import { TaskDetailModal } from '@/components/TaskDetailModal';
 import { TagBadge, type TagInfo } from '@/components/TagPicker';
+import { useToast } from '@/components/Toast';
 
 export interface TaskFieldValue {
   customFieldId: string;
@@ -85,6 +86,7 @@ export function KanbanBoard({
 }) {
   const [sections, setSections] = useState(initialSections);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     setSections(initialSections);
@@ -108,10 +110,10 @@ export function KanbanBoard({
       return next;
     });
 
-    void moveTask(draggableId, destination.droppableId, destination.index).then((result) => {
-      if (!result.success) {
+    void moveTask(draggableId, destination.droppableId, destination.index).then((res) => {
+      if (!res.success) {
         setSections(previousSections);
-        alert(result.error ?? 'Could not move this task.');
+        toast.error('Move failed', res.error ?? 'Could not move this task.');
       }
     });
   }

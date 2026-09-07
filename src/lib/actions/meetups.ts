@@ -431,7 +431,8 @@ export async function generateShareLink(meetupId: string, label?: string): Promi
 
 export async function convertActionItemsToTasks(
   meetupId: string,
-  items: Array<{ title: string; assigneeId?: string }>
+  items: Array<{ title: string; assigneeId?: string; dueDate?: string }>,
+  options?: { projectId?: string; sectionId?: string }
 ): Promise<ActionResult<{ taskCount: number }>> {
   const gate = requireMeetupsModule();
   if (gate) return { success: false, error: gate };
@@ -442,28 +443,46 @@ export async function convertActionItemsToTasks(
     return { success: false, error: 'Only managers, administrators, or the meetup organizer can perform this action' };
   }
 
-  const defaultProject = await prisma.project.findFirst({
-    orderBy: { createdAt: 'asc' },
-    include: {
-      sections: { orderBy: { order: 'asc' }, take: 1 },
-    },
-  });
+  let targetProject = null;
+  if (options?.projectId) {
+    targetProject = await prisma.project.findUnique({
+      where: { id: options.projectId },
+      include: { sections: { orderBy: { order: 'asc' } } },
+    });
+  }
 
-  if (!defaultProject) {
+  if (!targetProject) {
+    targetProject = await prisma.project.findFirst({
+      orderBy: { createdAt: 'asc' },
+      include: { sections: { orderBy: { order: 'asc' } } },
+    });
+  }
+
+  if (!targetProject) {
     return { success: false, error: 'No project found to associate tasks with.' };
   }
 
-  let sectionId = defaultProject.sections[0]?.id;
-  if (!sectionId) {
+  let targetSectionId = options?.sectionId;
+  if (!targetSectionId || !targetProject.sections.some((s) => s.id === targetSectionId)) {
+    targetSectionId = targetProject.sections[0]?.id;
+  }
+
+  if (!targetSectionId) {
     const createdSection = await prisma.section.create({
       data: {
         name: 'Action Items',
-        projectId: defaultProject.id,
+        projectId: targetProject.id,
         order: 0,
       },
     });
-    sectionId = createdSection.id;
+    targetSectionId = createdSection.id;
   }
+
+  const meetup = await prisma.meetup.findUnique({
+    where: { id: meetupId },
+    select: { title: true },
+  });
+  const meetupTitle = meetup?.title || 'Meetup';
 
   let count = 0;
   for (const item of items) {
@@ -472,9 +491,10 @@ export async function convertActionItemsToTasks(
     await prisma.task.create({
       data: {
         title: item.title.trim(),
-        description: `Action item from Meetup: ${meetupId}`,
-        projectId: defaultProject.id,
-        sectionId,
+        description: `Action item generated from **[${meetupTitle}](/meetups/${meetupId})**`,
+        projectId: targetProject.id,
+        sectionId: targetSectionId,
+        dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
         assignees: item.assigneeId
           ? { connect: [{ id: item.assigneeId }] }
           : undefined,
@@ -483,8 +503,43 @@ export async function convertActionItemsToTasks(
     count++;
   }
 
-  safeRevalidatePath('/tasks');
+  safeRevalidatePath(`/meetups/${meetupId}`);
+  safeRevalidatePath(`/projects/${targetProject.id}`);
+  safeRevalidatePath('/my-tasks');
   return { success: true, taskCount: count };
+}
+
+export async function saveMeetupSupplies(
+  meetupId: string,
+  supplies: Array<{ itemId: string; name: string; neededQty: number; unit: string }>
+): Promise<ActionResult> {
+  const gate = requireMeetupsModule();
+  if (gate) return { success: false, error: gate };
+
+  const session = await requireSession();
+  const canManage = await canUserManageMeetup(session.user.id, session.user.role, meetupId);
+  if (!canManage) {
+    return { success: false, error: 'Only managers, administrators, or the meetup organizer can perform this action' };
+  }
+
+  const meetup = await prisma.meetup.findUnique({
+    where: { id: meetupId },
+    select: { description: true },
+  });
+  if (!meetup) return { success: false, error: 'Meetup not found' };
+
+  // Encode supplies in a markdown comment tag within description
+  const cleanDescription = (meetup.description || '').replace(/<!-- SUPPLIES_MANIFEST:[\s\S]*?-->/g, '').trim();
+  const manifest = `<!-- SUPPLIES_MANIFEST:${JSON.stringify(supplies)}-->`;
+  const nextDescription = cleanDescription ? `${cleanDescription}\n\n${manifest}` : manifest;
+
+  await prisma.meetup.update({
+    where: { id: meetupId },
+    data: { description: nextDescription },
+  });
+
+  safeRevalidatePath(`/meetups/${meetupId}`);
+  return { success: true };
 }
 
 const updateAudienceSchema = z.object({
@@ -536,6 +591,27 @@ export async function updateMeetupAudience(
         });
       }
     }
+  });
+
+  safeRevalidatePath('/meetups');
+  safeRevalidatePath(`/meetups/${meetupId}`);
+  safeRevalidatePath('/calendar');
+  return { success: true };
+}
+
+export async function deleteMeetup(meetupId: string): Promise<ActionResult> {
+  const gate = requireMeetupsModule();
+  if (gate) return { success: false, error: gate };
+
+  const session = await requireSession();
+  const canManage = await canUserManageMeetup(session.user.id, session.user.role, meetupId);
+  if (!canManage) {
+    return { success: false, error: 'Only managers, administrators, or the meetup organizer can perform this action' };
+  }
+
+  await prisma.meetup.update({
+    where: { id: meetupId },
+    data: { archivedAt: new Date() },
   });
 
   safeRevalidatePath('/meetups');

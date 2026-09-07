@@ -1,7 +1,7 @@
 // src/components/MeetupsListClient.tsx
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MeetupCategory } from '@prisma/client';
 import { NewMeetupModal } from '@/components/NewMeetupModal';
@@ -16,6 +16,7 @@ import {
 } from '@/components/MeetupIcons';
 import { ShareLinkButton } from '@/components/meetups/ShareLinkButton';
 import { CalendarExportBar } from '@/components/meetups/CalendarExportBar';
+import { DeleteMeetupButton } from '@/components/meetups/DeleteMeetupButton';
 
 export interface MeetupRow {
   id: string;
@@ -63,9 +64,15 @@ export function MeetupsListClient({
   canManage?: boolean;
 }) {
   const [showNew, setShowNew] = useState(false);
+  const [preset, setPreset] = useState<'SUNDAY_WORSHIP' | undefined>(undefined);
   const [selectedGroup, setSelectedGroup] = useState<'ALL' | 'WORK' | 'MINISTRY' | 'VOTING'>('ALL');
+  const [meetupList, setMeetupList] = useState<MeetupRow[]>(meetups);
 
-  const filteredMeetups = meetups.filter((m) => {
+  useEffect(() => {
+    setMeetupList(meetups);
+  }, [meetups]);
+
+  const filteredMeetups = meetupList.filter((m) => {
     const meta = CATEGORY_MAP[m.category] || CATEGORY_MAP.GENERAL;
     if (selectedGroup === 'WORK') return meta.group === 'work';
     if (selectedGroup === 'MINISTRY') return meta.group === 'ministry' || m.isPotluck;
@@ -86,14 +93,31 @@ export function MeetupsListClient({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowNew(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors shrink-0"
-        >
-          <PlusIcon className="h-4 w-4" />
-          <span>Schedule Meetup</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setPreset('SUNDAY_WORSHIP');
+              setShowNew(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3.5 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-100 dark:border-purple-800 dark:bg-purple-950/60 dark:text-purple-300 dark:hover:bg-purple-900/60 shadow-sm transition-colors"
+          >
+            <span>⛪</span>
+            <span>Sunday Worship</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setPreset(undefined);
+              setShowNew(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors"
+          >
+            <PlusIcon className="h-4 w-4" />
+            <span>Schedule Meetup</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Tabs */}
@@ -256,6 +280,16 @@ export function MeetupsListClient({
                     >
                       View Details →
                     </Link>
+
+                    {m.canManage && (
+                      <DeleteMeetupButton
+                        meetupId={m.id}
+                        meetupTitle={m.displayName}
+                        variant="icon"
+                        redirectTo={null}
+                        onDeleted={() => setMeetupList((prev) => prev.filter((item) => item.id !== m.id))}
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -266,9 +300,13 @@ export function MeetupsListClient({
 
       {showNew && (
         <NewMeetupModal
-          onClose={() => setShowNew(false)}
+          onClose={() => {
+            setShowNew(false);
+            setPreset(undefined);
+          }}
           availableTeams={availableTeams}
           availableUsers={availableUsers}
+          initialPreset={preset}
         />
       )}
     </div>

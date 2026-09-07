@@ -153,3 +153,13 @@ export const DEFAULT_POTLUCK_ITEMS = [
   { title: 'Paper Plates, Napkins & Cutlery', category: 'Supplies', capacity: 2 },
 ];
 
+export const DEFAULT_SUNDAY_WORSHIP_ROLES = [
+  { title: 'Liturgist / Scripture Reader', category: 'Liturgy', capacity: 1 },
+  { title: 'Audio / Soundboard Engineer', category: 'AV Tech', capacity: 1 },
+  { title: 'Visuals / Projection & Livestream', category: 'AV Tech', capacity: 1 },
+  { title: 'Lead Usher / Greeter', category: 'Hospitality', capacity: 2 },
+  { title: 'Communion Preparer / Server', category: 'Liturgy', capacity: 2 },
+  { title: 'Nursery / Children Check-in', category: 'Family', capacity: 2 },
+];
+
+

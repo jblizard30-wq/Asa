@@ -18,7 +18,9 @@ import { MeetingRosterCard } from '@/components/meetups/MeetingRosterCard';
 import { ActionItemsSection } from '@/components/meetups/ActionItemsSection';
 import { CalendarExportBar } from '@/components/meetups/CalendarExportBar';
 import { ShareLinkButton } from '@/components/meetups/ShareLinkButton';
+import { DeleteMeetupButton } from '@/components/meetups/DeleteMeetupButton';
 import { AudienceSection } from '@/components/meetups/AudienceSection';
+import { MeetupSuppliesSection } from '@/components/meetups/MeetupSuppliesSection';
 
 export default async function MeetupDetailPage({ params }: { params: { id: string } }) {
   if (!isModuleEnabled('meetups')) {
@@ -30,7 +32,15 @@ export default async function MeetupDetailPage({ params }: { params: { id: strin
     redirect('/sign-in');
   }
 
-  const [meetup, userTeams, availableTeams, availableUsers] = await Promise.all([
+  const [
+    meetup,
+    userTeams,
+    availableTeams,
+    availableUsers,
+    accessibleProjects,
+    linkedTasks,
+    inventoryItems,
+  ] = await Promise.all([
     prisma.meetup.findUnique({
       where: { id: params.id },
       include: {
@@ -77,6 +87,47 @@ export default async function MeetupDetailPage({ params }: { params: { id: strin
       select: { id: true, name: true, email: true },
       orderBy: { name: 'asc' },
     }),
+    prisma.project.findMany({
+      where:
+        session.user.role === 'ADMIN'
+          ? { isPersonal: false }
+          : { isPersonal: false, members: { some: { userId: session.user.id } } },
+      select: {
+        id: true,
+        name: true,
+        sections: { select: { id: true, name: true }, orderBy: { order: 'asc' } },
+      },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.task.findMany({
+      where: {
+        deletedAt: null,
+        description: { contains: params.id },
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        projectId: true,
+        project: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    }),
+    isModuleEnabled('inventory')
+      ? prisma.inventoryItem.findMany({
+          select: {
+            id: true,
+            name: true,
+            onHandQty: true,
+            reorderThreshold: true,
+            unit: true,
+            room: { select: { name: true } },
+          },
+          orderBy: { name: 'asc' },
+          take: 100,
+        })
+      : [],
   ]);
 
   if (!meetup || meetup.archivedAt) {
@@ -99,6 +150,34 @@ export default async function MeetupDetailPage({ params }: { params: { id: strin
   const categoryMeta = CATEGORY_MAP[meetup.category] || CATEGORY_MAP.GENERAL;
   const isFinalized = Boolean(meetup.startsAt && meetup.finalizedTimeSlotId);
 
+  const manifestMatch = meetup.description?.match(/<!-- SUPPLIES_MANIFEST:([\s\S]*?)-->/);
+  let manifestSupplies: Array<{ itemId: string; name: string; neededQty: number; unit: string }> = [];
+  if (manifestMatch && manifestMatch[1]) {
+    try {
+      manifestSupplies = JSON.parse(manifestMatch[1]);
+    } catch {
+      manifestSupplies = [];
+    }
+  }
+  const displayDescription = (meetup.description || '').replace(/<!-- SUPPLIES_MANIFEST:[\s\S]*?-->/g, '').trim();
+
+  const formattedInventory = (inventoryItems as any[]).map((i) => ({
+    id: i.id,
+    name: i.name,
+    onHandQty: i.onHandQty,
+    reorderThreshold: i.reorderThreshold,
+    unit: i.unit,
+    roomName: i.room?.name || 'Unassigned',
+  }));
+
+  const formattedLinkedTasks = linkedTasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    status: t.status,
+    projectId: t.projectId,
+    projectName: t.project?.name || 'Project',
+  }));
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12">
       {/* Back to Meetups */}
@@ -116,7 +195,7 @@ export default async function MeetupDetailPage({ params }: { params: { id: strin
               event={{
                 id: meetup.id,
                 title: meetup.title,
-                description: meetup.description,
+                description: displayDescription,
                 startsAt: meetup.startsAt,
                 endsAt: meetup.endsAt,
                 location: meetup.location,
@@ -128,17 +207,21 @@ export default async function MeetupDetailPage({ params }: { params: { id: strin
           )}
 
           <ShareLinkButton meetupId={meetup.id} />
+
+          {canManage && (
+            <DeleteMeetupButton meetupId={meetup.id} meetupTitle={meetup.title} />
+          )}
         </div>
       </div>
 
-      {/* Main Header Card */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-4">
+      {/* Header Info Banner */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 shadow-sm space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${categoryMeta.badgeClass}`}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${categoryMeta.badgeClass}`}
           >
-            {getCategoryIcon(categoryMeta.iconName, 'h-3.5 w-3.5')}
-            <span>{categoryMeta.label}</span>
+            {getCategoryIcon(meetup.category, 'h-3.5 w-3.5')}
+            {categoryMeta.label}
           </span>
 
           {isFinalized ? (
@@ -169,9 +252,9 @@ export default async function MeetupDetailPage({ params }: { params: { id: strin
           )}
         </div>
 
-        {meetup.description && (
+        {displayDescription && (
           <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-            {meetup.description}
+            {displayDescription}
           </p>
         )}
 
@@ -269,8 +352,24 @@ export default async function MeetupDetailPage({ params }: { params: { id: strin
         currentUserId={session.user.id}
       />
 
+      {/* Event Supplies & Equipment Logistics */}
+      {isModuleEnabled('inventory') && (
+        <MeetupSuppliesSection
+          meetupId={meetup.id}
+          canManage={canManage}
+          initialSupplies={manifestSupplies}
+          availableInventory={formattedInventory}
+        />
+      )}
+
       {/* Action Items to Tasks (Organizers) */}
-      <ActionItemsSection meetupId={meetup.id} canManage={canManage} />
+      <ActionItemsSection
+        meetupId={meetup.id}
+        canManage={canManage}
+        availableProjects={accessibleProjects}
+        availableUsers={availableUsers}
+        linkedTasks={formattedLinkedTasks}
+      />
     </div>
   );
 }

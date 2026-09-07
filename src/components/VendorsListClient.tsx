@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/Toast';
 import {
   TruckIcon,
   MailIcon,
@@ -36,6 +37,7 @@ interface VendorsListClientProps {
 
 export function VendorsListClient({ canManage, vendors }: VendorsListClientProps) {
   const router = useRouter();
+  const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<VendorRow | null>(null);
@@ -68,8 +70,9 @@ export function VendorsListClient({ canManage, vendors }: VendorsListClientProps
 
     const res = await deleteVendor(vendor.id);
     if (!res.success) {
-      alert(res.error);
+      toast.error('Delete failed', res.error);
     } else {
+      toast.success(`Deleted vendor "${vendor.name}"`);
       router.refresh();
     }
   };

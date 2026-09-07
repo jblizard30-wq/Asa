@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { NewProjectModal } from '@/components/NewProjectModal';
+import { PlaybookTemplateSelector } from '@/components/PlaybookTemplateSelector';
 
 export interface ProjectSummary {
   id: string;
@@ -15,6 +16,7 @@ export interface ProjectSummary {
 
 export function ProjectsListClient({ projects, isAdmin }: { projects: ProjectSummary[]; isAdmin: boolean }) {
   const [showNewProject, setShowNewProject] = useState(false);
+  const [showPlaybookSelector, setShowPlaybookSelector] = useState(false);
 
   return (
     <div>
@@ -24,12 +26,23 @@ export function ProjectsListClient({ projects, isAdmin }: { projects: ProjectSum
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">All the initiatives your team is working on.</p>
         </div>
         {isAdmin && (
-          <button
-            onClick={() => setShowNewProject(true)}
-            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-          >
-            + New project
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowPlaybookSelector(true)}
+              className="flex items-center gap-1.5 rounded-md border border-brand-300 bg-brand-50 px-3.5 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100 dark:border-brand-700 dark:bg-brand-950/50 dark:text-brand-300 dark:hover:bg-brand-900/60 transition-colors shadow-xs"
+            >
+              <span>📚</span>
+              <span>Ministry Playbooks</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowNewProject(true)}
+              className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 shadow-xs"
+            >
+              + New project
+            </button>
+          </div>
         )}
       </div>
 
@@ -60,7 +73,18 @@ export function ProjectsListClient({ projects, isAdmin }: { projects: ProjectSum
         )}
       </div>
 
-      {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} />}
+      {showNewProject && (
+        <NewProjectModal
+          onClose={() => setShowNewProject(false)}
+          onOpenPlaybooks={() => {
+            setShowNewProject(false);
+            setShowPlaybookSelector(true);
+          }}
+        />
+      )}
+      {showPlaybookSelector && (
+        <PlaybookTemplateSelector onClose={() => setShowPlaybookSelector(false)} />
+      )}
     </div>
   );
 }

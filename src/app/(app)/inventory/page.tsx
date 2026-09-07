@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { isModuleEnabled } from '@/lib/modules';
 import { InventoryDashboardClient } from '@/components/InventoryDashboardClient';
+import { getSurgedParLevel } from '@/lib/liturgicalCalendar';
 
 export default async function InventoryPage() {
   if (!isModuleEnabled('inventory')) {
@@ -25,8 +26,13 @@ export default async function InventoryPage() {
             items: {
               select: {
                 id: true,
+                name: true,
+                notes: true,
                 idealQty: true,
                 onHandQty: true,
+                inventoryType: {
+                  select: { slug: true, name: true },
+                },
               },
             },
           },
@@ -63,7 +69,11 @@ export default async function InventoryPage() {
     id: b.id,
     name: b.name,
     rooms: b.rooms.map((r) => {
-      const neededCount = r.items.filter((item) => item.idealQty > item.onHandQty).length;
+      const neededCount = r.items.filter((item) => {
+        const surge = getSurgedParLevel(item);
+        const effectivePar = surge.isSurged ? surge.surgedParLevel : item.idealQty;
+        return item.onHandQty < effectivePar;
+      }).length;
       return {
         id: r.id,
         name: r.name,
@@ -84,39 +94,49 @@ export default async function InventoryPage() {
     itemCount: t._count.items,
   }));
 
-  const shapedItems = itemsData.map((item) => ({
-    id: item.id,
-    name: item.name,
-    unit: item.unit,
-    idealQty: item.idealQty,
-    onHandQty: item.onHandQty,
-    neededQty: Math.max(item.idealQty - item.onHandQty, 0),
-    reorderThreshold: item.reorderThreshold,
-    shelfLocation: item.shelfLocation,
-    sortOrder: item.sortOrder,
-    notes: item.notes,
-    roomId: item.roomId,
-    room: {
-      id: item.room.id,
-      name: item.room.name,
-      buildingId: item.room.buildingId,
-      building: {
-        id: item.room.building.id,
-        name: item.room.building.name,
+  const shapedItems = itemsData.map((item) => {
+    const surge = getSurgedParLevel(item);
+    const effectivePar = surge.isSurged ? surge.surgedParLevel : item.idealQty;
+    return {
+      id: item.id,
+      name: item.name,
+      unit: item.unit,
+      idealQty: item.idealQty,
+      onHandQty: item.onHandQty,
+      neededQty: Math.max(effectivePar - item.onHandQty, 0),
+      reorderThreshold: item.reorderThreshold,
+      shelfLocation: item.shelfLocation,
+      sortOrder: item.sortOrder,
+      notes: item.notes,
+      isSurged: surge.isSurged,
+      surgedParLevel: surge.surgedParLevel,
+      surgeBadgeText: surge.badgeText,
+      surgeReason: surge.surgeReason,
+      daysUntilFeast: surge.daysUntilFeast,
+      feastName: surge.feastName,
+      roomId: item.roomId,
+      room: {
+        id: item.room.id,
+        name: item.room.name,
+        buildingId: item.room.buildingId,
+        building: {
+          id: item.room.building.id,
+          name: item.room.building.name,
+        },
       },
-    },
-    inventoryTypeId: item.inventoryTypeId,
-    inventoryType: item.inventoryType
-      ? {
-          id: item.inventoryType.id,
-          name: item.inventoryType.name,
-          slug: item.inventoryType.slug,
-          icon: item.inventoryType.icon,
-        }
-      : null,
-    vendorId: item.vendorId,
-    vendor: item.vendor ? { id: item.vendor.id, name: item.vendor.name } : null,
-  }));
+      inventoryTypeId: item.inventoryTypeId,
+      inventoryType: item.inventoryType
+        ? {
+            id: item.inventoryType.id,
+            name: item.inventoryType.name,
+            slug: item.inventoryType.slug,
+            icon: item.inventoryType.icon,
+          }
+        : null,
+      vendorId: item.vendorId,
+      vendor: item.vendor ? { id: item.vendor.id, name: item.vendor.name } : null,
+    };
+  });
 
   return (
     <InventoryDashboardClient

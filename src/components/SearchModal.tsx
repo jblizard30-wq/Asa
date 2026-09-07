@@ -1,3 +1,4 @@
+// src/components/SearchModal.tsx
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -6,7 +7,18 @@ import { searchAll, type SearchResults } from '@/lib/actions/search';
 import { STATUS_LABELS } from '@/lib/format';
 import { TaskDetailModal } from '@/components/TaskDetailModal';
 
-const EMPTY: SearchResults = { tasks: [], projects: [], comments: [], pages: [] };
+const EMPTY: SearchResults = {
+  tasks: [],
+  projects: [],
+  meetups: [],
+  inventory: [],
+  raci: [],
+  tools: [],
+  people: [],
+  teams: [],
+  comments: [],
+  pages: [],
+};
 
 export function SearchModal() {
   const router = useRouter();
@@ -21,7 +33,7 @@ export function SearchModal() {
     function handleShortcut(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setOpen(true);
+        setOpen((prev) => !prev);
       }
       if (e.key === 'Escape') setOpen(false);
     }
@@ -30,7 +42,7 @@ export function SearchModal() {
   }, []);
 
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 0);
+    if (open) setTimeout(() => inputRef.current?.focus(), 50);
     else {
       setQuery('');
       setResults(EMPTY);
@@ -49,122 +61,231 @@ export function SearchModal() {
         setResults(data);
         setLoading(false);
       });
-    }, 300);
+    }, 250);
     return () => clearTimeout(handle);
   }, [query]);
 
   const hasResults =
-    results.tasks.length > 0 || results.projects.length > 0 || results.comments.length > 0 || results.pages.length > 0;
+    results.tasks.length > 0 ||
+    results.projects.length > 0 ||
+    results.meetups.length > 0 ||
+    results.inventory.length > 0 ||
+    results.raci.length > 0 ||
+    results.tools.length > 0 ||
+    results.people.length > 0 ||
+    results.teams.length > 0 ||
+    results.comments.length > 0 ||
+    results.pages.length > 0;
+
+  function navigateTo(url: string) {
+    setOpen(false);
+    router.push(url);
+  }
 
   function openTask(taskId: string) {
     setOpen(false);
     setOpenTaskId(taskId);
   }
 
-  function goToProject(projectId: string) {
-    setOpen(false);
-    router.push(`/projects/${projectId}`);
-  }
-
-  function goToPage(href: string) {
-    setOpen(false);
-    router.push(href);
-  }
-
   return (
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-400 hover:border-slate-300 hover:text-slate-600 dark:border-slate-700 dark:text-slate-500 dark:hover:border-slate-600 dark:hover:text-slate-300"
+        className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-1.5 text-xs text-slate-500 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200 transition-all"
         aria-label="Search"
       >
         <SearchIcon />
-        <span className="hidden sm:inline">Search…</span>
-        <kbd className="hidden rounded border border-slate-200 px-1 text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500 sm:inline">
+        <span className="hidden sm:inline">Search across all modules…</span>
+        <kbd className="hidden rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-mono font-medium text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 sm:inline">
           ⌘K
         </kbd>
       </button>
 
       {open && (
         <div
-          className="fixed inset-0 z-40 flex items-start justify-center bg-slate-900/40 p-4 pt-16 sm:pt-24"
+          className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/60 p-4 pt-12 sm:pt-20 backdrop-blur-xs animate-in fade-in duration-150"
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-xl dark:bg-slate-900"
+            className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 animate-in zoom-in-95 duration-150 flex flex-col max-h-[80vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-              <SearchIcon />
+            {/* Input Bar */}
+            <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3.5 dark:border-slate-800">
+              <SearchIcon className="h-5 w-5 text-slate-400" />
               <input
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search tasks, projects, comments, pages…"
-                className="w-full border-none bg-transparent text-sm text-slate-800 focus:outline-none dark:text-slate-100"
+                placeholder="Search tasks, meetups, inventory, RACI, tools, staff…"
+                className="w-full border-none bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-hidden dark:text-slate-100 dark:placeholder:text-slate-500"
               />
-              {loading && <span className="text-xs text-slate-400">Searching…</span>}
+              {loading && <span className="text-xs text-slate-400 animate-pulse">Searching…</span>}
+              <kbd
+                onClick={() => setOpen(false)}
+                className="cursor-pointer rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-mono text-slate-400 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-500 dark:hover:bg-slate-800"
+              >
+                ESC
+              </kbd>
             </div>
 
-            <div className="max-h-96 overflow-y-auto">
-              {query.trim().length >= 2 && !loading && !hasResults && (
-                <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-                  No results for &ldquo;{query}&rdquo;
-                </p>
-              )}
+            {/* Results Body */}
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
               {query.trim().length < 2 && (
-                <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-                  Type at least 2 characters to search.
-                </p>
-              )}
-
-              {results.pages.length > 0 && (
-                <div className="py-2">
-                  <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    Pages
-                  </p>
-                  {results.pages.map((p) => (
-                    <button
-                      key={p.key}
-                      onClick={() => goToPage(p.href)}
-                      className="block w-full truncate px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      {p.label}
-                    </button>
-                  ))}
+                <div className="p-4 space-y-4">
+                  <div>
+                    <p className="px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
+                      Quick Operational Shortcuts
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      <button
+                        onClick={() => navigateTo('/meetups')}
+                        className="flex items-center gap-2 p-2.5 rounded-lg text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/80 border border-slate-100 dark:border-slate-800"
+                      >
+                        <span>🗓️</span>
+                        <span>Meetups & Worship</span>
+                      </button>
+                      <button
+                        onClick={() => navigateTo('/inventory')}
+                        className="flex items-center gap-2 p-2.5 rounded-lg text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/80 border border-slate-100 dark:border-slate-800"
+                      >
+                        <span>📦</span>
+                        <span>Inventory Catalog</span>
+                      </button>
+                      <button
+                        onClick={() => navigateTo('/calendar')}
+                        className="flex items-center gap-2 p-2.5 rounded-lg text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/80 border border-slate-100 dark:border-slate-800"
+                      >
+                        <span>📅</span>
+                        <span>Liturgical Calendar</span>
+                      </button>
+                      <button
+                        onClick={() => navigateTo('/raci')}
+                        className="flex items-center gap-2 p-2.5 rounded-lg text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/80 border border-slate-100 dark:border-slate-800"
+                      >
+                        <span>👥</span>
+                        <span>RACI Processes</span>
+                      </button>
+                      <button
+                        onClick={() => navigateTo('/xp')}
+                        className="flex items-center gap-2 p-2.5 rounded-lg text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/80 border border-slate-100 dark:border-slate-800"
+                      >
+                        <span>📊</span>
+                        <span>XP Financial Hub</span>
+                      </button>
+                      <button
+                        onClick={() => navigateTo('/settings/navigation')}
+                        className="flex items-center gap-2 p-2.5 rounded-lg text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/80 border border-slate-100 dark:border-slate-800"
+                      >
+                        <span>⚙️</span>
+                        <span>Customize Sidebar</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {results.tasks.length > 0 && (
-                <div className="border-t border-slate-100 py-2 dark:border-slate-800">
-                  <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    Tasks
+              {query.trim().length >= 2 && !loading && !hasResults && (
+                <div className="py-12 text-center">
+                  <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                    No matching results found for &ldquo;{query}&rdquo;
                   </p>
-                  {results.tasks.map((t) => (
+                  <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                    Try searching for a task name, church event, room item, process, or staff member.
+                  </p>
+                </div>
+              )}
+
+              {/* Meetups */}
+              {results.meetups.length > 0 && (
+                <div className="py-2.5">
+                  <p className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                    🗓️ Meetups & Gatherings
+                  </p>
+                  {results.meetups.map((m) => (
                     <button
-                      key={t.id}
-                      onClick={() => openTask(t.id)}
-                      className="flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+                      key={m.id}
+                      onClick={() => navigateTo(`/meetups/${m.id}`)}
+                      className="flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors"
                     >
-                      <span className="truncate text-slate-700 dark:text-slate-200">{t.title}</span>
-                      <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
-                        {t.projectName} · {STATUS_LABELS[t.status]}
+                      <div className="truncate">
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {m.title}
+                        </span>
+                        {m.location && (
+                          <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">
+                            @ {m.location}
+                          </span>
+                        )}
+                      </div>
+                      <span className="shrink-0 rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
+                        {m.category}
                       </span>
                     </button>
                   ))}
                 </div>
               )}
 
+              {/* Inventory */}
+              {results.inventory.length > 0 && (
+                <div className="py-2.5">
+                  <p className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    📦 Inventory & Supplies
+                  </p>
+                  {results.inventory.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => navigateTo('/inventory')}
+                      className="flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors"
+                    >
+                      <div className="truncate">
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {item.name}
+                        </span>
+                        <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">
+                          ({item.locationName})
+                        </span>
+                      </div>
+                      <span className="shrink-0 font-mono text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                        {item.onHandQty} {item.unit}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Tasks */}
+              {results.tasks.length > 0 && (
+                <div className="py-2.5">
+                  <p className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                    ✅ Tasks
+                  </p>
+                  {results.tasks.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => openTask(t.id)}
+                      className="flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors"
+                    >
+                      <span className="truncate text-slate-800 dark:text-slate-200">{t.title}</span>
+                      <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+                        {t.projectName} · {STATUS_LABELS[t.status] || t.status}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Projects */}
               {results.projects.length > 0 && (
-                <div className="border-t border-slate-100 py-2 dark:border-slate-800">
-                  <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    Projects
+                <div className="py-2.5">
+                  <p className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    📁 Projects
                   </p>
                   {results.projects.map((p) => (
                     <button
                       key={p.id}
-                      onClick={() => goToProject(p.id)}
-                      className="block w-full truncate px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                      onClick={() => navigateTo(`/projects/${p.id}`)}
+                      className="block w-full truncate px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/80 transition-colors"
                     >
                       {p.name}
                     </button>
@@ -172,21 +293,105 @@ export function SearchModal() {
                 </div>
               )}
 
-              {results.comments.length > 0 && (
-                <div className="border-t border-slate-100 py-2 dark:border-slate-800">
-                  <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    Comments
+              {/* RACI Charts */}
+              {results.raci.length > 0 && (
+                <div className="py-2.5">
+                  <p className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                    👥 RACI Process Charts
                   </p>
-                  {results.comments.map((c) => (
+                  {results.raci.map((r) => (
                     <button
-                      key={c.id}
-                      onClick={() => openTask(c.taskId)}
-                      className="block w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+                      key={r.id}
+                      onClick={() => navigateTo('/raci')}
+                      className="flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors"
                     >
-                      <p className="truncate text-slate-700 dark:text-slate-200">{c.body}</p>
-                      <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-                        {c.userName} on &ldquo;{c.taskTitle}&rdquo; · {c.projectName}
+                      <span className="truncate font-medium text-slate-800 dark:text-slate-200">
+                        {r.processName}
+                      </span>
+                      <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+                        {r.ministryArea ? `${r.ministryArea} · ` : ''}Owner: {r.owner || 'Unassigned'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Strategic Discernment Tools */}
+              {results.tools.length > 0 && (
+                <div className="py-2.5">
+                  <p className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                    🛠️ Discernment Frameworks
+                  </p>
+                  {results.tools.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => navigateTo('/xp')}
+                      className="block w-full px-4 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">
+                          {t.name}
+                        </span>
+                        <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                          {t.primitive}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                        {t.blurb}
                       </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* People & Teams */}
+              {(results.people.length > 0 || results.teams.length > 0) && (
+                <div className="py-2.5">
+                  <p className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    👤 People & Ministry Teams
+                  </p>
+                  {results.people.map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => navigateTo('/org-chart')}
+                      className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors"
+                    >
+                      <span className="text-slate-800 dark:text-slate-200">
+                        {u.name || u.email}
+                      </span>
+                      <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">
+                        {u.role}
+                      </span>
+                    </button>
+                  ))}
+                  {results.teams.map((team) => (
+                    <button
+                      key={team.id}
+                      onClick={() => navigateTo('/teams')}
+                      className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors"
+                    >
+                      <span className="text-slate-800 dark:text-slate-200">
+                        👥 Team: {team.name}
+                      </span>
+                      <span className="text-xs text-slate-400">View team</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Pages */}
+              {results.pages.length > 0 && (
+                <div className="py-2.5">
+                  <p className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    Navigation Pages
+                  </p>
+                  {results.pages.map((p) => (
+                    <button
+                      key={p.key}
+                      onClick={() => navigateTo(p.href)}
+                      className="block w-full truncate px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/80 transition-colors"
+                    >
+                      {p.label}
                     </button>
                   ))}
                 </div>
@@ -201,10 +406,14 @@ export function SearchModal() {
   );
 }
 
-function SearchIcon() {
+function SearchIcon({ className = 'h-4 w-4 shrink-0' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.8} stroke="currentColor" className="h-4 w-4 shrink-0">
-      <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.8} stroke="currentColor" className={className}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+      />
     </svg>
   );
 }

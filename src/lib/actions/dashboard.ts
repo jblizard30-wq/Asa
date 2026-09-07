@@ -1,7 +1,11 @@
+// src/lib/actions/dashboard.ts
 'use server';
 
+import { addDays } from 'date-fns';
 import { requireManagerOrAdmin } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
+import { isModuleEnabled } from '@/lib/modules';
+import { allRatios } from '@/lib/xpRatios';
 import {
   computeMemberStats,
   computeOverdueTasks,
@@ -56,6 +60,142 @@ async function fetchScopedTasks(assigneeIds?: string[]): Promise<DashboardTask[]
   }));
 }
 
+export interface DashboardModuleTelemetry {
+  upcomingMeetups: Array<{
+    id: string;
+    title: string;
+    category: string;
+    startsAt: string | null;
+    location: string | null;
+    unfilledSlotCount: number;
+  }>;
+  criticalInventoryItems: Array<{
+    id: string;
+    name: string;
+    onHandQty: number;
+    idealQty: number;
+    reorderThreshold: number;
+    unit: string;
+    roomName: string;
+  }>;
+  openVolunteerSlots: Array<{
+    id: string;
+    meetupId: string;
+    meetupTitle: string;
+    slotTitle: string;
+    category: string;
+    neededCount: number;
+  }>;
+  financialRatios?: Array<{
+    label: string;
+    display: string;
+    status: 'healthy' | 'watch' | 'concern';
+    hint: string;
+  }>;
+}
+
+async function fetchModuleTelemetry(now: Date): Promise<DashboardModuleTelemetry> {
+  const nextWeek = addDays(now, 7);
+
+  const [meetupsRaw, lowStockRaw, latestSnapshot] = await Promise.all([
+    isModuleEnabled('meetups')
+      ? prisma.meetup.findMany({
+          where: {
+            archivedAt: null,
+            startsAt: { gte: now, lte: nextWeek },
+          },
+          include: {
+            signupSlots: {
+              include: { claims: true },
+            },
+          },
+          orderBy: { startsAt: 'asc' },
+          take: 6,
+        })
+      : [],
+
+    isModuleEnabled('inventory')
+      ? prisma.inventoryItem.findMany({
+          where: {
+            reorderThreshold: { gt: 0 },
+          },
+          include: { room: true },
+          take: 50,
+        })
+      : [],
+
+    isModuleEnabled('xp')
+      ? prisma.financialSnapshot.findFirst({
+          orderBy: { periodDate: 'desc' },
+        })
+      : null,
+  ]);
+
+  // Filter inventory items truly below reorder threshold
+  const criticalInventoryItems = lowStockRaw
+    .filter((item) => item.onHandQty <= item.reorderThreshold)
+    .slice(0, 5)
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      onHandQty: item.onHandQty,
+      idealQty: item.idealQty,
+      reorderThreshold: item.reorderThreshold,
+      unit: item.unit,
+      roomName: item.room.name,
+    }));
+
+  // Process meetups and volunteer openings
+  const upcomingMeetups: DashboardModuleTelemetry['upcomingMeetups'] = [];
+  const openVolunteerSlots: DashboardModuleTelemetry['openVolunteerSlots'] = [];
+
+  for (const m of meetupsRaw) {
+    let unfilledInMeetup = 0;
+    for (const slot of m.signupSlots) {
+      const openSpots = Math.max(0, slot.capacity - slot.claims.length);
+      if (openSpots > 0) {
+        unfilledInMeetup += openSpots;
+        openVolunteerSlots.push({
+          id: slot.id,
+          meetupId: m.id,
+          meetupTitle: m.title,
+          slotTitle: slot.title,
+          category: slot.category,
+          neededCount: openSpots,
+        });
+      }
+    }
+
+    upcomingMeetups.push({
+      id: m.id,
+      title: m.title,
+      category: m.category,
+      startsAt: m.startsAt ? m.startsAt.toISOString() : null,
+      location: m.location,
+      unfilledSlotCount: unfilledInMeetup,
+    });
+  }
+
+  // Financial ratios from latest XP snapshot
+  let financialRatios: DashboardModuleTelemetry['financialRatios'] = undefined;
+  if (latestSnapshot) {
+    financialRatios = allRatios({
+      unrestrictedCash: Number(latestSnapshot.unrestrictedCash),
+      annualRevenue: Number(latestSnapshot.annualRevenue),
+      annualExpense: Number(latestSnapshot.annualExpense),
+      programExpense: Number(latestSnapshot.programExpense),
+      personnelCost: Number(latestSnapshot.personnelCost),
+    });
+  }
+
+  return {
+    upcomingMeetups,
+    criticalInventoryItems,
+    openVolunteerSlots: openVolunteerSlots.slice(0, 5),
+    financialRatios,
+  };
+}
+
 interface DashboardScopeData {
   scopeDescription: string;
   topLine: TopLineStats;
@@ -67,6 +207,7 @@ interface DashboardScopeData {
   overdueTasks: TaskListEntry[];
   upcomingTasks: TaskListEntry[];
   recentlyCompleted: TaskListEntry[];
+  telemetry: DashboardModuleTelemetry;
 }
 
 export type DashboardData =
@@ -79,7 +220,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   const now = new Date();
 
   if (session.user.role === 'ADMIN') {
-    const [users, teamsRaw, tasks, projectCount] = await Promise.all([
+    const [users, teamsRaw, tasks, projectCount, telemetry] = await Promise.all([
       prisma.user.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, role: true } }),
       prisma.team.findMany({
         orderBy: { name: 'asc' },
@@ -87,6 +228,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       }),
       fetchScopedTasks(),
       prisma.project.count({ where: { isPersonal: false } }),
+      fetchModuleTelemetry(now),
     ]);
 
     const teamGroups: TeamGroup[] = teamsRaw.map((t) => ({
@@ -99,7 +241,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     return {
       role: 'ADMIN',
       hasTeams: true,
-      scopeDescription: 'Organization-wide view of every task, team, and project.',
+      scopeDescription: 'Organization-wide operations cockpit: Church rhythms, rosters, tasks, and supplies.',
       topLine: computeTopLineStats(tasks, users.length, now),
       statusBreakdown: computeStatusBreakdown(tasks),
       priorityBreakdown: computePriorityBreakdown(tasks),
@@ -109,6 +251,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       overdueTasks: computeOverdueTasks(tasks, now),
       upcomingTasks: computeUpcomingTasks(tasks, now),
       recentlyCompleted: computeRecentlyCompleted(tasks, now),
+      telemetry,
       adminExtras: {
         teamCount: teamsRaw.length,
         projectCount,
@@ -117,11 +260,14 @@ export async function getDashboardData(): Promise<DashboardData> {
     };
   }
 
-  const myTeams = await prisma.team.findMany({
-    where: { managerId: session.user.id },
-    orderBy: { name: 'asc' },
-    include: { members: { include: { user: { select: { id: true, name: true, role: true } } } } },
-  });
+  const [myTeams, telemetry] = await Promise.all([
+    prisma.team.findMany({
+      where: { managerId: session.user.id },
+      orderBy: { name: 'asc' },
+      include: { members: { include: { user: { select: { id: true, name: true, role: true } } } } },
+    }),
+    fetchModuleTelemetry(now),
+  ]);
 
   if (myTeams.length === 0) {
     return { role: 'MANAGER', hasTeams: false };
@@ -159,5 +305,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     overdueTasks: computeOverdueTasks(tasks, now),
     upcomingTasks: computeUpcomingTasks(tasks, now),
     recentlyCompleted: computeRecentlyCompleted(tasks, now),
+    telemetry,
   };
 }

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useToast } from '@/components/Toast';
 import {
   ArrowLeftIcon,
   SparklesIcon,
@@ -17,6 +18,7 @@ interface InventoryTypeOption {
 }
 
 export function CSVImporter({ inventoryTypes }: { inventoryTypes: InventoryTypeOption[] }) {
+  const toast = useToast();
   const [selectedInventory, setSelectedInventory] = useState<string>(inventoryTypes[0]?.id || '');
   const [previewRows, setPreviewRows] = useState<ImportPreviewRow[]>([]);
   const [isParsing, setIsParsing] = useState(false);
@@ -50,7 +52,7 @@ export function CSVImporter({ inventoryTypes }: { inventoryTypes: InventoryTypeO
 
   const handleExecuteImport = () => {
     if (!selectedInventory) {
-      alert('Please select a target Inventory Track first.');
+      toast.error('Select Inventory Track', 'Please select a target Inventory Track first.');
       return;
     }
     if (previewRows.length === 0) return;
@@ -65,8 +67,10 @@ export function CSVImporter({ inventoryTypes }: { inventoryTypes: InventoryTypeO
       if (res.success) {
         setImportResult({ count: res.count });
         setPreviewRows([]);
+        toast.success(`Imported ${res.count} items successfully`);
       } else {
         setErrorMessage(res.error || 'Import failed.');
+        toast.error('Import Failed', res.error || 'Import failed.');
       }
     });
   };

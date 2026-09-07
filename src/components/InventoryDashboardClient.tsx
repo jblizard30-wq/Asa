@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo, useTransition } from 'react';
+import { useState, useMemo, useTransition, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/Toast';
 import {
   PackageIcon,
   BuildingIcon,
@@ -20,6 +21,8 @@ import {
   MapPinIcon,
   ChevronRightIcon,
   LayersIcon,
+  QrCodeIcon,
+  SparklesIcon,
   getTrackIcon,
 } from '@/components/InventoryIcons';
 import {
@@ -29,6 +32,7 @@ import {
   updateInventoryItem,
   deleteInventoryItem,
 } from '@/lib/actions/inventory';
+import { InventoryQuickScanner } from '@/components/InventoryQuickScanner';
 
 export interface DashboardItem {
   id: string;
@@ -41,6 +45,12 @@ export interface DashboardItem {
   shelfLocation: string | null;
   sortOrder: number;
   notes: string | null;
+  isSurged?: boolean;
+  surgedParLevel?: number;
+  surgeBadgeText?: string | null;
+  surgeReason?: string | null;
+  daysUntilFeast?: number | null;
+  feastName?: string | null;
   roomId: string;
   room: {
     id: string;
@@ -108,6 +118,7 @@ export function InventoryDashboardClient({
   vendors,
 }: InventoryDashboardClientProps) {
   const router = useRouter();
+  const toast = useToast();
   const [isPending, startTransition] = useTransition();
 
   // Filters
@@ -123,8 +134,18 @@ export function InventoryDashboardClient({
 
   // Modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isQuickScannerOpen, setIsQuickScannerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DashboardItem | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('scanner') === 'open' || params.get('scan') === 'true') {
+        setIsQuickScannerOpen(true);
+      }
+    }
+  }, []);
 
   // Filtered items
   const filteredItems = useMemo(() => {
@@ -174,18 +195,22 @@ export function InventoryDashboardClient({
     );
   }, [buildings]);
 
-  const handleQuickCountChange = (itemId: string, currentVal: number, delta: number) => {
-    const existing = countInputs[itemId] !== undefined ? countInputs[itemId] : currentVal;
-    const nextVal = Math.max(0, existing + delta);
-    setCountInputs((prev) => ({ ...prev, [itemId]: nextVal }));
+  const handleInlineCountChange = (itemId: string, delta: number, current: number) => {
+    const prev = countInputs[itemId] !== undefined ? countInputs[itemId] : current;
+    const next = Math.max(0, prev + delta);
+    setCountInputs((p) => ({ ...p, [itemId]: next }));
+  };
+
+  const handleQuickCountChange = (itemId: string, current: number, delta: number) => {
+    handleInlineCountChange(itemId, delta, current);
   };
 
   const handleQuickCountDirect = (itemId: string, val: number) => {
-    setCountInputs((prev) => ({ ...prev, [itemId]: Math.max(0, val) }));
+    setCountInputs((p) => ({ ...p, [itemId]: Math.max(0, val) }));
   };
 
-  const handleSaveItemCount = async (itemId: string, defaultVal: number) => {
-    const qty = countInputs[itemId] !== undefined ? countInputs[itemId] : defaultVal;
+  const handleSaveCount = async (itemId: string, current: number) => {
+    const qty = countInputs[itemId] !== undefined ? countInputs[itemId] : current;
     setSavingItemIds((prev) => new Set(prev).add(itemId));
     const res = await submitStockCount({ itemId, qty });
     setSavingItemIds((prev) => {
@@ -194,9 +219,10 @@ export function InventoryDashboardClient({
       return next;
     });
     if (res.success) {
+      toast.success('Stock count recorded', `Updated to ${qty}`);
       router.refresh();
     } else {
-      alert(res.error);
+      toast.error('Stock Count Failed', res.error);
     }
   };
 
@@ -209,9 +235,10 @@ export function InventoryDashboardClient({
       return next;
     });
     if (res.success) {
+      toast.success('Restocked to par level');
       router.refresh();
     } else {
-      alert(res.error);
+      toast.error('Restock Failed', res.error);
     }
   };
 
@@ -219,8 +246,9 @@ export function InventoryDashboardClient({
     if (!confirm(`Are you sure you want to delete "${item.name}"?`)) return;
     const res = await deleteInventoryItem(item.id);
     if (!res.success) {
-      alert(res.error);
+      toast.error('Delete Failed', res.error);
     } else {
+      toast.success('Item removed from inventory');
       router.refresh();
     }
   };
@@ -239,6 +267,15 @@ export function InventoryDashboardClient({
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsQuickScannerOpen(true)}
+            className="flex items-center gap-2 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+          >
+            <QrCodeIcon className="h-4 w-4" />
+            <span>Quick-Audit Scanner</span>
+          </button>
+
           <Link
             href="/inventory/orders"
             className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900"
@@ -588,7 +625,15 @@ export function InventoryDashboardClient({
                       {/* Name & Track */}
                       <td className="px-4 py-3">
                         <div className="font-semibold text-slate-900 dark:text-slate-100">{item.name}</div>
-                        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                        {item.isSurged && (
+                          <div className="mt-1">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-900 border border-purple-300 dark:bg-purple-950/70 dark:text-purple-300 dark:border-purple-800">
+                              <SparklesIcon className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                              <span>{item.surgeBadgeText || '⚡ Lent/Easter Par Surge Active'}</span>
+                            </span>
+                          </div>
+                        )}
+                        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
                           {item.inventoryType && <span>{item.inventoryType.name}</span>}
                           {item.reorderThreshold > 0 && (
                             <span>&middot; Alert &le; {item.reorderThreshold} {item.unit}</span>
@@ -610,7 +655,18 @@ export function InventoryDashboardClient({
 
                       {/* Par */}
                       <td className="px-4 py-3 text-right text-xs text-slate-600 dark:text-slate-300">
-                        <strong>{item.idealQty}</strong> {item.unit}
+                        {item.isSurged && item.surgedParLevel ? (
+                          <div>
+                            <strong className="text-purple-700 dark:text-purple-400 font-bold">{item.surgedParLevel}</strong> {item.unit}
+                            <span className="block text-[10px] text-slate-400 font-medium">
+                              (Base: {item.idealQty} &middot; +50%)
+                            </span>
+                          </div>
+                        ) : (
+                          <div>
+                            <strong>{item.idealQty}</strong> {item.unit}
+                          </div>
+                        )}
                       </td>
 
                       {/* On Hand Stepper */}
@@ -649,7 +705,7 @@ export function InventoryDashboardClient({
                           {hasDraftChange && (
                             <button
                               type="button"
-                              onClick={() => handleSaveItemCount(item.id, item.onHandQty)}
+                              onClick={() => handleSaveCount(item.id, item.onHandQty)}
                               disabled={isSaving}
                               className="rounded bg-brand-600 px-2 py-1 text-[10px] font-semibold text-white shadow-xs hover:bg-brand-700 disabled:opacity-50"
                             >
@@ -801,6 +857,28 @@ export function InventoryDashboardClient({
           }}
         />
       )}
+
+      {/* MOBILE FLOATING QUICK-AUDIT BUTTON */}
+      <button
+        type="button"
+        onClick={() => setIsQuickScannerOpen(true)}
+        className="sm:hidden fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-2xl hover:bg-emerald-700 active:scale-95 transition"
+        title="Quick-Audit Scanner"
+        aria-label="Open Quick-Audit Scanner"
+      >
+        <QrCodeIcon className="h-6 w-6" />
+      </button>
+
+      {/* QUICK SCANNER MODAL */}
+      <InventoryQuickScanner
+        isOpen={isQuickScannerOpen}
+        onClose={() => setIsQuickScannerOpen(false)}
+        items={items}
+        onCountSaved={(itemId, newQty) => {
+          setCountInputs((p) => ({ ...p, [itemId]: newQty }));
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

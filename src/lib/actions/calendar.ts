@@ -3,6 +3,10 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getLectionaryReadings } from '@/lib/liturgicalCalendar';
+import { getOrCreatePersonalProject } from '@/lib/actions/projects';
+import { revalidatePath } from 'next/cache';
+import { parseISO } from 'date-fns';
 
 export interface CalendarTask {
   id: string;
@@ -114,6 +118,7 @@ export interface CalendarMeetup {
   isAllChurch: boolean;
   teamIds: string[];
   userIds: string[];
+  canManage: boolean;
 }
 
 /** Finalized meetups occurring within [startISO, endISO] if the meetups module is enabled and shared with the viewer. */
@@ -167,5 +172,145 @@ export async function getMeetupsInRange(startISO: string, endISO: string): Promi
     isAllChurch: m.isAllChurch,
     teamIds: m.shares.filter((s) => s.teamId).map((s) => s.teamId!),
     userIds: m.shares.filter((s) => s.userId).map((s) => s.userId!),
+    canManage: isAdmin || session.user.role === 'MANAGER' || m.createdById === session.user.id,
   }));
+}
+
+export interface CreateSermonPrepResult {
+  success: boolean;
+  error?: string;
+  taskId?: string;
+  projectId?: string;
+  readingSet?: ReturnType<typeof getLectionaryReadings>;
+}
+
+/**
+ * Creates a Sermon Prep task for the given liturgical Sunday, populated with the
+ * 4 canonical Revised Common Lectionary Scripture texts (First Reading, Psalm, Epistle, Gospel)
+ * and structured pastoral preparation workflow.
+ */
+export async function createSermonPrepTask(dateString: string): Promise<CreateSermonPrepResult> {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return { success: false, error: 'You must be signed in to create sermon prep tasks.' };
+  }
+
+  const readings = getLectionaryReadings(dateString);
+
+  // Find or create target project for preaching / pastoral workflow
+  let project = await prisma.project.findFirst({
+    where: {
+      name: { contains: 'Worship', mode: 'insensitive' },
+      members: { some: { userId: session.user.id } },
+    },
+    include: {
+      sections: { orderBy: { order: 'asc' } },
+    },
+  });
+
+  if (!project) {
+    project = await prisma.project.findFirst({
+      where: {
+        isPersonal: true,
+        createdById: session.user.id,
+      },
+      include: {
+        sections: { orderBy: { order: 'asc' } },
+      },
+    });
+  }
+
+  let projectId: string;
+  let sectionId: string;
+
+  if (project && project.sections.length > 0) {
+    projectId = project.id;
+    sectionId = project.sections[0].id;
+  } else {
+    projectId = await getOrCreatePersonalProject();
+    const sec = await prisma.section.findFirst({
+      where: { projectId },
+      orderBy: { order: 'asc' },
+    });
+    if (!sec) {
+      const createdSec = await prisma.section.create({
+        data: { name: 'To Do', order: 0, projectId },
+      });
+      sectionId = createdSec.id;
+    } else {
+      sectionId = sec.id;
+    }
+  }
+
+  const parsedDueDate = parseISO(dateString);
+  const taskTitle = `Sermon Prep: ${readings.sundayName} (${readings.gospel})`;
+
+  const taskDescription = [
+    `### Liturgical Context`,
+    `- **Sunday:** ${readings.sundayName}`,
+    `- **Liturgical Season:** ${readings.season}`,
+    `- **RCL Cycle:** Year ${readings.cycle}`,
+    ``,
+    `### Canonical Scripture Readings`,
+    `- **First Reading:** ${readings.firstReading}`,
+    `- **Psalm:** ${readings.psalm}`,
+    `- **Epistle:** ${readings.epistle}`,
+    `- **Gospel:** ${readings.gospel}`,
+    ``,
+    `### Pastoral Preparation Workflow`,
+    `- [ ] Initial Greek/Hebrew exegetical work on the Gospel and Epistle passages`,
+    `- [ ] Consult historical commentaries (Calvin, Matthew Henry, Barth)`,
+    `- [ ] Formulate big idea and sermon outline connecting texts to pastoral needs of the congregation`,
+    `- [ ] Draft liturgical prayers, confession, and hymn selections with worship director`,
+    `- [ ] Finalize preaching manuscript and teaching slides`,
+  ].join('\n');
+
+  // Check if a task for this sermon prep already exists to prevent duplicate clicks
+  const existing = await prisma.task.findFirst({
+    where: {
+      projectId,
+      title: taskTitle,
+      deletedAt: null,
+    },
+  });
+
+  if (existing) {
+    return {
+      success: true,
+      taskId: existing.id,
+      projectId,
+      readingSet: readings,
+    };
+  }
+
+  const lastTask = await prisma.task.findFirst({
+    where: { sectionId, parentTaskId: null, deletedAt: null },
+    orderBy: { order: 'desc' },
+  });
+
+  const task = await prisma.task.create({
+    data: {
+      title: taskTitle,
+      description: taskDescription,
+      projectId,
+      sectionId,
+      priority: 'HIGH',
+      status: 'TODO',
+      dueDate: parsedDueDate,
+      order: (lastTask?.order ?? -1) + 1,
+      assignees: {
+        connect: [{ id: session.user.id }],
+      },
+    },
+  });
+
+  revalidatePath('/calendar');
+  revalidatePath(`/projects/${projectId}`);
+
+  return {
+    success: true,
+    taskId: task.id,
+    projectId,
+    readingSet: readings,
+  };
 }

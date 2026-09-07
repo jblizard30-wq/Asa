@@ -138,6 +138,7 @@ import {
   createBuilding,
   createRoom,
   createVendor,
+  getSurgedParLevel,
 } from './inventory';
 
 describe('Inventory Server Actions', () => {
@@ -235,6 +236,39 @@ describe('Inventory Server Actions', () => {
       expect(res.success).toBe(true);
       expect(mockState.items.get('item-1')?.onHandQty).toBe(8);
       expect(mockState.stockCounts[0].qty).toBe(8);
+    });
+
+    it('quickRestockItemToPar brings sacred items up to surged par level during active feast windows', async () => {
+      vi.useFakeTimers({ now: new Date('2026-03-20T12:00:00Z') });
+      try {
+        mockState.items.set('item-wafers', {
+          id: 'item-wafers',
+          name: 'Communion Wafers',
+          idealQty: 4,
+          onHandQty: 2,
+          roomId: 'room-1',
+          vendorId: null,
+        });
+
+        const res = await quickRestockItemToPar('item-wafers');
+        expect(res.success).toBe(true);
+        // Surged par level for idealQty 4 is 6 (+50%)
+        expect(mockState.items.get('item-wafers')?.onHandQty).toBe(6);
+        expect(mockState.stockCounts[0].qty).toBe(6);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('getSurgedParLevel server action correctly computes par surge result', async () => {
+      const result = await getSurgedParLevel(
+        { name: 'Communion Wine', idealQty: 6 },
+        new Date('2026-03-20T12:00:00Z')
+      );
+      expect(result.isSurged).toBe(true);
+      expect(result.surgedParLevel).toBe(9);
+      expect(result.basePar).toBe(6);
+      expect(result.badgeText).toBe('⚡ Lent/Easter Par Surge Active');
     });
 
     it('quickRestockVendorItemsToPar restocks all vendor items currently below par', async () => {

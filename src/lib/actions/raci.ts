@@ -690,3 +690,129 @@ export async function setRaciCell(input: {
     return { success: false, error: (err as Error).message || 'Could not update the cell.' };
   }
 }
+
+export async function instantiateRaciAsProject(
+  chartId: string
+): Promise<ActionResult<{ projectId: string }>> {
+  try {
+    const gate = requireRaciModule();
+    if (gate) return { success: false, error: gate };
+    const session = await requireSession();
+
+    const chart = await prisma.raciChart.findUnique({
+      where: { id: chartId },
+      include: {
+        steps: {
+          orderBy: { stepOrder: 'asc' },
+          include: {
+            assignments: {
+              include: {
+                person: true,
+              },
+            },
+          },
+        },
+        people: {
+          orderBy: { personOrder: 'asc' },
+        },
+      },
+    });
+
+    if (!chart || chart.archivedAt) {
+      return { success: false, error: 'RACI chart not found.' };
+    }
+
+    const canEdit = await canUserEditChart(session.user.id, session.user.role, chartId);
+    if (!canEdit) {
+      return { success: false, error: 'You do not have permission to instantiate this chart.' };
+    }
+
+    // Create the Project with standard operational sections
+    const project = await prisma.project.create({
+      data: {
+        name: `${chart.processName} (Execution)`,
+        description: `Operational project instantiated from RACI matrix: ${chart.processName}.\nOwner: ${chart.owner || 'Unassigned'}\nTrigger: ${chart.trigger || 'Standard Rhythm'}`,
+        createdById: session.user.id,
+        members: {
+          create: {
+            userId: session.user.id,
+            isManager: true,
+          },
+        },
+        sections: {
+          create: [
+            { name: 'To Do', order: 0 },
+            { name: 'In Progress', order: 1 },
+            { name: 'Review & Sign-Off', order: 2 },
+            { name: 'Completed', order: 3 },
+          ],
+        },
+      },
+      include: {
+        sections: true,
+      },
+    });
+
+    const todoSection = project.sections.find((s) => s.name === 'To Do') || project.sections[0];
+    const projectMemberIds = new Set<string>([session.user.id]);
+
+    for (const step of chart.steps) {
+      const rPeople = step.assignments.filter((a) => a.designations.includes('RESPONSIBLE')).map((a) => a.person);
+      const aPeople = step.assignments.filter((a) => a.designations.includes('ACCOUNTABLE')).map((a) => a.person);
+      const cPeople = step.assignments.filter((a) => a.designations.includes('CONSULTED')).map((a) => a.person);
+      const iPeople = step.assignments.filter((a) => a.designations.includes('INFORMED')).map((a) => a.person);
+
+      const rNames = rPeople.map((p) => p.name).join(', ') || 'Unassigned';
+      const aNames = aPeople.map((p) => p.name).join(', ') || 'None designated';
+      const cNames = cPeople.map((p) => p.name).join(', ') || 'None';
+      const iNames = iPeople.map((p) => p.name).join(', ') || 'None';
+
+      const breakdown = [
+        `**RACI Matrix Breakdown** (from [${chart.processName}](/raci)):`,
+        `- **Responsible (R)**: ${rNames}`,
+        `- **Accountable (A)**: ${aNames}`,
+        `- **Consulted (C)**: ${cNames}`,
+        `- **Informed (I)**: ${iNames}`,
+      ].join('\n');
+
+      const primaryResponsibleUserId = rPeople.find((p) => p.userId)?.userId;
+      if (primaryResponsibleUserId) {
+        projectMemberIds.add(primaryResponsibleUserId);
+      }
+
+      await prisma.task.create({
+        data: {
+          title: step.stepName,
+          description: breakdown,
+          projectId: project.id,
+          sectionId: todoSection.id,
+          order: step.stepOrder,
+          priority: 'MEDIUM',
+          assignees: primaryResponsibleUserId
+            ? { connect: [{ id: primaryResponsibleUserId }] }
+            : undefined,
+        },
+      });
+    }
+
+    for (const memberId of projectMemberIds) {
+      if (memberId !== session.user.id) {
+        await prisma.projectMember.create({
+          data: {
+            projectId: project.id,
+            userId: memberId,
+            isManager: false,
+          },
+        }).catch(() => {});
+      }
+    }
+
+    revalidatePath('/projects');
+    revalidatePath(`/projects/${project.id}`);
+    revalidatePath(`/raci/${chartId}`);
+    return { success: true, projectId: project.id };
+  } catch (err) {
+    return { success: false, error: (err as Error).message || 'Could not instantiate project from RACI chart.' };
+  }
+}
+
