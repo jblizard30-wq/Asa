@@ -78,22 +78,76 @@ export async function createProject(formData: FormData) {
   return { success: true, projectId: project.id };
 }
 
-const inviteMemberSchema = z.object({
-  email: z.string().email('Enter a valid email address'),
+export async function searchAssignableUsers(projectId: string, query: string = '') {
+  await requireAdmin();
+  const trimmed = query.trim();
+
+  const existingMembers = await prisma.projectMember.findMany({
+    where: { projectId },
+    select: { userId: true },
+  });
+  const memberUserIds = existingMembers.map((m) => m.userId);
+
+  const users = await prisma.user.findMany({
+    where: {
+      id: { notIn: memberUserIds },
+      ...(trimmed
+        ? {
+            OR: [
+              { name: { contains: trimmed, mode: 'insensitive' } },
+              { email: { contains: trimmed, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+    },
+    orderBy: { name: 'asc' },
+    take: 10,
+  });
+
+  return users;
+}
+
+const addMemberSchema = z.object({
+  userId: z.string().min(1).optional(),
+  email: z.string().email('Enter a valid email address').optional(),
 });
 
-export async function inviteMemberToProject(projectId: string, formData: FormData) {
+export async function addMemberToProject(
+  projectId: string,
+  input: FormData | { userId?: string; email?: string }
+) {
   const session = await requireAdmin();
 
-  const parsed = inviteMemberSchema.safeParse({ email: formData.get('email') });
-  if (!parsed.success) {
-    return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  let rawUserId: string | undefined;
+  let rawEmail: string | undefined;
+
+  if (input instanceof FormData) {
+    const uId = input.get('userId');
+    const em = input.get('email');
+    if (typeof uId === 'string' && uId.trim()) rawUserId = uId.trim();
+    if (typeof em === 'string' && em.trim()) rawEmail = em.trim();
+  } else if (input && typeof input === 'object') {
+    if (input.userId?.trim()) rawUserId = input.userId.trim();
+    if (input.email?.trim()) rawEmail = input.email.trim();
   }
 
-  const email = parsed.data.email.toLowerCase().trim();
-  const user = await prisma.user.findUnique({ where: { email } });
+  const parsed = addMemberSchema.safeParse({ userId: rawUserId, email: rawEmail });
+  if (!parsed.success || (!parsed.data.userId && !parsed.data.email)) {
+    return { success: false, error: parsed.error?.issues[0]?.message ?? 'Please select a user to add.' };
+  }
+
+  const user = parsed.data.userId
+    ? await prisma.user.findUnique({ where: { id: parsed.data.userId } })
+    : await prisma.user.findUnique({ where: { email: parsed.data.email!.toLowerCase().trim() } });
+
   if (!user) {
-    return { success: false, error: 'No user found with that email. They need to sign up first.' };
+    return { success: false, error: 'User not found.' };
   }
 
   const project = await prisma.project.findUnique({ where: { id: projectId } });
@@ -118,8 +172,10 @@ export async function inviteMemberToProject(projectId: string, formData: FormDat
   });
 
   revalidatePath(`/projects/${projectId}`);
-  return { success: true };
+  return { success: true, member: { id: user.id, name: user.name, email: user.email } };
 }
+
+export const inviteMemberToProject = addMemberToProject;
 
 export async function removeMemberFromProject(projectId: string, userId: string) {
   await requireAdmin();
