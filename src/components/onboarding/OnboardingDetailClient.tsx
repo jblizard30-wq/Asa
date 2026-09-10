@@ -8,6 +8,7 @@ import {
   OnboardingItemCategory,
   OnboardingCostCadence,
   OnboardingProvisioningType,
+  OnboardingProcurementStatus,
   OnboardingStatus,
   Role,
 } from '@prisma/client';
@@ -47,7 +48,7 @@ export interface DetailedCaseItem {
   procurementVendor: string | null;
   procurementPoNumber: string | null;
   procurementUrl: string | null;
-  procurementStatus: string;
+  procurementStatus: OnboardingProcurementStatus;
   completedAt: string | null;
   completedBy: { id: string; name: string } | null;
   completedLocationNote: string | null;
@@ -151,7 +152,7 @@ export function OnboardingDetailClient({
   }
 
   // Update procurement
-  function handleProcurementChange(itemId: string, status: string) {
+  function handleProcurementChange(itemId: string, status: OnboardingProcurementStatus) {
     startTransition(async () => {
       await updateOnboardingItem(itemId, { procurementStatus: status });
       router.refresh();
@@ -561,7 +562,7 @@ export function OnboardingDetailClient({
                               {item.category === 'HARDWARE' && (
                                 <select
                                   value={item.procurementStatus}
-                                  onChange={(e) => handleProcurementChange(item.id, e.target.value)}
+                                  onChange={(e) => handleProcurementChange(item.id, e.target.value as OnboardingProcurementStatus)}
                                   className="rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                                 >
                                   <option value="NOT_REQUIRED">Fulfillment: Not Required</option>

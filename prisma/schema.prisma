@@ -1609,6 +1609,13 @@ enum OnboardingProvisioningType {
   MDM_DEVICE
 }
 
+enum OnboardingProcurementStatus {
+  NOT_REQUIRED
+  NEEDED
+  ORDERED
+  RECEIVED
+}
+
 enum OnboardingStatus {
   DRAFT
   IN_PROGRESS
@@ -1688,7 +1695,7 @@ model OnboardingCaseItem {
   procurementVendor     String?
   procurementPoNumber   String?
   procurementUrl        String?
-  procurementStatus     String                     @default("NOT_REQUIRED") // NOT_REQUIRED, NEEDED, ORDERED, RECEIVED
+  procurementStatus     OnboardingProcurementStatus @default(NOT_REQUIRED)
 
   completedAt           DateTime?
   completedByUserId     String?

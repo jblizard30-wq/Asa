@@ -11,6 +11,7 @@ import {
   OnboardingItemCategory,
   OnboardingCostCadence,
   OnboardingProvisioningType,
+  OnboardingProcurementStatus,
   OnboardingStatus,
   Prisma,
   Role,
@@ -442,7 +443,7 @@ export async function updateOnboardingItem(
     procurementVendor?: string | null;
     procurementPoNumber?: string | null;
     procurementUrl?: string | null;
-    procurementStatus?: string;
+    procurementStatus?: OnboardingProcurementStatus;
     completedLocationNote?: string | null;
   }
 ): Promise<ActionResult> {
@@ -459,24 +460,26 @@ export async function updateOnboardingItem(
       return { success: false, error: 'Item not found.' };
     }
 
+    const updateData: Prisma.OnboardingCaseItemUncheckedUpdateInput = {
+      ...(data.title !== undefined ? { title: data.title.trim() } : {}),
+      ...(data.description !== undefined ? { description: data.description?.trim() || null } : {}),
+      ...(data.docTemplateUrl !== undefined ? { docTemplateUrl: data.docTemplateUrl?.trim() || null } : {}),
+      ...(data.cost !== undefined
+        ? { cost: data.cost !== null ? new Prisma.Decimal(data.cost) : null }
+        : {}),
+      ...(data.costCadence !== undefined ? { costCadence: data.costCadence } : {}),
+      ...(data.inventoryItemId !== undefined ? { inventoryItemId: data.inventoryItemId || null } : {}),
+      ...(data.procurementVendor !== undefined ? { procurementVendor: data.procurementVendor?.trim() || null } : {}),
+      ...(data.procurementPoNumber !== undefined ? { procurementPoNumber: data.procurementPoNumber?.trim() || null } : {}),
+      ...(data.procurementUrl !== undefined ? { procurementUrl: data.procurementUrl?.trim() || null } : {}),
+      ...(data.procurementStatus !== undefined ? { procurementStatus: data.procurementStatus } : {}),
+      ...(data.completedLocationNote !== undefined ? { completedLocationNote: data.completedLocationNote?.trim() || null } : {}),
+    };
+
     await prisma.$transaction(async (tx) => {
       await tx.onboardingCaseItem.update({
         where: { id: itemId },
-        data: {
-          ...(data.title !== undefined ? { title: data.title.trim() } : {}),
-          ...(data.description !== undefined ? { description: data.description?.trim() || null } : {}),
-          ...(data.docTemplateUrl !== undefined ? { docTemplateUrl: data.docTemplateUrl?.trim() || null } : {}),
-          ...(data.cost !== undefined
-            ? { cost: data.cost !== null ? new Prisma.Decimal(data.cost) : null }
-            : {}),
-          ...(data.costCadence !== undefined ? { costCadence: data.costCadence } : {}),
-          ...(data.inventoryItemId !== undefined ? { inventoryItemId: data.inventoryItemId || null } : {}),
-          ...(data.procurementVendor !== undefined ? { procurementVendor: data.procurementVendor?.trim() || null } : {}),
-          ...(data.procurementPoNumber !== undefined ? { procurementPoNumber: data.procurementPoNumber?.trim() || null } : {}),
-          ...(data.procurementUrl !== undefined ? { procurementUrl: data.procurementUrl?.trim() || null } : {}),
-          ...(data.procurementStatus !== undefined ? { procurementStatus: data.procurementStatus } : {}),
-          ...(data.completedLocationNote !== undefined ? { completedLocationNote: data.completedLocationNote?.trim() || null } : {}),
-        },
+        data: updateData,
       });
 
       await recomputeCaseTotals(tx, item.caseId);
