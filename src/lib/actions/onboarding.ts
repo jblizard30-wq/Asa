@@ -194,6 +194,7 @@ export async function listOnboardingCases(filter?: {
       personName: c.personName,
       personEmail: c.personEmail,
       role: c.role,
+      roles: c.roles.length > 0 ? c.roles : [c.role],
       startDate: c.startDate ? c.startDate.toISOString() : null,
       status: c.status,
       templateSnapshotAt: c.templateSnapshotAt ? c.templateSnapshotAt.toISOString() : null,
@@ -224,6 +225,7 @@ export async function getOnboardingCase(id: string) {
       items: {
         include: {
           completedBy: { select: { id: true, name: true } },
+          assignedTo: { select: { id: true, name: true, email: true } },
           inventoryItem: { select: { id: true, name: true, onHandQty: true, unit: true } },
         },
         orderBy: { sortOrder: 'asc' },
@@ -240,6 +242,7 @@ export async function getOnboardingCase(id: string) {
     personName: c.personName,
     personEmail: c.personEmail,
     role: c.role,
+    roles: c.roles.length > 0 ? c.roles : [c.role],
     startDate: c.startDate ? c.startDate.toISOString() : null,
     status: c.status,
     templateSnapshotAt: c.templateSnapshotAt ? c.templateSnapshotAt.toISOString() : null,
@@ -264,6 +267,8 @@ export async function getOnboardingCase(id: string) {
       procurementPoNumber: item.procurementPoNumber,
       procurementUrl: item.procurementUrl,
       procurementStatus: item.procurementStatus,
+      assignedToUserId: item.assignedToUserId,
+      assignedTo: item.assignedTo,
       completedAt: item.completedAt ? item.completedAt.toISOString() : null,
       completedBy: item.completedBy,
       completedLocationNote: item.completedLocationNote,
@@ -274,8 +279,10 @@ export async function getOnboardingCase(id: string) {
 export async function createOnboardingCase(input: {
   personName: string;
   personEmail?: string | null;
-  role: OnboardingRole;
+  role?: OnboardingRole;
+  roles?: OnboardingRole[];
   startDate?: string | null;
+  categoryAssignees?: Partial<Record<OnboardingItemCategory, string>>;
 }): Promise<ActionResult<{ caseId: string }>> {
   ensureModuleEnabled();
   await requireAdmin();
@@ -283,36 +290,80 @@ export async function createOnboardingCase(input: {
   if (!input.personName?.trim()) {
     return { success: false, error: 'Person name is required.' };
   }
-  if (!input.role) {
-    return { success: false, error: 'Role is required.' };
+
+  const selectedRoles: OnboardingRole[] =
+    input.roles && input.roles.length > 0
+      ? input.roles
+      : input.role
+      ? [input.role]
+      : [];
+
+  if (selectedRoles.length === 0) {
+    return { success: false, error: 'At least one role blueprint must be selected.' };
   }
+
+  const primaryRole = selectedRoles[0];
 
   try {
     const newCase = await prisma.$transaction(async (tx) => {
-      // 1. Fetch blueprint template for this role
-      const blueprint = await tx.onboardingBlueprint.findUnique({
-        where: { role: input.role },
+      // 1. Fetch blueprints for all selected roles
+      const blueprints = await tx.onboardingBlueprint.findMany({
+        where: { role: { in: selectedRoles } },
         include: {
           items: { orderBy: { sortOrder: 'asc' } },
         },
       });
 
-      // 2. Create the case
+      // 2. Create the case with roles list
       const createdCase = await tx.onboardingCase.create({
         data: {
           personName: input.personName.trim(),
           personEmail: input.personEmail?.trim().toLowerCase() || null,
-          role: input.role,
+          role: primaryRole,
+          roles: selectedRoles,
           startDate: input.startDate ? new Date(input.startDate) : null,
           status: 'DRAFT',
           templateSnapshotAt: new Date(),
         },
       });
 
-      // 3. Snapshot copy items if blueprint exists
-      if (blueprint && blueprint.items.length > 0) {
+      // 3. Merge & deduplicate items across blueprints
+      const seenKeys = new Set<string>();
+      const mergedItems: Array<{
+        category: OnboardingItemCategory;
+        title: string;
+        description: string | null;
+        docTemplateUrl: string | null;
+        estimatedCost: Prisma.Decimal | null;
+        costCadence: OnboardingCostCadence | null;
+        provisioningType: OnboardingProvisioningType;
+        sortOrder: number;
+        assignedToUserId: string | null;
+      }> = [];
+
+      for (const bp of blueprints) {
+        for (const item of bp.items) {
+          const dedupeKey = `${item.category}:${item.title.trim().toLowerCase()}`;
+          if (seenKeys.has(dedupeKey)) continue;
+          seenKeys.add(dedupeKey);
+
+          mergedItems.push({
+            category: item.category,
+            title: item.title,
+            description: item.description,
+            docTemplateUrl: item.docTemplateUrl,
+            estimatedCost: item.estimatedCost,
+            costCadence: item.costCadence,
+            provisioningType: item.provisioningType,
+            sortOrder: mergedItems.length,
+            assignedToUserId: input.categoryAssignees?.[item.category] || null,
+          });
+        }
+      }
+
+      if (mergedItems.length > 0) {
         await tx.onboardingCaseItem.createMany({
-          data: blueprint.items.map((item, idx) => ({
+          data: mergedItems.map((item) => ({
             caseId: createdCase.id,
             category: item.category,
             title: item.title,
@@ -321,7 +372,8 @@ export async function createOnboardingCase(input: {
             cost: item.estimatedCost,
             costCadence: item.costCadence,
             provisioningType: item.provisioningType,
-            sortOrder: item.sortOrder ?? idx,
+            sortOrder: item.sortOrder,
+            assignedToUserId: item.assignedToUserId,
             procurementStatus: item.category === 'HARDWARE' ? 'NEEDED' : 'NOT_REQUIRED',
           })),
         });
@@ -444,6 +496,7 @@ export async function updateOnboardingItem(
     procurementPoNumber?: string | null;
     procurementUrl?: string | null;
     procurementStatus?: OnboardingProcurementStatus;
+    assignedToUserId?: string | null;
     completedLocationNote?: string | null;
   }
 ): Promise<ActionResult> {
@@ -473,6 +526,7 @@ export async function updateOnboardingItem(
       ...(data.procurementPoNumber !== undefined ? { procurementPoNumber: data.procurementPoNumber?.trim() || null } : {}),
       ...(data.procurementUrl !== undefined ? { procurementUrl: data.procurementUrl?.trim() || null } : {}),
       ...(data.procurementStatus !== undefined ? { procurementStatus: data.procurementStatus } : {}),
+      ...(data.assignedToUserId !== undefined ? { assignedToUserId: data.assignedToUserId || null } : {}),
       ...(data.completedLocationNote !== undefined ? { completedLocationNote: data.completedLocationNote?.trim() || null } : {}),
     };
 
@@ -493,6 +547,58 @@ export async function updateOnboardingItem(
   }
 }
 
+export async function assignOnboardingItem(
+  itemId: string,
+  assignedToUserId: string | null
+): Promise<ActionResult> {
+  ensureModuleEnabled();
+  await requireAdmin();
+
+  try {
+    const item = await prisma.onboardingCaseItem.update({
+      where: { id: itemId },
+      data: { assignedToUserId: assignedToUserId || null },
+      select: { caseId: true },
+    });
+
+    revalidatePath(`/admin/onboarding/${item.caseId}`);
+    return { success: true, data: undefined };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to assign item.' };
+  }
+}
+
+export async function batchAssignOnboardingCategory(
+  caseId: string,
+  category: OnboardingItemCategory,
+  assignedToUserId: string | null
+): Promise<ActionResult> {
+  ensureModuleEnabled();
+  await requireAdmin();
+
+  try {
+    await prisma.onboardingCaseItem.updateMany({
+      where: { caseId, category },
+      data: { assignedToUserId: assignedToUserId || null },
+    });
+
+    revalidatePath(`/admin/onboarding/${caseId}`);
+    return { success: true, data: undefined };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to batch assign category.' };
+  }
+}
+
+export async function getStaffUsersForAssigneePicker() {
+  ensureModuleEnabled();
+  await requireAdmin();
+
+  return prisma.user.findMany({
+    select: { id: true, name: true, email: true, role: true },
+    orderBy: { name: 'asc' },
+  });
+}
+
 export async function addOnboardingItem(
   caseId: string,
   data: {
@@ -504,6 +610,7 @@ export async function addOnboardingItem(
     costCadence?: OnboardingCostCadence | null;
     provisioningType?: OnboardingProvisioningType;
     inventoryItemId?: string | null;
+    assignedToUserId?: string | null;
   }
 ): Promise<ActionResult<{ itemId: string }>> {
   ensureModuleEnabled();

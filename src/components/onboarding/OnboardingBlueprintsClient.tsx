@@ -54,6 +54,8 @@ const STARTER_DEFAULTS: Record<OnboardingRole, Array<{ category: OnboardingItemC
     { category: 'PAPERWORK', title: 'I-9 Employment Eligibility Verification', cost: null, cadence: null, url: 'https://docs.google.com/document/d/copy' },
     { category: 'PAPERWORK', title: 'Direct Deposit Authorization', cost: null, cadence: null },
     { category: 'PAPERWORK', title: 'Ministerial Housing Allowance Agreement', cost: null, cadence: null },
+    { category: 'PAPERWORK', title: '30-Day Spiritual Health & Ministry Alignment Coffee', cost: null, cadence: null },
+    { category: 'PAPERWORK', title: '60-Day Elder & Team Debrief', cost: null, cadence: null },
     { category: 'HARDWARE', title: 'MacBook Pro 16-inch', cost: 2499, cadence: 'ONE_TIME' },
     { category: 'HARDWARE', title: 'Office Desk & Ergonomic Chair', cost: 750, cadence: 'ONE_TIME' },
     { category: 'HARDWARE', title: 'External 4K Monitor & USB-C Dock', cost: 450, cadence: 'ONE_TIME' },

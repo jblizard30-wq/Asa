@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { isModuleEnabled } from '@/lib/modules';
-import { getOnboardingBlueprints } from '@/lib/actions/onboarding';
+import { getOnboardingBlueprints, getStaffUsersForAssigneePicker } from '@/lib/actions/onboarding';
 import { NewOnboardingWizardClient } from '@/components/onboarding/NewOnboardingWizardClient';
 
 export default async function NewOnboardingPage() {
@@ -19,7 +19,10 @@ export default async function NewOnboardingPage() {
     redirect('/my-tasks');
   }
 
-  const blueprintsData = await getOnboardingBlueprints();
+  const [blueprintsData, staffUsers] = await Promise.all([
+    getOnboardingBlueprints(),
+    getStaffUsersForAssigneePicker(),
+  ]);
 
   const blueprints = blueprintsData.map((b) => ({
     id: b.id,
@@ -36,6 +39,6 @@ export default async function NewOnboardingPage() {
     })),
   }));
 
-  return <NewOnboardingWizardClient blueprints={blueprints} />;
+  return <NewOnboardingWizardClient blueprints={blueprints} staffUsers={staffUsers} />;
 }
 

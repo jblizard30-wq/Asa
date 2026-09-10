@@ -215,6 +215,12 @@ model User {
   // Onboarding module (add-on — gated by ENABLED_MODULES, see src/lib/modules.ts).
   onboardedCase            OnboardingCase?      @relation("OnboardingCreatedUser")
   completedOnboardingItems OnboardingCaseItem[] @relation("OnboardingItemCompletedBy")
+  assignedOnboardingItems  OnboardingCaseItem[] @relation("OnboardingItemAssignedTo")
+
+  // Child Protection module (add-on — gated by ENABLED_MODULES)
+  childProtectionRecords   ChildProtectionRecord[] @relation("ChildProtectionUserRecords")
+  childProtectionCreated   ChildProtectionRecord[] @relation("ChildProtectionRecordCreator")
+  childProtectionShares    ChildProtectionShare[]  @relation("ChildProtectionUserShares")
 
   @@index([managerId])
 }
@@ -254,8 +260,9 @@ model Team {
 
   members         TeamMember[]
   workflows       Workflow[]
-  raciChartShares RaciChartShare[] @relation("RaciChartTeamShares")
-  meetupShares    MeetupShare[]    @relation("MeetupTeamShares")
+  raciChartShares       RaciChartShare[]       @relation("RaciChartTeamShares")
+  meetupShares          MeetupShare[]          @relation("MeetupTeamShares")
+  childProtectionShares ChildProtectionShare[] @relation("ChildProtectionTeamShares")
 }
 
 model TeamMember {
@@ -1656,6 +1663,7 @@ model OnboardingCase {
   personName           String
   personEmail          String?
   role                 OnboardingRole
+  roles                OnboardingRole[]     @default([])
   startDate            DateTime?
   status               OnboardingStatus     @default(DRAFT)
   templateSnapshotAt   DateTime?
@@ -1697,6 +1705,10 @@ model OnboardingCaseItem {
   procurementUrl        String?
   procurementStatus     OnboardingProcurementStatus @default(NOT_REQUIRED)
 
+  // Task assignment to specific director / team member
+  assignedToUserId      String?
+  assignedTo            User?                      @relation("OnboardingItemAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
   completedAt           DateTime?
   completedByUserId     String?
   completedBy           User?                      @relation("OnboardingItemCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
@@ -1707,5 +1719,72 @@ model OnboardingCaseItem {
 
   @@index([caseId])
   @@index([inventoryItemId])
+  @@index([assignedToUserId])
 }
+
+// ---------------------------------------------------------------------------
+// Child Protection Module (gated by ENABLED_MODULES)
+// ---------------------------------------------------------------------------
+
+enum ChildProtectionAccessLevel {
+  VIEW
+  EDIT
+}
+
+model ChildProtectionRecord {
+  id                         String    @id @default(cuid())
+  name                       String
+  email                      String?
+  phone                      String?
+  ministries                 String[]  @default([])
+
+  // DocuSign Agreement (One-time)
+  docusignSigned             Boolean   @default(false)
+  docusignSignedAt           DateTime?
+  docusignUrl                String?
+
+  // MinistrySafe Training (3-year renewal)
+  ministrySafeCompletedAt    DateTime?
+  ministrySafeExpiresAt      DateTime?
+  ministrySafeUrl            String?
+
+  // Background Check (5-year renewal)
+  backgroundCheckCompletedAt DateTime?
+  backgroundCheckExpiresAt   DateTime?
+  backgroundCheckUrl         String?
+
+  notes                      String?   @db.Text
+
+  // Optional link to staff user if employed
+  userId                     String?
+  user                       User?     @relation("ChildProtectionUserRecords", fields: [userId], references: [id], onDelete: SetNull)
+
+  createdById                String?
+  createdBy                  User?     @relation("ChildProtectionRecordCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+  archivedAt                 DateTime?
+
+  @@index([archivedAt])
+  @@index([ministrySafeExpiresAt])
+  @@index([backgroundCheckExpiresAt])
+  @@index([userId])
+  @@index([createdById])
+}
+
+model ChildProtectionShare {
+  id        String                     @id @default(cuid())
+  userId    String?
+  user      User?                      @relation("ChildProtectionUserShares", fields: [userId], references: [id], onDelete: Cascade)
+  teamId    String?
+  team      Team?                      @relation("ChildProtectionTeamShares", fields: [teamId], references: [id], onDelete: Cascade)
+  access    ChildProtectionAccessLevel @default(VIEW)
+  createdAt DateTime                   @default(now())
+
+  @@unique([userId])
+  @@unique([teamId])
+  @@index([userId])
+  @@index([teamId])
+}
+
 

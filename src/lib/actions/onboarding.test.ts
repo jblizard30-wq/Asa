@@ -5,6 +5,8 @@ import {
   toggleOnboardingItemComplete,
   completeOnboardingAndCreateUser,
   updateOnboardingCaseStatus,
+  assignOnboardingItem,
+  batchAssignOnboardingCategory,
 } from './onboarding';
 import { prisma } from '@/lib/prisma';
 import { isModuleEnabled } from '@/lib/modules';
@@ -50,11 +52,13 @@ vi.mock('@/lib/prisma', () => {
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       delete: vi.fn(),
     },
     user: {
       findUnique: vi.fn(),
       create: vi.fn(),
+      findMany: vi.fn(),
     },
     $transaction: vi.fn(async (cb: any) => cb(mockPrisma)),
   };
@@ -111,38 +115,48 @@ describe('Onboarding Server Actions', () => {
   });
 
   it('snapshot-copies items from blueprint when creating an onboarding case', async () => {
-    vi.mocked(prisma.onboardingBlueprint.findUnique).mockResolvedValue({
-      id: 'bp-1',
-      role: 'PASTORAL_STAFF',
-      items: [
-        {
-          id: 'bpi-1',
-          category: 'PAPERWORK',
-          title: 'W-4 Form',
-          docTemplateUrl: 'https://docs.google.com/w4/copy',
-          estimatedCost: null,
-          costCadence: null,
-          provisioningType: 'MANUAL_TASK',
-          sortOrder: 0,
-        },
-        {
-          id: 'bpi-2',
-          category: 'HARDWARE',
-          title: 'MacBook Pro',
-          docTemplateUrl: null,
-          estimatedCost: 2400 as any,
-          costCadence: 'ONE_TIME',
-          provisioningType: 'MANUAL_TASK',
-          sortOrder: 1,
-        },
-      ],
-    } as any);
+    vi.mocked(prisma.onboardingBlueprint.findMany).mockResolvedValue([
+      {
+        id: 'bp-1',
+        role: 'PASTORAL_STAFF',
+        description: 'Pastoral',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        items: [
+          {
+            id: 'bpi-1',
+            blueprintId: 'bp-1',
+            category: 'PAPERWORK',
+            title: 'W-4 Form',
+            description: null,
+            docTemplateUrl: 'https://docs.google.com/w4/copy',
+            estimatedCost: null,
+            costCadence: null,
+            provisioningType: 'MANUAL_TASK',
+            sortOrder: 0,
+          },
+          {
+            id: 'bpi-2',
+            blueprintId: 'bp-1',
+            category: 'HARDWARE',
+            title: 'MacBook Pro',
+            description: null,
+            docTemplateUrl: null,
+            estimatedCost: 2400 as any,
+            costCadence: 'ONE_TIME',
+            provisioningType: 'MANUAL_TASK',
+            sortOrder: 1,
+          },
+        ],
+      },
+    ] as any);
 
     vi.mocked(prisma.onboardingCase.create).mockResolvedValue({
       id: 'case-123',
       personName: 'Jane Smith',
       personEmail: 'jane@example.com',
       role: 'PASTORAL_STAFF',
+      roles: ['PASTORAL_STAFF'],
       status: 'DRAFT',
     } as any);
 
@@ -171,6 +185,219 @@ describe('Onboarding Server Actions', () => {
           procurementStatus: 'NEEDED',
         }),
       ]),
+    });
+  });
+
+  it('merges multiple role blueprints and deduplicates identical items', async () => {
+    vi.mocked(prisma.onboardingBlueprint.findMany).mockResolvedValue([
+      {
+        id: 'bp-pastoral',
+        role: 'PASTORAL_STAFF',
+        description: 'Pastoral',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        items: [
+          {
+            id: 'item-w4-1',
+            blueprintId: 'bp-pastoral',
+            category: 'PAPERWORK',
+            title: 'Federal W-4 Form',
+            description: 'Tax withholding',
+            docTemplateUrl: null,
+            estimatedCost: null,
+            costCadence: null,
+            provisioningType: 'MANUAL_TASK',
+            sortOrder: 0,
+          },
+          {
+            id: 'item-mbp',
+            blueprintId: 'bp-pastoral',
+            category: 'HARDWARE',
+            title: 'MacBook Pro 16-inch',
+            description: 'Laptop',
+            docTemplateUrl: null,
+            estimatedCost: 2499 as any,
+            costCadence: 'ONE_TIME',
+            provisioningType: 'MANUAL_TASK',
+            sortOrder: 1,
+          },
+        ],
+      },
+      {
+        id: 'bp-youth',
+        role: 'CHILDRENS_YOUTH',
+        description: 'Youth',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        items: [
+          // Duplicate W-4 Form across roles
+          {
+            id: 'item-w4-2',
+            blueprintId: 'bp-youth',
+            category: 'PAPERWORK',
+            title: 'Federal W-4 Form',
+            description: 'Tax form',
+            docTemplateUrl: null,
+            estimatedCost: null,
+            costCadence: null,
+            provisioningType: 'MANUAL_TASK',
+            sortOrder: 0,
+          },
+          // Unique youth item
+          {
+            id: 'item-bg-check',
+            blueprintId: 'bp-youth',
+            category: 'PAPERWORK',
+            title: 'MinistrySafe Background Check',
+            description: 'Safety compliance',
+            docTemplateUrl: null,
+            estimatedCost: 35 as any,
+            costCadence: 'ONE_TIME',
+            provisioningType: 'MANUAL_TASK',
+            sortOrder: 1,
+          },
+        ],
+      },
+    ] as any);
+
+    vi.mocked(prisma.onboardingCase.create).mockResolvedValue({
+      id: 'case-youth-pastor',
+      personName: 'Alex Pastor',
+      role: 'PASTORAL_STAFF',
+      roles: ['PASTORAL_STAFF', 'CHILDRENS_YOUTH'],
+      status: 'DRAFT',
+    } as any);
+
+    vi.mocked(prisma.onboardingCaseItem.findMany).mockResolvedValue([
+      { cost: 2499, costCadence: 'ONE_TIME' },
+      { cost: 35, costCadence: 'ONE_TIME' },
+    ] as any);
+
+    const res = await createOnboardingCase({
+      personName: 'Alex Pastor',
+      roles: ['PASTORAL_STAFF', 'CHILDRENS_YOUTH'],
+    });
+
+    expect(res.success).toBe(true);
+    // Verified createMany called with exactly 3 deduplicated items (W-4 once, MacBook Pro, MinistrySafe)
+    expect(prisma.onboardingCaseItem.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          caseId: 'case-youth-pastor',
+          title: 'Federal W-4 Form',
+          category: 'PAPERWORK',
+        }),
+        expect.objectContaining({
+          caseId: 'case-youth-pastor',
+          title: 'MacBook Pro 16-inch',
+          category: 'HARDWARE',
+        }),
+        expect.objectContaining({
+          caseId: 'case-youth-pastor',
+          title: 'MinistrySafe Background Check',
+          category: 'PAPERWORK',
+        }),
+      ],
+    });
+  });
+
+  it('applies category-level workflow assignee defaults to items upon creation', async () => {
+    vi.mocked(prisma.onboardingBlueprint.findMany).mockResolvedValue([
+      {
+        id: 'bp-1',
+        role: 'PASTORAL_STAFF',
+        description: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        items: [
+          {
+            id: 'item-1',
+            blueprintId: 'bp-1',
+            category: 'PAPERWORK',
+            title: 'W-4 Form',
+            description: null,
+            docTemplateUrl: null,
+            estimatedCost: null,
+            costCadence: null,
+            provisioningType: 'MANUAL_TASK',
+            sortOrder: 0,
+          },
+          {
+            id: 'item-2',
+            blueprintId: 'bp-1',
+            category: 'HARDWARE',
+            title: 'Laptop',
+            description: null,
+            docTemplateUrl: null,
+            estimatedCost: 1200 as any,
+            costCadence: 'ONE_TIME',
+            provisioningType: 'MANUAL_TASK',
+            sortOrder: 1,
+          },
+        ],
+      },
+    ] as any);
+
+    vi.mocked(prisma.onboardingCase.create).mockResolvedValue({
+      id: 'case-assigned',
+      personName: 'Sam Tech',
+      role: 'PASTORAL_STAFF',
+      roles: ['PASTORAL_STAFF'],
+      status: 'DRAFT',
+    } as any);
+
+    vi.mocked(prisma.onboardingCaseItem.findMany).mockResolvedValue([]);
+
+    const res = await createOnboardingCase({
+      personName: 'Sam Tech',
+      role: 'PASTORAL_STAFF',
+      categoryAssignees: {
+        PAPERWORK: 'user-hr-director',
+        HARDWARE: 'user-it-lead',
+      },
+    });
+
+    expect(res.success).toBe(true);
+    expect(prisma.onboardingCaseItem.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          category: 'PAPERWORK',
+          assignedToUserId: 'user-hr-director',
+        }),
+        expect.objectContaining({
+          category: 'HARDWARE',
+          assignedToUserId: 'user-it-lead',
+        }),
+      ],
+    });
+  });
+
+  it('assigns an onboarding item directly to a user', async () => {
+    vi.mocked(prisma.onboardingCaseItem.update).mockResolvedValue({
+      id: 'item-1',
+      caseId: 'case-123',
+      assignedToUserId: 'user-it',
+    } as any);
+
+    const res = await assignOnboardingItem('item-1', 'user-it');
+    expect(res.success).toBe(true);
+    expect(prisma.onboardingCaseItem.update).toHaveBeenCalledWith({
+      where: { id: 'item-1' },
+      data: { assignedToUserId: 'user-it' },
+      select: { caseId: true },
+    });
+  });
+
+  it('batch assigns an entire category to a user', async () => {
+    vi.mocked(prisma.onboardingCaseItem.updateMany).mockResolvedValue({
+      count: 5,
+    } as any);
+
+    const res = await batchAssignOnboardingCategory('case-123', 'PAPERWORK', 'user-hr');
+    expect(res.success).toBe(true);
+    expect(prisma.onboardingCaseItem.updateMany).toHaveBeenCalledWith({
+      where: { caseId: 'case-123', category: 'PAPERWORK' },
+      data: { assignedToUserId: 'user-hr' },
     });
   });
 

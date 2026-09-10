@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { isModuleEnabled } from '@/lib/modules';
-import { getOnboardingCase } from '@/lib/actions/onboarding';
+import { getOnboardingCase, getStaffUsersForAssigneePicker } from '@/lib/actions/onboarding';
 import { OnboardingDetailClient } from '@/components/onboarding/OnboardingDetailClient';
 
 export default async function OnboardingDetailPage({
@@ -24,7 +24,11 @@ export default async function OnboardingDetailPage({
     redirect('/my-tasks');
   }
 
-  const onboardingCase = await getOnboardingCase(params.id);
+  const [onboardingCase, staffUsers] = await Promise.all([
+    getOnboardingCase(params.id),
+    getStaffUsersForAssigneePicker(),
+  ]);
+
   if (!onboardingCase) {
     notFound();
   }
@@ -41,6 +45,7 @@ export default async function OnboardingDetailPage({
     <OnboardingDetailClient
       onboardingCase={onboardingCase}
       inventoryItems={inventoryItems}
+      staffUsers={staffUsers}
     />
   );
 }

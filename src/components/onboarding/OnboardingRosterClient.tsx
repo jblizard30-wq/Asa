@@ -16,6 +16,7 @@ export interface SerializedOnboardingCase {
   personName: string;
   personEmail: string | null;
   role: OnboardingRole;
+  roles?: OnboardingRole[];
   startDate: string | null;
   status: OnboardingStatus;
   templateSnapshotAt: string | null;
@@ -76,7 +77,13 @@ export function OnboardingRosterClient({
 
   const filteredCases = useMemo(() => {
     return cases.filter((c) => {
-      if (roleFilter !== 'ALL' && c.role !== roleFilter) return false;
+      if (roleFilter !== 'ALL') {
+        const hasRole =
+          c.roles && c.roles.length > 0
+            ? c.roles.includes(roleFilter as OnboardingRole)
+            : c.role === roleFilter;
+        if (!hasRole) return false;
+      }
       if (statusFilter !== 'ALL' && c.status !== statusFilter) return false;
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
@@ -286,9 +293,16 @@ export function OnboardingRosterClient({
                         )}
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className="inline-block rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                          {ROLE_LABELS[c.role] || c.role}
-                        </span>
+                        <div className="flex flex-wrap gap-1 max-w-[220px]">
+                          {(c.roles && c.roles.length > 0 ? c.roles : [c.role]).map((r) => (
+                            <span
+                              key={r}
+                              className="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                            >
+                              {ROLE_LABELS[r] || r}
+                            </span>
+                          ))}
+                        </div>
                       </td>
                       <td className="px-4 py-3.5">
                         <span

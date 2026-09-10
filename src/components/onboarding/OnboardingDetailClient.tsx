@@ -20,6 +20,8 @@ import {
   updateOnboardingCaseStatus,
   completeOnboardingAndCreateUser,
   deleteOnboardingCase,
+  assignOnboardingItem,
+  batchAssignOnboardingCategory,
 } from '@/lib/actions/onboarding';
 import { formatMoney } from '@/lib/onboardingBudget';
 import {
@@ -30,6 +32,9 @@ import {
   CloudIcon,
   ComputerDesktopIcon,
   KeyIcon,
+  FunnelIcon,
+  UserGroupIcon,
+  UserPlusIcon,
 } from './OnboardingIcons';
 
 export interface DetailedCaseItem {
@@ -49,6 +54,8 @@ export interface DetailedCaseItem {
   procurementPoNumber: string | null;
   procurementUrl: string | null;
   procurementStatus: OnboardingProcurementStatus;
+  assignedToUserId: string | null;
+  assignedTo: { id: string; name: string; email: string } | null;
   completedAt: string | null;
   completedBy: { id: string; name: string } | null;
   completedLocationNote: string | null;
@@ -59,6 +66,7 @@ export interface DetailedOnboardingCase {
   personName: string;
   personEmail: string | null;
   role: OnboardingRole;
+  roles?: OnboardingRole[];
   startDate: string | null;
   status: OnboardingStatus;
   templateSnapshotAt: string | null;
@@ -107,13 +115,18 @@ const CATEGORY_CONFIG: Record<
 export function OnboardingDetailClient({
   onboardingCase,
   inventoryItems = [],
+  staffUsers = [],
 }: {
   onboardingCase: DetailedOnboardingCase;
   inventoryItems?: Array<{ id: string; name: string; onHandQty: number; unit: string }>;
+  staffUsers?: Array<{ id: string; name: string; email: string; role: Role }>;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  // Filters & State
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('ALL');
 
   // Modals & form state
   const [showAddItem, setShowAddItem] = useState(false);
@@ -122,6 +135,7 @@ export function OnboardingDetailClient({
   const [newItemCost, setNewItemCost] = useState('');
   const [newItemCadence, setNewItemCadence] = useState<OnboardingCostCadence>('ONE_TIME');
   const [newItemUrl, setNewItemUrl] = useState('');
+  const [newItemAssignee, setNewItemAssignee] = useState<string>('');
 
   const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [accountEmail, setAccountEmail] = useState(onboardingCase.personEmail || '');
@@ -159,6 +173,24 @@ export function OnboardingDetailClient({
     });
   }
 
+  // Assign individual item
+  function handleAssignItem(itemId: string, userId: string | null) {
+    startTransition(async () => {
+      const res = await assignOnboardingItem(itemId, userId);
+      if (!res.success) setError(res.error);
+      else router.refresh();
+    });
+  }
+
+  // Batch assign whole category
+  function handleBatchAssignCategory(category: OnboardingItemCategory, userId: string | null) {
+    startTransition(async () => {
+      const res = await batchAssignOnboardingCategory(onboardingCase.id, category, userId);
+      if (!res.success) setError(res.error);
+      else router.refresh();
+    });
+  }
+
   // Add Item
   function handleAddItem(e: React.FormEvent) {
     e.preventDefault();
@@ -171,6 +203,7 @@ export function OnboardingDetailClient({
         cost: newItemCost ? parseFloat(newItemCost) : null,
         costCadence: newItemCadence,
         docTemplateUrl: newItemUrl.trim() || undefined,
+        assignedToUserId: newItemAssignee || undefined,
       });
 
       if (!res.success) {
@@ -181,6 +214,7 @@ export function OnboardingDetailClient({
       setNewItemTitle('');
       setNewItemCost('');
       setNewItemUrl('');
+      setNewItemAssignee('');
       setShowAddItem(false);
       router.refresh();
     });
@@ -290,13 +324,23 @@ export function OnboardingDetailClient({
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
                 {onboardingCase.personName}
               </h1>
-              <span className="rounded-md bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 dark:bg-brand-950/80 dark:text-brand-300">
-                {onboardingCase.role.replace(/_/g, ' ')}
-              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(onboardingCase.roles && onboardingCase.roles.length > 0
+                  ? onboardingCase.roles
+                  : [onboardingCase.role]
+                ).map((r) => (
+                  <span
+                    key={r}
+                    className="rounded-md bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 dark:bg-brand-950/80 dark:text-brand-300"
+                  >
+                    {r.replace(/_/g, ' ')}
+                  </span>
+                ))}
+              </div>
             </div>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               {onboardingCase.personEmail || 'No email provided'} &bull; Start Date:{' '}
@@ -372,15 +416,41 @@ export function OnboardingDetailClient({
       </div>
 
       {/* Action Bar for Items */}
-      <div className="flex justify-between items-center">
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Onboarding Checklist & Deliverables</h2>
-        <button
-          type="button"
-          onClick={() => setShowAddItem(true)}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-        >
-          + Add Custom Item
-        </button>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Onboarding Checklist & Deliverables</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Check off completed tasks, assign workflow deliverables, and track equipment procurement.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Assignee Filter */}
+          <div className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs shadow-xs dark:border-slate-700 dark:bg-slate-800">
+            <FunnelIcon className="h-3.5 w-3.5 text-slate-400" />
+            <select
+              value={assigneeFilter}
+              onChange={(e) => setAssigneeFilter(e.target.value)}
+              className="bg-transparent text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none"
+            >
+              <option value="ALL">All Assignees</option>
+              <option value="UNASSIGNED">Unassigned Only</option>
+              {staffUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  Assigned: {u.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowAddItem(true)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            + Add Custom Item
+          </button>
+        </div>
       </div>
 
       {/* Add Item Form (Inline Toggle) */}
@@ -400,7 +470,7 @@ export function OnboardingDetailClient({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Category</label>
               <select
@@ -415,7 +485,7 @@ export function OnboardingDetailClient({
               </select>
             </div>
 
-            <div className="sm:col-span-2">
+            <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Title</label>
               <input
                 type="text"
@@ -449,7 +519,23 @@ export function OnboardingDetailClient({
               </div>
             </div>
 
-            <div className="sm:col-span-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Assignee</label>
+              <select
+                value={newItemAssignee}
+                onChange={(e) => setNewItemAssignee(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              >
+                <option value="">— Unassigned —</option>
+                {staffUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="sm:col-span-2 lg:col-span-4">
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Optional Link / Google Doc Copy URL
               </label>
@@ -478,7 +564,12 @@ export function OnboardingDetailClient({
       {/* Categorized Checklist Sections */}
       {(['PAPERWORK', 'HARDWARE', 'SOFTWARE_LICENSE', 'FACILITY_ACCESS'] as OnboardingItemCategory[]).map(
         (category) => {
-          const items = onboardingCase.items.filter((i) => i.category === category);
+          const allCategoryItems = onboardingCase.items.filter((i) => i.category === category);
+          const items = allCategoryItems.filter((i) => {
+            if (assigneeFilter === 'ALL') return true;
+            if (assigneeFilter === 'UNASSIGNED') return !i.assignedToUserId;
+            return i.assignedToUserId === assigneeFilter;
+          });
           const config = CATEGORY_CONFIG[category];
           const Icon = config.icon;
 
@@ -488,7 +579,7 @@ export function OnboardingDetailClient({
               className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
             >
               {/* Category Header */}
-              <div className="border-b border-slate-200 bg-slate-50/70 px-6 py-4 flex items-center justify-between dark:border-slate-800 dark:bg-slate-800/50">
+              <div className="border-b border-slate-200 bg-slate-50/70 px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 dark:border-slate-800 dark:bg-slate-800/50">
                 <div className="flex items-center gap-3">
                   <div className="rounded-lg bg-white p-2 shadow-xs border border-slate-200 dark:bg-slate-800 dark:border-slate-700">
                     <Icon className="h-5 w-5 text-slate-700 dark:text-slate-300" />
@@ -498,14 +589,44 @@ export function OnboardingDetailClient({
                     <p className="text-xs text-slate-500 dark:text-slate-400">{config.desc}</p>
                   </div>
                 </div>
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  {items.filter((i) => i.completedAt !== null).length} / {items.length} Done
-                </span>
+
+                <div className="flex items-center gap-3">
+                  {staffUsers.length > 0 && (
+                    <select
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) return;
+                        handleBatchAssignCategory(category, val === '__CLEAR__' ? null : val);
+                        e.target.value = '';
+                      }}
+                      disabled={isPending}
+                      defaultValue=""
+                      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 focus:outline-none"
+                    >
+                      <option value="" disabled>
+                        Batch Assign Category...
+                      </option>
+                      <option value="__CLEAR__">— Clear / Unassign Category —</option>
+                      {staffUsers.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          Assign All to {u.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 shrink-0">
+                    {allCategoryItems.filter((i) => i.completedAt !== null).length} / {allCategoryItems.length} Done
+                  </span>
+                </div>
               </div>
 
               {/* Items List */}
               {items.length === 0 ? (
-                <div className="p-6 text-center text-xs text-slate-400 italic">No items in this category.</div>
+                <div className="p-6 text-center text-xs text-slate-400 italic">
+                  {allCategoryItems.length === 0
+                    ? 'No items in this category.'
+                    : 'No items in this category match the current assignee filter.'}
+                </div>
               ) : (
                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
                   {items.map((item) => {
@@ -569,6 +690,27 @@ export function OnboardingDetailClient({
                                   <option value="NEEDED">Fulfillment: Needed</option>
                                   <option value="ORDERED">Fulfillment: Ordered (PO Issued)</option>
                                   <option value="RECEIVED">Fulfillment: Received & Tagged</option>
+                                </select>
+                              )}
+
+                              {/* Inline Assignee Selector */}
+                              {staffUsers.length > 0 && (
+                                <select
+                                  value={item.assignedToUserId || ''}
+                                  onChange={(e) => handleAssignItem(item.id, e.target.value || null)}
+                                  disabled={isPending}
+                                  className={`rounded border px-2 py-0.5 text-[11px] font-medium focus:outline-none transition-colors ${
+                                    item.assignedToUserId
+                                      ? 'border-indigo-200 bg-indigo-50/70 text-indigo-700 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-300'
+                                      : 'border-slate-300 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                                  }`}
+                                >
+                                  <option value="">— Unassigned —</option>
+                                  {staffUsers.map((u) => (
+                                    <option key={u.id} value={u.id}>
+                                      Owner: {u.name}
+                                    </option>
+                                  ))}
                                 </select>
                               )}
                             </div>
