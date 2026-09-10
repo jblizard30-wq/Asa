@@ -212,6 +212,10 @@ model User {
   // XP module strategic frameworks
   frameworksCreated StrategicFramework[] @relation("FrameworkCreatedBy")
 
+  // Onboarding module (add-on — gated by ENABLED_MODULES, see src/lib/modules.ts).
+  onboardedCase            OnboardingCase?      @relation("OnboardingCreatedUser")
+  completedOnboardingItems OnboardingCaseItem[] @relation("OnboardingItemCompletedBy")
+
   @@index([managerId])
 }
 
@@ -1105,6 +1109,7 @@ model InventoryItem {
 
   stockCounts       StockCount[]
   restockOrderItems RestockOrderItem[]
+  onboardingItems   OnboardingCaseItem[]
 
   @@index([roomId])
   @@index([inventoryTypeId])
@@ -1567,3 +1572,133 @@ model MeetupShare {
   @@index([teamId])
   @@index([meetupId])
 }
+
+// ============================================================================
+// Onboarding module (add-on — gated by ENABLED_MODULES, see src/lib/modules.ts).
+// Role-based blueprints, paperwork & gear fulfillment, and budget estimator.
+// ============================================================================
+
+enum OnboardingRole {
+  PASTORAL_STAFF
+  ADMIN_OFFICE
+  FACILITIES
+  IT_MEDIA
+  WORSHIP_MUSIC
+  CHILDRENS_YOUTH
+  VOLUNTEER
+  OTHER
+}
+
+enum OnboardingItemCategory {
+  PAPERWORK
+  SOFTWARE_LICENSE
+  HARDWARE
+  FACILITY_ACCESS
+}
+
+enum OnboardingCostCadence {
+  ONE_TIME
+  MONTHLY
+}
+
+enum OnboardingProvisioningType {
+  MANUAL_TASK
+  GOOGLE_WORKSPACE
+  MICROSOFT_365
+  SLACK
+  MDM_DEVICE
+}
+
+enum OnboardingStatus {
+  DRAFT
+  IN_PROGRESS
+  READY_FOR_DAY_ONE
+  COMPLETED
+  CANCELLED
+}
+
+model OnboardingBlueprint {
+  id          String                    @id @default(cuid())
+  role        OnboardingRole            @unique
+  description String?
+  items       OnboardingBlueprintItem[]
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+}
+
+model OnboardingBlueprintItem {
+  id               String                     @id @default(cuid())
+  blueprintId      String
+  blueprint        OnboardingBlueprint        @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  category         OnboardingItemCategory
+  title            String
+  description      String?
+  docTemplateUrl   String?
+  estimatedCost    Decimal?                   @db.Decimal(10, 2)
+  costCadence      OnboardingCostCadence?
+  provisioningType OnboardingProvisioningType @default(MANUAL_TASK)
+  sortOrder        Int                        @default(0)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  @@index([blueprintId])
+}
+
+model OnboardingCase {
+  id                   String               @id @default(cuid())
+  personName           String
+  personEmail          String?
+  role                 OnboardingRole
+  startDate            DateTime?
+  status               OnboardingStatus     @default(DRAFT)
+  templateSnapshotAt   DateTime?
+  estimatedCapex       Decimal              @default(0) @db.Decimal(10, 2)
+  estimatedMonthlyOpex Decimal              @default(0) @db.Decimal(10, 2)
+
+  // 1-to-1 link to newly created User once onboarded
+  createdUserId        String?              @unique
+  createdUser          User?                @relation("OnboardingCreatedUser", fields: [createdUserId], references: [id], onDelete: SetNull)
+
+  items                OnboardingCaseItem[]
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([role])
+  @@index([status])
+}
+
+model OnboardingCaseItem {
+  id                    String                     @id @default(cuid())
+  caseId                String
+  case                  OnboardingCase             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  category              OnboardingItemCategory
+  title                 String
+  description           String?
+  docTemplateUrl        String?
+  cost                  Decimal?                   @db.Decimal(10, 2)
+  costCadence           OnboardingCostCadence?
+  provisioningType      OnboardingProvisioningType @default(MANUAL_TASK)
+  sortOrder             Int                        @default(0)
+
+  // Optional link to existing warehouse stock (if inventory module is active)
+  inventoryItemId       String?
+  inventoryItem         InventoryItem?             @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+
+  // Lightweight procurement tracking
+  procurementVendor     String?
+  procurementPoNumber   String?
+  procurementUrl        String?
+  procurementStatus     String                     @default("NOT_REQUIRED") // NOT_REQUIRED, NEEDED, ORDERED, RECEIVED
+
+  completedAt           DateTime?
+  completedByUserId     String?
+  completedBy           User?                      @relation("OnboardingItemCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+  completedLocationNote String?
+
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  @@index([caseId])
+  @@index([inventoryItemId])
+}
+
