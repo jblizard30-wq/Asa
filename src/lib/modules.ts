@@ -4,9 +4,9 @@
  * bought" is a per-deployment env var, not a database row — there is only ever
  * one tenant reading this at runtime.
  */
-export type ModuleKey = 'inventory' | 'meetups' | 'xp' | 'raci' | 'onboarding';
+export type ModuleKey = 'inventory' | 'meetups' | 'xp' | 'raci' | 'onboarding' | 'child_protection';
 
-const ALL_MODULES: ModuleKey[] = ['inventory', 'meetups', 'xp', 'raci', 'onboarding'];
+const ALL_MODULES: ModuleKey[] = ['inventory', 'meetups', 'xp', 'raci', 'onboarding', 'child_protection'];
 
 function parseEnabledModules(): Set<ModuleKey> {
   // Case-insensitive because a typo here silently withholds a module the

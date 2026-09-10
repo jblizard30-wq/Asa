@@ -49,7 +49,7 @@ export const DEFAULT_NAV_GROUPS: { name: string; itemKeys: string[] }[] = [
   },
   {
     name: 'Administration',
-    itemKeys: ['admin-users', 'admin-onboarding', 'admin-workflows', 'admin-trash', 'trash'],
+    itemKeys: ['admin-users', 'admin-onboarding', 'admin-child-protection', 'admin-workflows', 'admin-trash', 'trash'],
   },
 ];
 
@@ -69,6 +69,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'teams', label: 'Teams', href: '/teams', requires: 'canManageTeams' },
   { key: 'admin-users', label: 'User Management', href: '/admin/users', requires: 'admin' },
   { key: 'admin-onboarding', label: 'Onboarding', href: '/admin/onboarding', requires: 'admin', module: 'onboarding' },
+  { key: 'admin-child-protection', label: 'Child Protection', href: '/admin/child-protection', requires: 'admin', module: 'child_protection' },
   { key: 'admin-trash', label: 'All Trash', href: '/admin/trash', requires: 'admin' },
   { key: 'admin-workflows', label: 'Workflows', href: '/admin/workflows', requires: 'admin' },
 ];
