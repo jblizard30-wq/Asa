@@ -5,13 +5,16 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { isModuleEnabled } from '@/lib/modules';
+import { requireProjectMember, filterToAssignableUsers } from '@/lib/actions/tasks';
 import {
   computeRecordStatus,
   computeMinistrySafeExpiry,
   computeBackgroundCheckExpiry,
   checkChildProtectionAccess,
+  parseChildProtectionImportRows,
   type SerializedChildProtectionRecord,
   type ChildProtectionStatus,
+  type ParsedChildProtectionImportRow,
 } from '@/lib/childProtection';
 
 export interface ChildProtectionMetrics {
@@ -293,15 +296,43 @@ export async function batchUpdateChildProtectionRecords(
     return { success: false, error: 'Unauthorized. You must have edit access to update records.' };
   }
 
+  const ids = updates.map((u) => u.id);
+  const existingRecords = await prisma.childProtectionRecord.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, archivedAt: true, docusignSignedAt: true },
+  });
+  const existingById = new Map(existingRecords.map((r) => [r.id, r]));
+  const hasMissingOrArchived = ids.some((id) => {
+    const existing = existingById.get(id);
+    return !existing || existing.archivedAt;
+  });
+  if (hasMissingOrArchived) {
+    return { success: false, error: 'One or more records were not found or have been archived.' };
+  }
+
   await prisma.$transaction(
     updates.map(({ id, data }) => {
       const updatePayload: Record<string, any> = {};
+      const existing = existingById.get(id)!;
 
       if (data.name !== undefined) updatePayload.name = data.name.trim();
       if (data.email !== undefined) updatePayload.email = data.email?.trim() || null;
       if (data.ministries !== undefined) updatePayload.ministries = data.ministries;
-      if (data.docusignSigned !== undefined) updatePayload.docusignSigned = data.docusignSigned;
       if (data.docusignUrl !== undefined) updatePayload.docusignUrl = data.docusignUrl?.trim() || null;
+
+      // DocuSign — mirrors updateChildProtectionRecord: stamp the signed date only
+      // when newly signing with no existing date on file, and clear it on unsign.
+      if (data.docusignSigned !== undefined) {
+        updatePayload.docusignSigned = data.docusignSigned;
+        if (data.docusignSigned && !existing.docusignSignedAt && data.docusignSignedAt === undefined) {
+          updatePayload.docusignSignedAt = new Date();
+        } else if (!data.docusignSigned) {
+          updatePayload.docusignSignedAt = null;
+        }
+      }
+      if (data.docusignSignedAt !== undefined) {
+        updatePayload.docusignSignedAt = data.docusignSignedAt ? new Date(data.docusignSignedAt) : null;
+      }
 
       if (data.ministrySafeCompletedAt !== undefined) {
         const msDate = data.ministrySafeCompletedAt ? new Date(data.ministrySafeCompletedAt) : null;
@@ -365,9 +396,19 @@ export async function createRenewalReviewTask(input: {
   }
 
   const session = await getServerSession(authOptions);
-  const { allowed } = await checkChildProtectionAccess(session);
-  if (!allowed) {
-    return { success: false, error: 'Unauthorized.' };
+  const { allowed, access } = await checkChildProtectionAccess(session);
+  if (!allowed || access !== 'EDIT') {
+    return { success: false, error: 'Unauthorized. You must have edit access to create review tasks.' };
+  }
+
+  // Child Protection access does not imply membership in the target project — task
+  // visibility is scoped by project, not by ChildProtectionShare, so both the creator
+  // and the assignee must be validated against it independently (mirrors requireProjectMember
+  // / filterToAssignableUsers in actions/tasks.ts).
+  try {
+    await requireProjectMember(input.projectId);
+  } catch {
+    return { success: false, error: 'You are not a member of the selected project.' };
   }
 
   const record = await prisma.childProtectionRecord.findUnique({
@@ -423,6 +464,10 @@ export async function createRenewalReviewTask(input: {
   });
   const order = (lastTask?.order ?? -1) + 1;
 
+  const assigneeIds = input.assigneeId
+    ? await filterToAssignableUsers(input.projectId, [input.assigneeId])
+    : [];
+
   const task = await prisma.task.create({
     data: {
       title,
@@ -432,14 +477,54 @@ export async function createRenewalReviewTask(input: {
       priority: status === 'EXPIRED' ? 'HIGH' : 'MEDIUM',
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
       order,
-      assignees: input.assigneeId ? { connect: [{ id: input.assigneeId }] } : undefined,
+      assignees: assigneeIds.length > 0 ? { connect: assigneeIds.map((id) => ({ id })) } : undefined,
     },
   });
 
   return { success: true, data: task };
 }
 
-export async function importChildProtectionRecords(records: UpsertChildProtectionRecordInput[]) {
+/**
+ * Builds a Prisma update payload for a row matched to an existing record.
+ * Only fields present on `row` (i.e. non-blank in the pasted sheet) are
+ * included — a blank cell never clobbers data the record already has.
+ */
+function buildImportUpdatePayload(
+  row: ParsedChildProtectionImportRow,
+  existing: { docusignSignedAt: Date | null }
+): Record<string, any> {
+  const data: Record<string, any> = { name: row.name };
+
+  if (row.email !== undefined) data.email = row.email;
+  if (row.ministries !== undefined) data.ministries = row.ministries;
+
+  if (row.docusignSigned !== undefined) {
+    data.docusignSigned = row.docusignSigned;
+    if (row.docusignSigned) {
+      if (!existing.docusignSignedAt) data.docusignSignedAt = new Date();
+    } else {
+      data.docusignSignedAt = null;
+    }
+  }
+
+  if (row.ministrySafeCompletedAt !== undefined) {
+    const msDate = new Date(row.ministrySafeCompletedAt);
+    data.ministrySafeCompletedAt = msDate;
+    data.ministrySafeExpiresAt = computeMinistrySafeExpiry(msDate);
+  }
+  if (row.backgroundCheckCompletedAt !== undefined) {
+    const bgDate = new Date(row.backgroundCheckCompletedAt);
+    data.backgroundCheckCompletedAt = bgDate;
+    data.backgroundCheckExpiresAt = computeBackgroundCheckExpiry(bgDate);
+  }
+
+  return data;
+}
+
+export async function importChildProtectionRecords(rawText: string): Promise<
+  | { success: true; count: number; created: number; updated: number; warnings: string[] }
+  | { success: false; error: string; warnings?: string[] }
+> {
   if (!isModuleEnabled('child_protection')) {
     return { success: false, error: 'Child Protection module is not enabled.' };
   }
@@ -450,46 +535,77 @@ export async function importChildProtectionRecords(records: UpsertChildProtectio
     return { success: false, error: 'Unauthorized. You must have edit access to import records.' };
   }
 
-  const validRecords = records.filter((r) => r.name && r.name.trim().length > 0);
+  const { records, warnings } = parseChildProtectionImportRows(rawText);
 
-  if (validRecords.length === 0) {
-    return { success: false, error: 'No valid records found in import payload.' };
+  if (records.length === 0) {
+    return {
+      success: false,
+      error: 'No valid rows could be parsed. Check that rows contain at least a volunteer name.',
+      warnings,
+    };
   }
 
-  await prisma.$transaction(
-    validRecords.map((r) => {
-      const msCompletedAt = r.ministrySafeCompletedAt ? new Date(r.ministrySafeCompletedAt) : null;
-      const msExpiresAt = msCompletedAt ? computeMinistrySafeExpiry(msCompletedAt) : null;
+  // Match against active records by email (case-insensitive) first, falling back to an
+  // exact case-insensitive name match only when it's unambiguous — a name shared by more
+  // than one active record is treated as no match rather than guessing which one to update.
+  const existing = await prisma.childProtectionRecord.findMany({
+    where: { archivedAt: null },
+    select: { id: true, name: true, email: true, docusignSignedAt: true },
+  });
 
-      const bgCompletedAt = r.backgroundCheckCompletedAt ? new Date(r.backgroundCheckCompletedAt) : null;
-      const bgExpiresAt = bgCompletedAt ? computeBackgroundCheckExpiry(bgCompletedAt) : null;
+  const byEmail = new Map<string, (typeof existing)[number]>();
+  const byName = new Map<string, (typeof existing)[number]>();
+  const nameCount = new Map<string, number>();
+  for (const rec of existing) {
+    if (rec.email) {
+      const emailKey = rec.email.trim().toLowerCase();
+      if (!byEmail.has(emailKey)) byEmail.set(emailKey, rec);
+    }
+    const nameKey = rec.name.trim().toLowerCase();
+    nameCount.set(nameKey, (nameCount.get(nameKey) ?? 0) + 1);
+    byName.set(nameKey, rec);
+  }
 
-      const docSignedAt = r.docusignSignedAt ? new Date(r.docusignSignedAt) : r.docusignSigned ? new Date() : null;
+  let createdCount = 0;
+  let updatedCount = 0;
 
-      return prisma.childProtectionRecord.create({
-        data: {
-          name: r.name.trim(),
-          email: r.email?.trim() || null,
-          phone: r.phone?.trim() || null,
-          ministries: r.ministries ?? [],
-          docusignSigned: r.docusignSigned ?? false,
-          docusignSignedAt: docSignedAt,
-          docusignUrl: r.docusignUrl?.trim() || null,
-          ministrySafeCompletedAt: msCompletedAt,
-          ministrySafeExpiresAt: msExpiresAt,
-          ministrySafeUrl: r.ministrySafeUrl?.trim() || null,
-          backgroundCheckCompletedAt: bgCompletedAt,
-          backgroundCheckExpiresAt: bgExpiresAt,
-          backgroundCheckUrl: r.backgroundCheckUrl?.trim() || null,
-          notes: r.notes?.trim() || null,
-          createdById: session?.user?.id || null,
-        },
+  const ops = records.map((row) => {
+    const emailKey = row.email ? row.email.trim().toLowerCase() : null;
+    const nameKey = row.name.trim().toLowerCase();
+    const match = (emailKey && byEmail.get(emailKey)) || (nameCount.get(nameKey) === 1 ? byName.get(nameKey) : undefined);
+
+    if (match) {
+      updatedCount += 1;
+      return prisma.childProtectionRecord.update({
+        where: { id: match.id },
+        data: buildImportUpdatePayload(row, match),
       });
-    })
-  );
+    }
+
+    createdCount += 1;
+    const msCompletedAt = row.ministrySafeCompletedAt ? new Date(row.ministrySafeCompletedAt) : null;
+    const bgCompletedAt = row.backgroundCheckCompletedAt ? new Date(row.backgroundCheckCompletedAt) : null;
+
+    return prisma.childProtectionRecord.create({
+      data: {
+        name: row.name,
+        email: row.email ?? null,
+        ministries: row.ministries ?? [],
+        docusignSigned: row.docusignSigned ?? false,
+        docusignSignedAt: row.docusignSigned ? new Date() : null,
+        ministrySafeCompletedAt: msCompletedAt,
+        ministrySafeExpiresAt: msCompletedAt ? computeMinistrySafeExpiry(msCompletedAt) : null,
+        backgroundCheckCompletedAt: bgCompletedAt,
+        backgroundCheckExpiresAt: bgCompletedAt ? computeBackgroundCheckExpiry(bgCompletedAt) : null,
+        createdById: session?.user?.id || null,
+      },
+    });
+  });
+
+  await prisma.$transaction(ops);
 
   revalidatePath('/admin/child-protection');
-  return { success: true, count: validRecords.length };
+  return { success: true, count: records.length, created: createdCount, updated: updatedCount, warnings };
 }
 
 // Scaffolded share management for Admins

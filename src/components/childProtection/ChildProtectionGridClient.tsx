@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useTransition } from 'react';
+import React, { useState, useMemo, useTransition, useEffect } from 'react';
 import Link from 'next/link';
 import {
   ShieldCheckIcon,
@@ -214,9 +214,11 @@ export function ChildProtectionGridClient({
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <div
+        <button
+          type="button"
           onClick={() => setStatusFilter('ALL')}
-          className={`cursor-pointer rounded-xl border p-4 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 ${
+          aria-pressed={statusFilter === 'ALL'}
+          className={`cursor-pointer rounded-xl border p-4 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 hover:border-slate-400 dark:hover:border-slate-600 ${
             statusFilter === 'ALL'
               ? 'border-indigo-500 bg-indigo-50/40 dark:border-indigo-500 dark:bg-indigo-950/20'
               : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
@@ -228,11 +230,13 @@ export function ChildProtectionGridClient({
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{metrics.total}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">Active tracked individuals</p>
-        </div>
+        </button>
 
-        <div
+        <button
+          type="button"
           onClick={() => setStatusFilter('COMPLIANT')}
-          className={`cursor-pointer rounded-xl border p-4 shadow-sm transition-all hover:border-emerald-400 dark:hover:border-emerald-600 ${
+          aria-pressed={statusFilter === 'COMPLIANT'}
+          className={`cursor-pointer rounded-xl border p-4 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 hover:border-emerald-400 dark:hover:border-emerald-600 ${
             statusFilter === 'COMPLIANT'
               ? 'border-emerald-500 bg-emerald-50/40 dark:border-emerald-500 dark:bg-emerald-950/20'
               : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
@@ -244,11 +248,13 @@ export function ChildProtectionGridClient({
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{metrics.compliant}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">All 3 current (&gt;45 days)</p>
-        </div>
+        </button>
 
-        <div
+        <button
+          type="button"
           onClick={() => setStatusFilter('EXPIRING_SOON')}
-          className={`cursor-pointer rounded-xl border p-4 shadow-sm transition-all hover:border-amber-400 dark:hover:border-amber-600 ${
+          aria-pressed={statusFilter === 'EXPIRING_SOON'}
+          className={`cursor-pointer rounded-xl border p-4 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 hover:border-amber-400 dark:hover:border-amber-600 ${
             statusFilter === 'EXPIRING_SOON'
               ? 'border-amber-500 bg-amber-50/40 dark:border-amber-500 dark:bg-amber-950/20'
               : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
@@ -260,11 +266,13 @@ export function ChildProtectionGridClient({
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{metrics.expiringSoon}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">Within 45-day renewal window</p>
-        </div>
+        </button>
 
-        <div
+        <button
+          type="button"
           onClick={() => setStatusFilter('EXPIRED')}
-          className={`cursor-pointer rounded-xl border p-4 shadow-sm transition-all hover:border-rose-400 dark:hover:border-rose-600 ${
+          aria-pressed={statusFilter === 'EXPIRED'}
+          className={`cursor-pointer rounded-xl border p-4 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 hover:border-rose-400 dark:hover:border-rose-600 ${
             statusFilter === 'EXPIRED'
               ? 'border-rose-500 bg-rose-50/40 dark:border-rose-500 dark:bg-rose-950/20'
               : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
@@ -276,11 +284,13 @@ export function ChildProtectionGridClient({
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{metrics.expired}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">Past 3-yr or 5-yr renewal</p>
-        </div>
+        </button>
 
-        <div
+        <button
+          type="button"
           onClick={() => setStatusFilter('INCOMPLETE')}
-          className={`cursor-pointer rounded-xl border p-4 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 ${
+          aria-pressed={statusFilter === 'INCOMPLETE'}
+          className={`cursor-pointer rounded-xl border p-4 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 hover:border-slate-400 dark:hover:border-slate-600 ${
             statusFilter === 'INCOMPLETE'
               ? 'border-indigo-500 bg-indigo-50/40 dark:border-indigo-500 dark:bg-indigo-950/20'
               : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
@@ -292,7 +302,7 @@ export function ChildProtectionGridClient({
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{metrics.incomplete}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">Missing signature or initial check</p>
-        </div>
+        </button>
       </div>
 
       {/* Filter & Search Bar */}
@@ -342,7 +352,7 @@ export function ChildProtectionGridClient({
       {/* Spreadsheet-Grade Grid Table */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
+          <table className="w-full min-w-[860px] text-left text-sm text-slate-600 dark:text-slate-300">
             <thead className="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400">
               <tr>
                 <th className="py-3.5 pl-4 pr-3">Volunteer / Person</th>
@@ -560,8 +570,17 @@ export function ChildProtectionGridClient({
                           {userAccess === 'EDIT' && (
                             <>
                               <button
+                                onClick={() => setReviewTaskRecord(r)}
+                                title="Assign Renewal Review Task"
+                                aria-label={`Assign Renewal Review Task for ${r.name}`}
+                                className="inline-flex items-center gap-1 rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-400"
+                              >
+                                <ClipboardDocumentCheckIcon className="h-4 w-4" />
+                              </button>
+                              <button
                                 onClick={() => setEditingRecord(r)}
                                 title="Edit Volunteer"
+                                aria-label={`Edit ${r.name}`}
                                 className="inline-flex items-center gap-1 rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                               >
                                 <PencilSquareIcon className="h-4 w-4" />
@@ -569,6 +588,7 @@ export function ChildProtectionGridClient({
                               <button
                                 onClick={() => handleArchive(r.id, r.name)}
                                 title="Archive Volunteer"
+                                aria-label={`Archive ${r.name}`}
                                 className="inline-flex items-center gap-1 rounded p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
                               >
                                 <ArchiveBoxIcon className="h-4 w-4" />
@@ -630,8 +650,12 @@ export function ChildProtectionGridClient({
       {isImportModalOpen && (
         <ImportCsvModal
           onClose={() => setIsImportModalOpen(false)}
-          onImported={(count) => {
-            setFeedbackMessage({ type: 'success', text: `Successfully imported ${count} volunteers!` });
+          onImported={(count, created, updated) => {
+            const summary =
+              updated > 0
+                ? `Imported ${count} rows: ${created} added, ${updated} updated on existing records.`
+                : `Successfully imported ${count} volunteers!`;
+            setFeedbackMessage({ type: 'success', text: summary });
             setIsImportModalOpen(false);
             window.location.reload(); // Re-fetch all data from server
           }}
@@ -681,6 +705,16 @@ function RecordFormModal({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -743,7 +777,11 @@ function RecordFormModal({
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">
             {record ? `Edit ${record.name}` : 'Add Volunteer to Child Protection'}
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+          >
             ✕
           </button>
         </div>
@@ -762,6 +800,7 @@ function RecordFormModal({
               <input
                 type="text"
                 required
+                autoFocus
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Full Name"
@@ -979,6 +1018,16 @@ function ReviewTaskModal({
 
   const selectedProject = availableProjects.find((p) => p.id === projectId);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProject) {
@@ -1008,8 +1057,8 @@ function ReviewTaskModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800 my-8">
         <div className="flex items-center justify-between border-b border-slate-200 pb-4 dark:border-slate-800">
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">
@@ -1017,7 +1066,11 @@ function ReviewTaskModal({
             </h2>
             <p className="text-xs text-slate-500">For {record.name}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+          >
             ✕
           </button>
         </div>
@@ -1032,6 +1085,7 @@ function ReviewTaskModal({
           <div>
             <label className="block font-medium text-slate-700 dark:text-slate-300">Project</label>
             <select
+              autoFocus
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
@@ -1116,11 +1170,22 @@ function ImportCsvModal({
   onImported,
 }: {
   onClose: () => void;
-  onImported: (count: number) => void;
+  onImported: (count: number, created: number, updated: number) => void;
 }) {
   const [csvText, setCsvText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const handleImport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1131,51 +1196,16 @@ function ImportCsvModal({
 
     setIsSubmitting(true);
     setError(null);
+    setWarnings([]);
 
     try {
-      const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
-      const parsedRecords = [];
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        // Split by tab (if copied from Google Sheets) or comma
-        const parts = line.includes('\t') ? line.split('\t') : line.split(',');
-        if (parts.length === 0) continue;
-
-        const name = parts[0]?.trim();
-        if (!name || name.toLowerCase() === 'name' || name.toLowerCase() === 'volunteer') {
-          // skip header row
-          continue;
-        }
-
-        const email = parts[1]?.trim() || null;
-        const ministries = parts[2] ? parts[2].split(';').map((s) => s.trim()) : [];
-        const docusignSigned = parts[3]?.toLowerCase() === 'yes' || parts[3]?.toLowerCase() === 'true' || parts[3]?.toLowerCase() === 'x';
-        const msDateStr = parts[4]?.trim();
-        const bgDateStr = parts[5]?.trim();
-
-        const msDate = msDateStr ? new Date(msDateStr) : null;
-        const bgDate = bgDateStr ? new Date(bgDateStr) : null;
-
-        parsedRecords.push({
-          name,
-          email,
-          ministries,
-          docusignSigned,
-          ministrySafeCompletedAt: msDate && !isNaN(msDate.getTime()) ? msDate.toISOString() : null,
-          backgroundCheckCompletedAt: bgDate && !isNaN(bgDate.getTime()) ? bgDate.toISOString() : null,
-        });
-      }
-
-      if (parsedRecords.length === 0) {
-        setError('No valid rows could be parsed. Check that rows contain at least a volunteer name.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      const res = await importChildProtectionRecords(parsedRecords);
-      if (res.success && res.count) {
-        onImported(res.count);
+      // Parsing (delimiter detection, quoted-field handling, date normalization, and
+      // dedup-by-match against the existing roster) all happen server-side in
+      // importChildProtectionRecords — see src/lib/childProtection.ts.
+      const res = await importChildProtectionRecords(csvText);
+      if (res.warnings?.length) setWarnings(res.warnings);
+      if (res.success) {
+        onImported(res.count, res.created, res.updated);
       } else {
         setError(res.error || 'Failed to import records.');
       }
@@ -1187,8 +1217,8 @@ function ImportCsvModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800 my-8">
         <div className="flex items-center justify-between border-b border-slate-200 pb-4 dark:border-slate-800">
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">
@@ -1198,7 +1228,11 @@ function ImportCsvModal({
               Paste rows directly from your Google Sheet or CSV export.
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+          >
             ✕
           </button>
         </div>
@@ -1222,12 +1256,24 @@ function ImportCsvModal({
             <textarea
               rows={8}
               required
+              autoFocus
               value={csvText}
               onChange={(e) => setCsvText(e.target.value)}
               placeholder={`John Doe\tjohndoe@example.com\tKids Ministry; Nursery\tYes\t2024-05-15\t2023-11-20\nJane Smith\tjanesmith@example.com\tYouth\tNo\t2025-01-10\t`}
               className="w-full font-mono text-xs rounded-lg border border-slate-300 p-3 text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
           </div>
+
+          {warnings.length > 0 && (
+            <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              <p className="font-semibold mb-1">Imported with warnings:</p>
+              <ul className="list-disc list-inside space-y-0.5">
+                {warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
             <button
