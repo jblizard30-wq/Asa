@@ -26,6 +26,7 @@ import {
   createRenewalReviewTask,
   importChildProtectionRecords,
 } from '@/lib/actions/childProtection';
+import { CsvTemplateButton } from '@/components/CsvTemplateButton';
 
 interface Props {
   initialRecords: SerializedChildProtectionRecord[];
@@ -1209,9 +1210,12 @@ function ImportCsvModal({
         )}
 
         <form onSubmit={handleImport} className="mt-4 space-y-4 text-sm">
-          <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-            <p className="font-semibold text-slate-700 dark:text-slate-200 mb-1">Expected Column Order:</p>
-            <code>Name &nbsp;|&nbsp; Email &nbsp;|&nbsp; Ministries (separated by ;) &nbsp;|&nbsp; DocuSign (Yes/No) &nbsp;|&nbsp; MinistrySafe Date &nbsp;|&nbsp; Background Check Date</code>
+          <div className="flex flex-col gap-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300 border border-slate-200 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-slate-700 dark:text-slate-200 mb-1">Expected Column Order:</p>
+              <code>Name &nbsp;|&nbsp; Email &nbsp;|&nbsp; Ministries (separated by ;) &nbsp;|&nbsp; DocuSign (Yes/No) &nbsp;|&nbsp; MinistrySafe Date &nbsp;|&nbsp; Background Check Date</code>
+            </div>
+            <CsvTemplateButton template="child_protection" label="Download Template (.csv)" />
           </div>
 
           <div>

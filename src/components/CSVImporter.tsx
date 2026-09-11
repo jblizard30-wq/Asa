@@ -11,6 +11,7 @@ import {
   DownloadIcon,
 } from '@/components/InventoryIcons';
 import { parseAndPreviewCSV, executeBatchImport, type ImportPreviewRow } from '@/lib/actions/inventoryImport';
+import { CsvTemplateButton } from '@/components/CsvTemplateButton';
 
 interface InventoryTypeOption {
   id: string;
@@ -130,16 +131,19 @@ export function CSVImporter({ inventoryTypes }: { inventoryTypes: InventoryTypeO
           Supports columns: Location/Building, Room, Item Name, On Hand, Unit, Vendor
         </p>
 
-        <label className="mt-4 inline-block cursor-pointer rounded-lg bg-brand-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-brand-700">
-          Select CSV File
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleFileUpload}
-            disabled={isParsing || isImporting}
-            className="hidden"
-          />
-        </label>
+        <div className="mt-4 flex items-center justify-center gap-3">
+          <label className="inline-block cursor-pointer rounded-lg bg-brand-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-brand-700">
+            Select CSV File
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              disabled={isParsing || isImporting}
+              className="hidden"
+            />
+          </label>
+          <CsvTemplateButton template="inventory" label="Download Sample Template (.csv)" />
+        </div>
 
         {isParsing && <p className="mt-3 text-xs text-brand-500">Sanitizing and parsing CSV...</p>}
       </div>

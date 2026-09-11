@@ -8,6 +8,7 @@ import {
   type CsvUserPreviewRow,
   type CsvUserPreviewResult,
 } from '@/lib/actions/users';
+import { downloadCsvTemplate } from '@/lib/csvTemplates';
 
 interface UserCsvImportModalProps {
   onClose: () => void;
@@ -88,23 +89,7 @@ export function UserCsvImportModal({ onClose }: UserCsvImportModalProps) {
   }
 
   function handleDownloadTemplate() {
-    const templateContent =
-      'Name,Email,Role,Password\n' +
-      'Pastor Dan Whitfield,pastor.dan@chespres.org,ADMIN,\n' +
-      'Renee Ortiz,renee.ortiz@chespres.org,MANAGER,\n' +
-      'Miguel Alvarez,miguel.alvarez@chespres.org,USER,\n' +
-      'Casey Nguyen,casey.nguyen@chespres.org,USER,\n' +
-      'Sarah Kim,sarah.kim@chespres.org,USER,\n';
-
-    const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'cpcana_staff_import_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadCsvTemplate('users');
   }
 
   function handleExecuteImport() {
