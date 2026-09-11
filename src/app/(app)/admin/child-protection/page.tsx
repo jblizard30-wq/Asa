@@ -39,6 +39,7 @@ export default async function AdminChildProtectionPage() {
       userAccess={result.data.userAccess}
       availableProjects={result.data.availableProjects}
       assignableUsers={result.data.assignableUsers}
+      isAdmin={session.user.role === 'ADMIN'}
     />
   );
 }

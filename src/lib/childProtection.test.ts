@@ -34,7 +34,10 @@ import {
   checkChildProtectionAccess,
   parseChildProtectionImportRows,
   splitDelimitedLine,
+  detectRenewalOverwrite,
+  buildRenewalTaskContent,
   RENEWAL_WARNING_DAYS,
+  RENEWAL_RENOTIFY_DAYS,
 } from './childProtection';
 
 beforeEach(() => {
@@ -441,5 +444,147 @@ describe('checkChildProtectionAccess', () => {
 
     const result = await checkChildProtectionAccess({ user: { id: 'user-1', role: 'USER' } } as any);
     expect(result).toEqual({ allowed: true, access: 'EDIT' });
+  });
+});
+
+describe('detectRenewalOverwrite', () => {
+  const priorCert = {
+    completedAt: new Date('2021-05-15T00:00:00.000Z'),
+    expiresAt: new Date('2024-05-15T00:00:00.000Z'),
+    url: 'https://drive.google.com/file/d/old',
+  };
+
+  it('archives the prior values when a completion date is genuinely replaced', () => {
+    const entry = detectRenewalOverwrite(
+      priorCert,
+      { completedAt: '2024-05-01T00:00:00.000Z' },
+      'MINISTRY_SAFE'
+    );
+
+    expect(entry).toEqual({
+      certType: 'MINISTRY_SAFE',
+      previousCompletedAt: priorCert.completedAt,
+      previousExpiresAt: priorCert.expiresAt,
+      previousUrl: priorCert.url,
+    });
+  });
+
+  it('does not archive first-time data entry, which is not a renewal', () => {
+    const entry = detectRenewalOverwrite(
+      { completedAt: null, expiresAt: null, url: null },
+      { completedAt: '2024-05-01T00:00:00.000Z' },
+      'MINISTRY_SAFE'
+    );
+
+    expect(entry).toBeNull();
+  });
+
+  it('does not archive when the cert fields were not part of the update', () => {
+    expect(detectRenewalOverwrite(priorCert, {}, 'BACKGROUND_CHECK')).toBeNull();
+  });
+
+  it('does not archive a re-save of the identical date', () => {
+    // Editing an unrelated field (a phone number, say) re-submits the existing cert date;
+    // that must not manufacture a renewal record.
+    const entry = detectRenewalOverwrite(
+      priorCert,
+      { completedAt: '2021-05-15T00:00:00.000Z' },
+      'MINISTRY_SAFE'
+    );
+
+    expect(entry).toBeNull();
+  });
+
+  it('treats a Date instance and its ISO string as the same instant', () => {
+    const entry = detectRenewalOverwrite(
+      priorCert,
+      { completedAt: new Date('2021-05-15T00:00:00.000Z') },
+      'MINISTRY_SAFE'
+    );
+
+    expect(entry).toBeNull();
+  });
+
+  it('archives when only the certificate link changes', () => {
+    // The old link is the pointer to the superseded document — overwriting it in place is
+    // how that evidence becomes unreachable.
+    const entry = detectRenewalOverwrite(
+      priorCert,
+      { url: 'https://drive.google.com/file/d/new' },
+      'BACKGROUND_CHECK'
+    );
+
+    expect(entry?.certType).toBe('BACKGROUND_CHECK');
+    expect(entry?.previousUrl).toBe('https://drive.google.com/file/d/old');
+  });
+
+  it('does not archive when the same link is re-submitted', () => {
+    expect(
+      detectRenewalOverwrite(priorCert, { url: 'https://drive.google.com/file/d/old' }, 'MINISTRY_SAFE')
+    ).toBeNull();
+  });
+
+  it('archives when a cert is cleared outright', () => {
+    const entry = detectRenewalOverwrite(priorCert, { completedAt: null }, 'MINISTRY_SAFE');
+    expect(entry?.previousCompletedAt).toEqual(priorCert.completedAt);
+  });
+});
+
+describe('buildRenewalTaskContent', () => {
+  const baseRecord = {
+    name: 'Jane Volunteer',
+    email: 'jane@example.com',
+    ministries: ['Nursery'],
+    docusignSigned: true,
+    docusignUrl: null,
+    ministrySafeCompletedAt: new Date('2021-05-15T00:00:00.000Z'),
+    ministrySafeUrl: null,
+    backgroundCheckCompletedAt: new Date('2021-05-15T00:00:00.000Z'),
+    backgroundCheckUrl: null,
+  };
+
+  it('marks an expired record HIGH priority and says how long ago it lapsed', () => {
+    const { title, description, priority } = buildRenewalTaskContent(baseRecord, 'EXPIRED', -10, 400);
+
+    expect(priority).toBe('HIGH');
+    expect(title).toContain('Jane Volunteer');
+    expect(title).toContain('EXPIRED');
+    expect(description).toContain('MinistrySafe training EXPIRED (10 days ago)');
+  });
+
+  it('uses MEDIUM priority and a countdown inside the warning window', () => {
+    const { description, priority } = buildRenewalTaskContent(baseRecord, 'EXPIRING_SOON', 30, 400);
+
+    expect(priority).toBe('MEDIUM');
+    expect(description).toContain('MinistrySafe training renewal due in 30 days');
+  });
+
+  it('flags missing requirements rather than reporting a countdown for them', () => {
+    const { description } = buildRenewalTaskContent(
+      { ...baseRecord, docusignSigned: false, backgroundCheckCompletedAt: null },
+      'INCOMPLETE',
+      400,
+      null
+    );
+
+    expect(description).toContain('DocuSign agreement is missing/unsigned');
+    expect(description).toContain('Background check not completed');
+  });
+
+  it('appends reviewer notes only when supplied', () => {
+    const withNote = buildRenewalTaskContent(baseRecord, 'EXPIRING_SOON', 10, 400, 'Call her Sunday');
+    const withoutNote = buildRenewalTaskContent(baseRecord, 'EXPIRING_SOON', 10, 400);
+
+    expect(withNote.description).toContain('Reviewer Notes');
+    expect(withNote.description).toContain('Call her Sunday');
+    expect(withoutNote.description).not.toContain('Reviewer Notes');
+  });
+});
+
+describe('renewal cron cadence', () => {
+  it('re-notifies before the warning window lapses', () => {
+    // The cron's throttle has to be shorter than the warning window, or a volunteer flagged
+    // on day 45 would never be raised again before the cert actually expired.
+    expect(RENEWAL_RENOTIFY_DAYS).toBeLessThan(RENEWAL_WARNING_DAYS);
   });
 });

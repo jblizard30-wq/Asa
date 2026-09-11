@@ -7,6 +7,11 @@ export const RENEWAL_WARNING_DAYS = 45;
 export const MINISTRY_SAFE_VALIDITY_YEARS = 3;
 export const BACKGROUND_CHECK_VALIDITY_YEARS = 5;
 
+/// How long the renewal cron waits before flagging the same record again. Kept below
+/// RENEWAL_WARNING_DAYS so an ignored volunteer is raised at least once more before the
+/// cert actually lapses, while a weekly cron doesn't file the same task every Monday.
+export const RENEWAL_RENOTIFY_DAYS = 30;
+
 export interface SerializedChildProtectionRecord {
   id: string;
   name: string;
@@ -135,6 +140,125 @@ export function computeRecordStatus(record: {
     daysUntilBackgroundCheckExpires: bgDays,
     daysUntilNextRenewal,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Renewal audit trail
+// ---------------------------------------------------------------------------
+
+export type ChildProtectionCertType = 'MINISTRY_SAFE' | 'BACKGROUND_CHECK';
+
+export interface RenewalAuditEntry {
+  certType: ChildProtectionCertType;
+  previousCompletedAt: Date | null;
+  previousExpiresAt: Date | null;
+  previousUrl: string | null;
+}
+
+function normalizeIncomingDate(value: string | Date | null | undefined): Date | null {
+  if (value === null || value === undefined) return null;
+  return value instanceof Date ? value : new Date(value);
+}
+
+function sameInstant(a: Date | null, b: Date | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.getTime() === b.getTime();
+}
+
+/**
+ * Returns the cert's prior values when an update genuinely overwrites an existing
+ * MinistrySafe/Background Check, or null when there is nothing to archive.
+ *
+ * Three cases deliberately produce no audit row: the record had no prior cert at all
+ * (first-time data entry, not a renewal), the field wasn't part of this update, and a
+ * re-save of the identical value (editing someone's phone number shouldn't manufacture
+ * renewal history).
+ *
+ * A URL-only change does count. The old link is the pointer to the superseded
+ * certificate document, and overwriting it in place is the one way that evidence
+ * becomes unreachable — which is exactly what an insurance audit comes looking for.
+ */
+export function detectRenewalOverwrite(
+  existing: { completedAt: Date | null; expiresAt: Date | null; url: string | null },
+  incoming: { completedAt?: string | Date | null; url?: string | null },
+  certType: ChildProtectionCertType
+): RenewalAuditEntry | null {
+  if (!existing.completedAt) return null;
+
+  const completedAtChanged =
+    incoming.completedAt !== undefined &&
+    !sameInstant(normalizeIncomingDate(incoming.completedAt), existing.completedAt);
+
+  const urlChanged =
+    incoming.url !== undefined && (incoming.url ? incoming.url.trim() : null) !== existing.url;
+
+  if (!completedAtChanged && !urlChanged) return null;
+
+  return {
+    certType,
+    previousCompletedAt: existing.completedAt,
+    previousExpiresAt: existing.expiresAt,
+    previousUrl: existing.url,
+  };
+}
+
+/**
+ * Builds the title/description/priority for a renewal review task. Shared by the
+ * on-demand action and the weekly cron so both describe the same record identically.
+ */
+export function buildRenewalTaskContent(
+  record: {
+    name: string;
+    email: string | null;
+    ministries: string[];
+    docusignSigned: boolean;
+    docusignUrl: string | null;
+    ministrySafeCompletedAt: Date | null;
+    ministrySafeUrl: string | null;
+    backgroundCheckCompletedAt: Date | null;
+    backgroundCheckUrl: string | null;
+  },
+  status: ChildProtectionStatus,
+  daysUntilMinistrySafeExpires: number | null,
+  daysUntilBackgroundCheckExpires: number | null,
+  customNote?: string | null
+): { title: string; description: string; priority: 'HIGH' | 'MEDIUM' } {
+  const reasons: string[] = [];
+
+  if (!record.docusignSigned) reasons.push('• DocuSign agreement is missing/unsigned.');
+
+  if (!record.ministrySafeCompletedAt) {
+    reasons.push('• MinistrySafe sexual abuse awareness training not completed.');
+  } else if (daysUntilMinistrySafeExpires !== null && daysUntilMinistrySafeExpires < 0) {
+    reasons.push(`• MinistrySafe training EXPIRED (${Math.abs(daysUntilMinistrySafeExpires)} days ago).`);
+  } else if (daysUntilMinistrySafeExpires !== null && daysUntilMinistrySafeExpires <= RENEWAL_WARNING_DAYS) {
+    reasons.push(`• MinistrySafe training renewal due in ${daysUntilMinistrySafeExpires} days.`);
+  }
+
+  if (!record.backgroundCheckCompletedAt) {
+    reasons.push('• Background check not completed.');
+  } else if (daysUntilBackgroundCheckExpires !== null && daysUntilBackgroundCheckExpires < 0) {
+    reasons.push(`• Background check EXPIRED (${Math.abs(daysUntilBackgroundCheckExpires)} days ago).`);
+  } else if (daysUntilBackgroundCheckExpires !== null && daysUntilBackgroundCheckExpires <= RENEWAL_WARNING_DAYS) {
+    reasons.push(`• Background check renewal due in ${daysUntilBackgroundCheckExpires} days.`);
+  }
+
+  const title = `Review Child Protection: ${record.name} (${status.replace('_', ' ')})`;
+  const description = [
+    `Child Protection Compliance Review requested for **${record.name}** (${record.email || 'No email'}).`,
+    `Ministries: ${record.ministries.length > 0 ? record.ministries.join(', ') : 'None specified'}`,
+    '',
+    '**Items Requiring Attention:**',
+    reasons.length > 0 ? reasons.join('\n') : '• General compliance review.',
+    '',
+    '**Google Drive Document Links:**',
+    `• DocuSign: ${record.docusignUrl || 'None attached'}`,
+    `• MinistrySafe: ${record.ministrySafeUrl || 'None attached'}`,
+    `• Background Check: ${record.backgroundCheckUrl || 'None attached'}`,
+    customNote ? `\n**Reviewer Notes:**\n${customNote}` : '',
+  ].join('\n');
+
+  return { title, description, priority: status === 'EXPIRED' ? 'HIGH' : 'MEDIUM' };
 }
 
 // ---------------------------------------------------------------------------

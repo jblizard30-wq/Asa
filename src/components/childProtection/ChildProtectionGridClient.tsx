@@ -13,7 +13,9 @@ import {
   PencilSquareIcon,
   ClipboardDocumentCheckIcon,
   ArchiveBoxIcon,
+  UsersIcon,
 } from './ChildProtectionIcons';
+import { ManageAccessModal } from './ManageAccessModal';
 import type {
   SerializedChildProtectionRecord,
   ChildProtectionStatus,
@@ -34,6 +36,9 @@ interface Props {
   userAccess: 'VIEW' | 'EDIT' | null;
   availableProjects: { id: string; name: string; defaultSectionId: string }[];
   assignableUsers: { id: string; name: string; email: string }[];
+  /// Distinct from userAccess === 'EDIT': a non-admin can hold EDIT through a team share,
+  /// but granting access to others stays with global admins.
+  isAdmin: boolean;
 }
 
 const COMMON_MINISTRIES = [
@@ -53,6 +58,7 @@ export function ChildProtectionGridClient({
   userAccess,
   availableProjects,
   assignableUsers,
+  isAdmin,
 }: Props) {
   const [records, setRecords] = useState<SerializedChildProtectionRecord[]>(initialRecords);
   const [metrics, setMetrics] = useState<ChildProtectionMetrics>(initialMetrics);
@@ -69,6 +75,7 @@ export function ChildProtectionGridClient({
   const [editingRecord, setEditingRecord] = useState<SerializedChildProtectionRecord | null>(null);
   const [reviewTaskRecord, setReviewTaskRecord] = useState<SerializedChildProtectionRecord | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isManageAccessModalOpen, setIsManageAccessModalOpen] = useState(false);
 
   // Extract all distinct ministries from records for the filter dropdown
   const allDistinctMinistries = useMemo(() => {
@@ -192,24 +199,36 @@ export function ChildProtectionGridClient({
           </p>
         </div>
 
-        {userAccess === 'EDIT' && (
-          <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3">
+          {isAdmin && (
             <button
-              onClick={() => setIsImportModalOpen(true)}
+              onClick={() => setIsManageAccessModalOpen(true)}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             >
-              <ArrowUpTrayIcon className="h-4 w-4" />
-              Import CSV / Sheets
+              <UsersIcon className="h-4 w-4" />
+              Manage Access
             </button>
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors dark:bg-indigo-600 dark:hover:bg-indigo-500"
-            >
-              <PlusIcon className="h-4 w-4" />
-              Add Volunteer
-            </button>
-          </div>
-        )}
+          )}
+
+          {userAccess === 'EDIT' && (
+            <>
+              <button
+                onClick={() => setIsImportModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                <ArrowUpTrayIcon className="h-4 w-4" />
+                Import CSV / Sheets
+              </button>
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors dark:bg-indigo-600 dark:hover:bg-indigo-500"
+              >
+                <PlusIcon className="h-4 w-4" />
+                Add Volunteer
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Metric Cards */}
@@ -643,6 +662,15 @@ export function ChildProtectionGridClient({
             setFeedbackMessage({ type: 'success', text: `Assigned task: "${taskTitle}"` });
             setReviewTaskRecord(null);
           }}
+        />
+      )}
+
+      {/* Manage Access Modal */}
+      {isManageAccessModalOpen && (
+        <ManageAccessModal
+          assignableUsers={assignableUsers}
+          onClose={() => setIsManageAccessModalOpen(false)}
+          onFeedback={(msg) => setFeedbackMessage(msg)}
         />
       )}
 

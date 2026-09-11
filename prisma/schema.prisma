@@ -218,9 +218,10 @@ model User {
   assignedOnboardingItems  OnboardingCaseItem[] @relation("OnboardingItemAssignedTo")
 
   // Child Protection module (add-on — gated by ENABLED_MODULES)
-  childProtectionRecords   ChildProtectionRecord[] @relation("ChildProtectionUserRecords")
-  childProtectionCreated   ChildProtectionRecord[] @relation("ChildProtectionRecordCreator")
-  childProtectionShares    ChildProtectionShare[]  @relation("ChildProtectionUserShares")
+  childProtectionRecords       ChildProtectionRecord[]       @relation("ChildProtectionUserRecords")
+  childProtectionCreated       ChildProtectionRecord[]       @relation("ChildProtectionRecordCreator")
+  childProtectionShares        ChildProtectionShare[]        @relation("ChildProtectionUserShares")
+  childProtectionRenewalAudits ChildProtectionRenewalAudit[] @relation("ChildProtectionRenewalAuditChanger")
 
   @@index([managerId])
 }
@@ -1765,6 +1766,12 @@ model ChildProtectionRecord {
   updatedAt                  DateTime  @updatedAt
   archivedAt                 DateTime?
 
+  /// Claim stamp for the weekly renewal cron (src/app/api/cron/child-protection-renewals).
+  /// Set via a conditional updateMany so a duplicate invocation can't double-create tasks.
+  lastAutoReviewTaskAt       DateTime?
+
+  renewalAudits              ChildProtectionRenewalAudit[]
+
   @@index([archivedAt])
   @@index([ministrySafeExpiresAt])
   @@index([backgroundCheckExpiresAt])
@@ -1785,6 +1792,35 @@ model ChildProtectionShare {
   @@unique([teamId])
   @@index([userId])
   @@index([teamId])
+}
+
+enum ChildProtectionCertType {
+  MINISTRY_SAFE
+  BACKGROUND_CHECK
+}
+
+/// Archive of a cert's prior values, written whenever a renewal overwrites an
+/// existing MinistrySafe or Background Check on a record. Insurance and
+/// denominational audits ask what someone's clearance was on a past date, which
+/// the live record alone can't answer since a renewal overwrites it in place.
+/// One row per cert type per overwrite; the insert shares the update's
+/// transaction, so history can't be lost while the overwrite succeeds.
+model ChildProtectionRenewalAudit {
+  id                  String                  @id @default(cuid())
+  recordId            String
+  record              ChildProtectionRecord   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  certType            ChildProtectionCertType
+
+  previousCompletedAt DateTime?
+  previousExpiresAt   DateTime?
+  previousUrl         String?
+
+  changedById         String?
+  changedBy           User?                   @relation("ChildProtectionRenewalAuditChanger", fields: [changedById], references: [id], onDelete: SetNull)
+  changedAt           DateTime                @default(now())
+
+  @@index([recordId])
+  @@index([changedById])
 }
 
 
