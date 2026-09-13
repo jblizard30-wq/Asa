@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { applyNavPreferences, buildNavGroups, getVisibleNavDefs } from '@/lib/navItems';
+import { isModuleEnabled, type ModuleKey } from '@/lib/modules';
 import { NavSettingsPanel } from '@/components/NavSettingsPanel';
 
 export default async function SettingsNavigationPage() {
@@ -12,8 +13,27 @@ export default async function SettingsNavigationPage() {
   const isAdmin = session.user.role === 'ADMIN';
   const canManageTeams = isAdmin || session.user.role === 'MANAGER';
 
-  const navPreferences = await prisma.navPreference.findMany({ where: { userId: session.user.id } });
-  const visibleDefs = getVisibleNavDefs({ isAdmin, canManageTeams });
+  const [navPreferences, childProtectionShare] = await Promise.all([
+    prisma.navPreference.findMany({ where: { userId: session.user.id } }),
+    isAdmin || !isModuleEnabled('child_protection')
+      ? Promise.resolve(null)
+      : prisma.childProtectionShare.findFirst({
+          where: {
+            OR: [
+              { userId: session.user.id },
+              { team: { members: { some: { userId: session.user.id } } } },
+            ],
+          },
+          select: { id: true },
+        }),
+  ]);
+
+  const sharedModules = new Set<ModuleKey>();
+  if (childProtectionShare) {
+    sharedModules.add('child_protection');
+  }
+
+  const visibleDefs = getVisibleNavDefs({ isAdmin, canManageTeams, sharedModules });
   const items = applyNavPreferences(visibleDefs, navPreferences);
   const groups = buildNavGroups(visibleDefs, navPreferences).map((g) => ({
     name: g.name,

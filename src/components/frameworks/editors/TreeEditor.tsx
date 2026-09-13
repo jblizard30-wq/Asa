@@ -135,7 +135,7 @@ function TreeNodeItem({
       </div>
 
       {showAdd && (
-        <form onSubmit={handleAdd} className="mt-2 flex flex-wrap gap-2 items-end rounded-lg bg-white p-3 border border-indigo-200 shadow-xs dark:border-slate-700 dark:bg-slate-800 print:hidden">
+        <form onSubmit={handleAdd} className="mt-2 flex flex-wrap gap-2 items-end rounded-lg bg-white p-3 border border-brand-200 shadow-xs dark:border-slate-700 dark:bg-slate-800 print:hidden">
           <div>
             <label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-300">Role / Node Title</label>
             <input

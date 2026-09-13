@@ -183,7 +183,7 @@ export function OnboardingRosterClient({
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
-            <BanknotesIcon className="h-5 w-5 text-indigo-500" />
+            <BanknotesIcon className="h-5 w-5 text-brand-500" />
             <span className="text-xs font-semibold uppercase tracking-wider">Monthly License Opex</span>
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{formatMoney(metrics.totalMonthlyOpex)}/mo</p>

@@ -87,7 +87,7 @@ export function FlowEditor({
 
                 <div className="flex items-center gap-2">
                   {node.values.headcount !== undefined && Number(node.values.headcount) > 0 && (
-                    <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 border border-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800">
+                    <span className="rounded-md bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700 border border-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:border-brand-800">
                       👥 {node.values.headcount} people
                     </span>
                   )}
@@ -136,7 +136,7 @@ export function FlowEditor({
               placeholder="e.g. Inquirer Class Cohort…"
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
           </div>
 
@@ -149,7 +149,7 @@ export function FlowEditor({
               placeholder="Count"
               value={newHeadcount}
               onChange={(e) => setNewHeadcount(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
           </div>
 
@@ -159,7 +159,7 @@ export function FlowEditor({
               <select
                 value={selectedLane}
                 onChange={(e) => setSelectedLane(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               >
                 {definition.config.lanes.map((lane) => (
                   <option key={lane.key} value={lane.key}>

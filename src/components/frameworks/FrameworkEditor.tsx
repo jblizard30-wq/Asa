@@ -108,7 +108,7 @@ export function FrameworkEditor({
             ← Back to XP Hub
           </Link>
           <span className="text-slate-300 dark:text-slate-700">|</span>
-          <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+          <span className="rounded-md bg-brand-50 px-2 py-0.5 text-[10px] font-bold uppercase text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">
             {definition.primitive}
           </span>
           <span className="text-xs text-slate-400">
@@ -146,7 +146,7 @@ export function FrameworkEditor({
           <button
             type="button"
             onClick={() => setIsGuideOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/60 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/60 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300"
           >
             <span>📘 Framework Guide</span>
           </button>
@@ -169,7 +169,7 @@ export function FrameworkEditor({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={handleTitleBlur}
-            className="w-full text-2xl font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-600 focus:outline-none dark:text-white dark:hover:border-slate-700"
+            className="w-full text-2xl font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-brand-600 focus:outline-none dark:text-white dark:hover:border-slate-700"
           />
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             {definition.name} · {definition.blurb}
@@ -182,7 +182,7 @@ export function FrameworkEditor({
             <select
               value={status}
               onChange={(e) => handleStatusChange(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             >
               <option value="draft">Draft</option>
               <option value="in_review">In Review</option>
@@ -255,8 +255,8 @@ export function FrameworkEditor({
               </div>
 
               {definition.churchExample && (
-                <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3.5 dark:border-indigo-900 dark:bg-indigo-950/20">
-                  <h4 className="font-bold text-indigo-900 dark:text-indigo-300 uppercase tracking-wider text-[11px]">Real-World Church Application</h4>
+                <div className="rounded-xl border border-brand-200 bg-brand-50/50 p-3.5 dark:border-brand-900 dark:bg-brand-950/20">
+                  <h4 className="font-bold text-brand-900 dark:text-brand-300 uppercase tracking-wider text-[11px]">Real-World Church Application</h4>
                   <p className="mt-1 italic leading-relaxed text-slate-700 dark:text-slate-300">{definition.churchExample}</p>
                 </div>
               )}

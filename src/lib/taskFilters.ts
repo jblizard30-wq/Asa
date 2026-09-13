@@ -52,7 +52,7 @@ export interface FilterableTask {
   title: string;
   description?: string | null;
   status: string;
-  priority: string;
+  priority?: string;
   assigneeIds: string[];
   dueDate: string | null;
   projectId?: string;
@@ -107,7 +107,7 @@ function matchesDueDate(dueDate: string | null, filters: TaskFilters): boolean {
 
 export function matchesTaskFilters(task: FilterableTask, filters: TaskFilters, context: TaskFilterContext = {}): boolean {
   if (filters.statuses.length > 0 && !filters.statuses.includes(task.status)) return false;
-  if (filters.priorities.length > 0 && !filters.priorities.includes(task.priority)) return false;
+  if (filters.priorities.length > 0 && (!task.priority || !filters.priorities.includes(task.priority))) return false;
 
   if (filters.assigneeIds.length > 0) {
     const matchesUnassigned = task.assigneeIds.length === 0 && filters.assigneeIds.includes(UNASSIGNED_ID);

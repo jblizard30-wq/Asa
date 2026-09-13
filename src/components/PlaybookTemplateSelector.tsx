@@ -153,7 +153,7 @@ export function PlaybookTemplateSelector({ onClose, onSuccess }: PlaybookTemplat
                   </h3>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+                  <span className="inline-flex items-center rounded-md bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 dark:bg-brand-950/60 dark:text-brand-300">
                     {selectedPlaybook.category}
                   </span>
                   <span className="inline-flex items-center rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">

@@ -143,11 +143,11 @@ export function StrategicFrameworksCatalog({
   return (
     <div className="space-y-8">
       {/* Header Info */}
-      <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 dark:border-indigo-900/40 dark:bg-indigo-950/20">
+      <div className="rounded-xl border border-brand-100 bg-brand-50/60 p-4 dark:border-brand-900/40 dark:bg-brand-950/20">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
+              <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-brand-800 dark:bg-brand-900 dark:text-brand-200">
                 7 Visual Primitives
               </span>
               <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-bold text-brand-800 dark:bg-brand-900 dark:text-brand-200">
@@ -225,7 +225,7 @@ export function StrategicFrameworksCatalog({
                           <span>•</span>
                           <Link
                             href={`/xp/packets/${bf.packet.id}`}
-                            className="text-indigo-600 font-semibold hover:underline dark:text-indigo-400"
+                            className="text-brand-600 font-semibold hover:underline dark:text-brand-400"
                           >
                             📑 In Packet: {bf.packet.title}
                           </Link>
@@ -314,7 +314,7 @@ export function StrategicFrameworksCatalog({
               placeholder="Search frameworks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs placeholder-slate-400 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
             {searchQuery && (
               <button
@@ -381,7 +381,7 @@ export function StrategicFrameworksCatalog({
                   {isRaci ? (
                     <Link
                       href="/raci"
-                      className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-center text-xs font-bold text-white shadow-xs hover:bg-indigo-700 transition-colors"
+                      className="flex-1 rounded-lg bg-brand-600 px-3 py-2 text-center text-xs font-bold text-white shadow-xs hover:bg-brand-700 transition-colors"
                     >
                       Open RACI Matrix ↗
                     </Link>
@@ -416,7 +416,7 @@ export function StrategicFrameworksCatalog({
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
               <div>
-                <span className="rounded bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                <span className="rounded bg-brand-50 px-2 py-0.5 text-[10px] font-bold uppercase text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">
                   {toolToBuild.primitive}
                 </span>
                 <h3 className="mt-1 text-base font-bold text-slate-900 dark:text-white">
@@ -448,7 +448,7 @@ export function StrategicFrameworksCatalog({
                   required
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 />
               </div>
 
@@ -458,7 +458,7 @@ export function StrategicFrameworksCatalog({
                     type="checkbox"
                     checked={useTemplate}
                     onChange={(e) => setUseTemplate(e.target.checked)}
-                    className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                    className="mt-0.5 rounded text-brand-600 focus:ring-brand-500"
                   />
                   <div>
                     <span className="font-semibold text-slate-800 dark:text-slate-200">
@@ -479,7 +479,7 @@ export function StrategicFrameworksCatalog({
                   <select
                     value={targetPacketId}
                     onChange={(e) => setTargetPacketId(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   >
                     <option value="">None (Independent Framework)</option>
                     {packets.map((p) => (
@@ -607,7 +607,7 @@ export function StrategicFrameworksCatalog({
                   setSelectedTool(null);
                   handleOpenBuildModal(t);
                 }}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 shadow-xs"
+                className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-700 shadow-xs"
               >
                 + Build this Framework
               </button>

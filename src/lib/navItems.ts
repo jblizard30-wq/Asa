@@ -12,6 +12,7 @@ export interface NavItemDef {
 export interface RoleFlags {
   isAdmin: boolean;
   canManageTeams: boolean;
+  sharedModules?: Set<ModuleKey>;
 }
 
 export interface NavPreferenceInput {
@@ -85,7 +86,9 @@ export const SETTINGS_NAV_ITEM: NavItemDef = {
 export function getVisibleNavDefs(role: RoleFlags): NavItemDef[] {
   return NAV_ITEMS.filter((item) => {
     if (item.module && !isModuleEnabled(item.module)) return false;
-    if (item.requires === 'admin') return role.isAdmin;
+    if (item.requires === 'admin') {
+      return role.isAdmin || (item.module ? Boolean(role.sharedModules?.has(item.module)) : false);
+    }
     if (item.requires === 'canManageTeams') return role.canManageTeams;
     return true;
   });

@@ -88,12 +88,12 @@ export function DashboardView({
 
       {/* Financial Runway Ratios (if XP enabled) */}
       {telemetry?.financialRatios && telemetry.financialRatios.length > 0 && (
-        <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 dark:border-indigo-900/40 dark:bg-indigo-950/20">
+        <div className="rounded-xl border border-brand-100 bg-brand-50/40 p-4 dark:border-brand-900/40 dark:bg-brand-950/20">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+            <span className="text-xs font-bold uppercase tracking-wider text-brand-700 dark:text-brand-300">
               📊 Financial Runway & Health Ratios (XP Hub)
             </span>
-            <Link href="/xp" className="text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400">
+            <Link href="/xp" className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400">
               View Financials →
             </Link>
           </div>

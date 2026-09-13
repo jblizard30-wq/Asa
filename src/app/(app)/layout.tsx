@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { Navbar } from '@/components/Navbar';
 import { Sidebar } from '@/components/Sidebar';
 import { applyNavPreferences, buildNavGroups, getVisibleNavDefs } from '@/lib/navItems';
+import { isModuleEnabled, type ModuleKey } from '@/lib/modules';
 import { ORG_NAME } from '@/lib/site';
 
 import { ToastProvider } from '@/components/Toast';
@@ -16,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const isAdmin = session.user.role === 'ADMIN';
   const canManageTeams = isAdmin || session.user.role === 'MANAGER';
 
-  const [notifications, projects, folders, navPreferences] = await Promise.all([
+  const [notifications, projects, folders, navPreferences, childProtectionShare] = await Promise.all([
     prisma.notification.findMany({
       where: { recipientId: session.user.id },
       orderBy: { createdAt: 'desc' },
@@ -40,9 +41,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       },
     }),
     prisma.navPreference.findMany({ where: { userId: session.user.id } }),
+    isAdmin || !isModuleEnabled('child_protection')
+      ? Promise.resolve(null)
+      : prisma.childProtectionShare.findFirst({
+          where: {
+            OR: [
+              { userId: session.user.id },
+              { team: { members: { some: { userId: session.user.id } } } },
+            ],
+          },
+          select: { id: true },
+        }),
   ]);
 
-  const visibleDefs = getVisibleNavDefs({ isAdmin, canManageTeams });
+  const sharedModules = new Set<ModuleKey>();
+  if (childProtectionShare) {
+    sharedModules.add('child_protection');
+  }
+
+  const visibleDefs = getVisibleNavDefs({ isAdmin, canManageTeams, sharedModules });
   const navItems = applyNavPreferences(visibleDefs, navPreferences).filter((item) => !item.hidden);
   const navGroups = buildNavGroups(visibleDefs, navPreferences)
     .map((group) => ({

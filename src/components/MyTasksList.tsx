@@ -12,12 +12,13 @@ import { bulkDeleteTasks, bulkUpdateTasks } from '@/lib/actions/tasks';
 
 export interface MyTask {
   id: string;
+  source: 'task' | 'onboarding';
   title: string;
   description: string | null;
-  priority: string;
+  priority?: string;
   status: string;
   dueDate: string | null;
-  projectId: string;
+  projectId?: string;
   projectName: string;
   sectionName: string;
   assigneeIds: string[];
@@ -27,6 +28,16 @@ export interface MyTask {
 
 const STATUS_OPTIONS = Object.entries(STATUS_LABELS).map(([id, label]) => ({ id, label }));
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_LABELS).map(([id, label]) => ({ id, label }));
+
+const SOURCE_STYLES: Record<'task' | 'onboarding', string> = {
+  task: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  onboarding: 'border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-300',
+};
+
+const SOURCE_LABELS: Record<'task' | 'onboarding', string> = {
+  task: 'Task',
+  onboarding: 'Onboarding',
+};
 
 // Completed tasks are hidden by default so this view stays focused on open work;
 // the filter bar lets the user opt back in by selecting "Done" under Status.
@@ -42,7 +53,11 @@ export function MyTasksList({ tasks }: { tasks: MyTask[] }) {
 
   const projectOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const task of tasks) seen.set(task.projectId, task.projectName);
+    for (const task of tasks) {
+      if (task.projectId) {
+        seen.set(task.projectId, task.projectName);
+      }
+    }
     return [...seen.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [tasks]);
 
@@ -53,7 +68,10 @@ export function MyTasksList({ tasks }: { tasks: MyTask[] }) {
   }, [tasks]);
 
   const filteredTasks = useMemo(() => tasks.filter((task) => matchesTaskFilters(task, filters)), [tasks, filters]);
-  const filteredTaskIds = useMemo(() => filteredTasks.map((t) => t.id), [filteredTasks]);
+  const filteredTaskIds = useMemo(
+    () => filteredTasks.filter((t) => t.source === 'task').map((t) => t.id),
+    [filteredTasks]
+  );
   const allSelected = filteredTaskIds.length > 0 && filteredTaskIds.every((id) => selectedIds.has(id));
 
   function toggleAll() {
@@ -136,7 +154,7 @@ export function MyTasksList({ tasks }: { tasks: MyTask[] }) {
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-200 bg-brand-50 px-4 py-2.5 text-sm dark:border-brand-800 dark:bg-brand-950/40">
           <span className="text-slate-700 dark:text-slate-200">
             {selectedIds.size} selected
-            {!allSelected && (
+            {filteredTaskIds.length > 0 && !allSelected && (
               <button onClick={toggleAll} className="ml-2 font-medium text-brand-600 hover:underline dark:text-brand-400">
                 Select all {filteredTaskIds.length}
               </button>
@@ -214,32 +232,28 @@ export function MyTasksList({ tasks }: { tasks: MyTask[] }) {
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {filteredTasks.map((task) => {
               const due = formatDueDate(task.dueDate);
-              return (
-                <li key={task.id} className="flex items-center gap-3 px-4">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(task.id)}
-                    onChange={() => toggleOne(task.id)}
-                    disabled={isBulkPending}
-                    aria-label={`Select ${task.title}`}
-                    className="h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600"
-                  />
-                  <button
-                    onClick={() => setOpenTaskId(task.id)}
-                    className="flex min-w-0 flex-1 items-center justify-between gap-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">{task.title}</p>
-                        {task.tags.length > 0 && (
-                          <span className="flex shrink-0 gap-1">
-                            {task.tags.map((tag) => (
-                              <TagBadge key={tag.id} tag={tag} />
-                            ))}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">
+              const isTask = task.source === 'task';
+
+              const content = (
+                <>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`shrink-0 rounded border px-1.5 py-0.5 text-xs font-medium ${SOURCE_STYLES[task.source]}`}
+                      >
+                        {SOURCE_LABELS[task.source]}
+                      </span>
+                      <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">{task.title}</p>
+                      {task.tags.length > 0 && (
+                        <span className="flex shrink-0 gap-1">
+                          {task.tags.map((tag) => (
+                            <TagBadge key={tag.id} tag={tag} />
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">
+                      {task.projectId ? (
                         <Link
                           href={`/projects/${task.projectId}`}
                           onClick={(e) => e.stopPropagation()}
@@ -247,20 +261,50 @@ export function MyTasksList({ tasks }: { tasks: MyTask[] }) {
                         >
                           {task.projectName}
                         </Link>
-                        {' · '}
-                        {task.sectionName}
-                        {task.assigneeNames.length > 1 && ` · Shared with ${task.assigneeNames.join(', ')}`}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
+                      ) : (
+                        <span>{task.projectName}</span>
+                      )}
+                      {task.sectionName ? ` · ${task.sectionName}` : ''}
+                      {task.assigneeNames.length > 1 && ` · Shared with ${task.assigneeNames.join(', ')}`}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    {task.priority && PRIORITY_STYLES[task.priority] && (
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[task.priority]}`}>
                         {PRIORITY_LABELS[task.priority]}
                       </span>
-                      <span className={`text-xs ${due.overdue ? 'font-medium text-red-500 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                        {due.label}
-                      </span>
+                    )}
+                    <span className={`text-xs ${due.overdue ? 'font-medium text-red-500 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                      {due.label}
+                    </span>
+                  </div>
+                </>
+              );
+
+              return (
+                <li key={task.id} className="flex items-center gap-3 px-4">
+                  {isTask ? (
+                    <>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(task.id)}
+                        onChange={() => toggleOne(task.id)}
+                        disabled={isBulkPending}
+                        aria-label={`Select ${task.title}`}
+                        className="h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600"
+                      />
+                      <button
+                        onClick={() => setOpenTaskId(task.id)}
+                        className="flex min-w-0 flex-1 items-center justify-between gap-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800"
+                      >
+                        {content}
+                      </button>
+                    </>
+                  ) : (
+                    <div className="flex min-w-0 flex-1 items-center justify-between gap-4 py-3 text-left">
+                      {content}
                     </div>
-                  </button>
+                  )}
                 </li>
               );
             })}

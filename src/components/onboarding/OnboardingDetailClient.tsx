@@ -701,7 +701,7 @@ export function OnboardingDetailClient({
                                   disabled={isPending}
                                   className={`rounded border px-2 py-0.5 text-[11px] font-medium focus:outline-none transition-colors ${
                                     item.assignedToUserId
-                                      ? 'border-indigo-200 bg-indigo-50/70 text-indigo-700 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-300'
+                                      ? 'border-brand-200 bg-brand-50/70 text-brand-700 dark:border-brand-900/60 dark:bg-brand-950/40 dark:text-brand-300'
                                       : 'border-slate-300 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
                                   }`}
                                 >

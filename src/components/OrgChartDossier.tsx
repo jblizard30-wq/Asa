@@ -275,7 +275,7 @@ export function OrgChartDossier({
                             </span>
                           )}
                           {task.workflowName && (
-                            <span className="rounded bg-indigo-50 px-1.5 py-0.2 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 font-mono">
+                            <span className="rounded bg-brand-50 px-1.5 py-0.2 text-brand-700 dark:bg-brand-950/50 dark:text-brand-300 font-mono">
                               ⚡ {task.workflowName}
                             </span>
                           )}

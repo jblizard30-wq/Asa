@@ -131,7 +131,7 @@ function PersonCard({
     : isAncestor
     ? 'border-blue-400 ring-2 ring-blue-400/40 shadow-md dark:border-blue-500'
     : isDescendant
-    ? 'border-indigo-400 ring-2 ring-indigo-400/40 shadow-md dark:border-indigo-500'
+    ? 'border-brand-400 ring-2 ring-brand-400/40 shadow-md dark:border-brand-500'
     : isHighlighted
     ? 'border-brand-500 ring-2 ring-brand-500/40 shadow-md scale-[1.02] dark:border-brand-400'
     : isDimmed
@@ -163,7 +163,7 @@ function PersonCard({
               </span>
             )}
             {isDescendant && (
-              <span className="rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.2 text-[8px] font-bold uppercase tracking-wider">
+              <span className="rounded-full bg-brand-100 text-brand-800 dark:bg-brand-950 dark:text-brand-300 border border-brand-200 dark:border-brand-800 px-1.5 py-0.2 text-[8px] font-bold uppercase tracking-wider">
                 Report
               </span>
             )}
@@ -736,7 +736,7 @@ export function OrgChart({
               </span>
             )}
             {selectedProcess.workflowName && (
-              <span className="rounded bg-indigo-50 px-1.5 py-0.2 text-indigo-700 font-mono text-[10px] dark:bg-indigo-950/50 dark:text-indigo-300">
+              <span className="rounded bg-brand-50 px-1.5 py-0.2 text-brand-700 font-mono text-[10px] dark:bg-brand-950/50 dark:text-brand-300">
                 Workflow: {selectedProcess.workflowName}
               </span>
             )}

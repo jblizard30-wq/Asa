@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useTransition, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   ShieldCheckIcon,
   CheckCircleIcon,
@@ -60,6 +61,7 @@ export function ChildProtectionGridClient({
   assignableUsers,
   isAdmin,
 }: Props) {
+  const router = useRouter();
   const [records, setRecords] = useState<SerializedChildProtectionRecord[]>(initialRecords);
   const [metrics, setMetrics] = useState<ChildProtectionMetrics>(initialMetrics);
 
@@ -187,7 +189,7 @@ export function ChildProtectionGridClient({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-950 dark:text-brand-400">
               <ShieldCheckIcon className="h-5 w-5" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -221,7 +223,7 @@ export function ChildProtectionGridClient({
               </button>
               <button
                 onClick={() => setIsAddModalOpen(true)}
-                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors dark:bg-indigo-600 dark:hover:bg-indigo-500"
+                className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors dark:bg-brand-600 dark:hover:bg-brand-500"
               >
                 <PlusIcon className="h-4 w-4" />
                 Add Volunteer
@@ -237,14 +239,14 @@ export function ChildProtectionGridClient({
           type="button"
           onClick={() => setStatusFilter('ALL')}
           aria-pressed={statusFilter === 'ALL'}
-          className={`cursor-pointer rounded-xl border p-4 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 hover:border-slate-400 dark:hover:border-slate-600 ${
+          className={`cursor-pointer rounded-xl border p-4 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 hover:border-slate-400 dark:hover:border-slate-600 ${
             statusFilter === 'ALL'
-              ? 'border-indigo-500 bg-indigo-50/40 dark:border-indigo-500 dark:bg-indigo-950/20'
+              ? 'border-brand-500 bg-brand-50/40 dark:border-brand-500 dark:bg-brand-950/20'
               : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
           }`}
         >
           <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-            <ShieldCheckIcon className="h-4 w-4 text-indigo-500" />
+            <ShieldCheckIcon className="h-4 w-4 text-brand-500" />
             <span className="text-xs font-semibold uppercase tracking-wider">Total Roster</span>
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{metrics.total}</p>
@@ -309,14 +311,14 @@ export function ChildProtectionGridClient({
           type="button"
           onClick={() => setStatusFilter('INCOMPLETE')}
           aria-pressed={statusFilter === 'INCOMPLETE'}
-          className={`cursor-pointer rounded-xl border p-4 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 hover:border-slate-400 dark:hover:border-slate-600 ${
+          className={`cursor-pointer rounded-xl border p-4 text-left shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 hover:border-slate-400 dark:hover:border-slate-600 ${
             statusFilter === 'INCOMPLETE'
-              ? 'border-indigo-500 bg-indigo-50/40 dark:border-indigo-500 dark:bg-indigo-950/20'
+              ? 'border-brand-500 bg-brand-50/40 dark:border-brand-500 dark:bg-brand-950/20'
               : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
           }`}
         >
           <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-            <ClipboardDocumentCheckIcon className="h-4 w-4 text-indigo-500" />
+            <ClipboardDocumentCheckIcon className="h-4 w-4 text-brand-500" />
             <span className="text-xs font-semibold uppercase tracking-wider">Incomplete</span>
           </div>
           <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{metrics.incomplete}</p>
@@ -332,13 +334,13 @@ export function ChildProtectionGridClient({
             placeholder="Search volunteer by name or email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full sm:w-72 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            className="w-full sm:w-72 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
 
           <select
             value={ministryFilter}
             onChange={(e) => setMinistryFilter(e.target.value)}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           >
             <option value="ALL">All Ministries</option>
             {allDistinctMinistries.map((m) => (
@@ -351,7 +353,7 @@ export function ChildProtectionGridClient({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           >
             <option value="ALL">All Statuses</option>
             <option value="NEEDS_ATTENTION">⚠️ Needs Attention (Expiring / Expired / Incomplete)</option>
@@ -402,7 +404,7 @@ export function ChildProtectionGridClient({
                         <div className="font-medium text-slate-900 dark:text-white flex items-center gap-2">
                           <span>{r.name}</span>
                           {r.user && (
-                            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                            <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300">
                               Staff
                             </span>
                           )}
@@ -483,7 +485,7 @@ export function ChildProtectionGridClient({
                               target="_blank"
                               rel="noopener noreferrer"
                               title="Open DocuSign in Google Drive"
-                              className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                              className="text-slate-400 hover:text-brand-600 dark:hover:text-brand-400"
                             >
                               <ArrowTopRightOnSquareIcon className="h-4 w-4" />
                             </a>
@@ -505,7 +507,7 @@ export function ChildProtectionGridClient({
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   title="Open MinistrySafe Certificate in Google Drive"
-                                  className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                                  className="text-slate-400 hover:text-brand-600 dark:hover:text-brand-400"
                                 >
                                   <ArrowTopRightOnSquareIcon className="h-4 w-4" />
                                 </a>
@@ -547,7 +549,7 @@ export function ChildProtectionGridClient({
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   title="Open Background Check Report in Google Drive"
-                                  className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                                  className="text-slate-400 hover:text-brand-600 dark:hover:text-brand-400"
                                 >
                                   <ArrowTopRightOnSquareIcon className="h-4 w-4" />
                                 </a>
@@ -581,7 +583,7 @@ export function ChildProtectionGridClient({
                           <button
                             onClick={() => setReviewTaskRecord(r)}
                             title="Assign Renewal Review Task"
-                            className="inline-flex items-center gap-1 rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-400"
+                            className="inline-flex items-center gap-1 rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800 dark:hover:text-brand-400"
                           >
                             <ClipboardDocumentCheckIcon className="h-4 w-4" />
                           </button>
@@ -592,7 +594,7 @@ export function ChildProtectionGridClient({
                                 onClick={() => setReviewTaskRecord(r)}
                                 title="Assign Renewal Review Task"
                                 aria-label={`Assign Renewal Review Task for ${r.name}`}
-                                className="inline-flex items-center gap-1 rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-400"
+                                className="inline-flex items-center gap-1 rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800 dark:hover:text-brand-400"
                               >
                                 <ClipboardDocumentCheckIcon className="h-4 w-4" />
                               </button>
@@ -685,12 +687,85 @@ export function ChildProtectionGridClient({
                 : `Successfully imported ${count} volunteers!`;
             setFeedbackMessage({ type: 'success', text: summary });
             setIsImportModalOpen(false);
-            window.location.reload(); // Re-fetch all data from server
+            router.refresh(); // Re-fetch all data from server
           }}
         />
       )}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Compliance & Date Helpers (Local pure functions to avoid importing @/lib/prisma)
+// ---------------------------------------------------------------------------
+
+function toIsoString(date: Date | string | null | undefined): string | null {
+  if (!date) return null;
+  return typeof date === 'string' ? date : date.toISOString();
+}
+
+function differenceInCalendarDays(futureDate: Date, fromDate: Date): number {
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const utc1 = Date.UTC(futureDate.getUTCFullYear(), futureDate.getUTCMonth(), futureDate.getUTCDate());
+  const utc2 = Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), fromDate.getUTCDate());
+  return Math.floor((utc1 - utc2) / msPerDay);
+}
+
+function computeComplianceStatus(record: {
+  docusignSigned: boolean;
+  ministrySafeCompletedAt: Date | string | null;
+  ministrySafeExpiresAt?: Date | string | null;
+  backgroundCheckCompletedAt: Date | string | null;
+  backgroundCheckExpiresAt?: Date | string | null;
+}): {
+  status: ChildProtectionStatus;
+  daysUntilMinistrySafeExpires: number | null;
+  daysUntilBackgroundCheckExpires: number | null;
+  daysUntilNextRenewal: number | null;
+} {
+  const now = new Date();
+  const msExpires = record.ministrySafeExpiresAt
+    ? record.ministrySafeExpiresAt instanceof Date
+      ? record.ministrySafeExpiresAt
+      : new Date(record.ministrySafeExpiresAt)
+    : null;
+  const bgExpires = record.backgroundCheckExpiresAt
+    ? record.backgroundCheckExpiresAt instanceof Date
+      ? record.backgroundCheckExpiresAt
+      : new Date(record.backgroundCheckExpiresAt)
+    : null;
+
+  const daysUntilMinistrySafeExpires = msExpires ? differenceInCalendarDays(msExpires, now) : null;
+  const daysUntilBackgroundCheckExpires = bgExpires ? differenceInCalendarDays(bgExpires, now) : null;
+
+  const knownDays = [daysUntilMinistrySafeExpires, daysUntilBackgroundCheckExpires].filter(
+    (d): d is number => d !== null
+  );
+  const daysUntilNextRenewal = knownDays.length > 0 ? Math.min(...knownDays) : null;
+
+  let status: ChildProtectionStatus;
+  if (!record.docusignSigned || !record.ministrySafeCompletedAt || !record.backgroundCheckCompletedAt) {
+    status = 'INCOMPLETE';
+  } else if (
+    (daysUntilMinistrySafeExpires !== null && daysUntilMinistrySafeExpires < 0) ||
+    (daysUntilBackgroundCheckExpires !== null && daysUntilBackgroundCheckExpires < 0)
+  ) {
+    status = 'EXPIRED';
+  } else if (
+    (daysUntilMinistrySafeExpires !== null && daysUntilMinistrySafeExpires <= 45) ||
+    (daysUntilBackgroundCheckExpires !== null && daysUntilBackgroundCheckExpires <= 45)
+  ) {
+    status = 'EXPIRING_SOON';
+  } else {
+    status = 'COMPLIANT';
+  }
+
+  return {
+    status,
+    daysUntilMinistrySafeExpires,
+    daysUntilBackgroundCheckExpires,
+    daysUntilNextRenewal,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -778,15 +853,99 @@ function RecordFormModal({
       if (record) {
         const res = await updateChildProtectionRecord(record.id, payload);
         if (res.success && res.data) {
-          // Compute updated status
-          window.location.reload();
+          const docusignSignedAt = toIsoString(res.data.docusignSignedAt);
+          const ministrySafeCompletedAt = toIsoString(res.data.ministrySafeCompletedAt);
+          const ministrySafeExpiresAt = toIsoString(res.data.ministrySafeExpiresAt);
+          const backgroundCheckCompletedAt = toIsoString(res.data.backgroundCheckCompletedAt);
+          const backgroundCheckExpiresAt = toIsoString(res.data.backgroundCheckExpiresAt);
+          const createdAt = toIsoString(res.data.createdAt) ?? record.createdAt;
+          const updatedAt = toIsoString(res.data.updatedAt) ?? new Date().toISOString();
+
+          const computed = computeComplianceStatus({
+            docusignSigned: res.data.docusignSigned,
+            ministrySafeCompletedAt,
+            ministrySafeExpiresAt,
+            backgroundCheckCompletedAt,
+            backgroundCheckExpiresAt,
+          });
+
+          const updatedRecord: SerializedChildProtectionRecord = {
+            ...record,
+            id: res.data.id,
+            name: res.data.name,
+            email: res.data.email,
+            phone: res.data.phone,
+            ministries: res.data.ministries,
+            docusignSigned: res.data.docusignSigned,
+            docusignSignedAt,
+            docusignUrl: res.data.docusignUrl,
+            ministrySafeCompletedAt,
+            ministrySafeExpiresAt,
+            ministrySafeUrl: res.data.ministrySafeUrl,
+            backgroundCheckCompletedAt,
+            backgroundCheckExpiresAt,
+            backgroundCheckUrl: res.data.backgroundCheckUrl,
+            notes: res.data.notes,
+            userId: record.userId,
+            user: record.user,
+            status: computed.status,
+            daysUntilMinistrySafeExpires: computed.daysUntilMinistrySafeExpires,
+            daysUntilBackgroundCheckExpires: computed.daysUntilBackgroundCheckExpires,
+            daysUntilNextRenewal: computed.daysUntilNextRenewal,
+            createdAt,
+            updatedAt,
+          };
+
+          onSaved(updatedRecord);
         } else {
           setError(res.error || 'Failed to update record.');
         }
       } else {
         const res = await createChildProtectionRecord(payload);
         if (res.success && res.data) {
-          window.location.reload();
+          const docusignSignedAt = toIsoString(res.data.docusignSignedAt);
+          const ministrySafeCompletedAt = toIsoString(res.data.ministrySafeCompletedAt);
+          const ministrySafeExpiresAt = toIsoString(res.data.ministrySafeExpiresAt);
+          const backgroundCheckCompletedAt = toIsoString(res.data.backgroundCheckCompletedAt);
+          const backgroundCheckExpiresAt = toIsoString(res.data.backgroundCheckExpiresAt);
+          const createdAt = toIsoString(res.data.createdAt) ?? new Date().toISOString();
+          const updatedAt = toIsoString(res.data.updatedAt) ?? new Date().toISOString();
+
+          const computed = computeComplianceStatus({
+            docusignSigned: res.data.docusignSigned,
+            ministrySafeCompletedAt,
+            ministrySafeExpiresAt,
+            backgroundCheckCompletedAt,
+            backgroundCheckExpiresAt,
+          });
+
+          const createdRecord: SerializedChildProtectionRecord = {
+            id: res.data.id,
+            name: res.data.name,
+            email: res.data.email,
+            phone: res.data.phone,
+            ministries: res.data.ministries,
+            docusignSigned: res.data.docusignSigned,
+            docusignSignedAt,
+            docusignUrl: res.data.docusignUrl,
+            ministrySafeCompletedAt,
+            ministrySafeExpiresAt,
+            ministrySafeUrl: res.data.ministrySafeUrl,
+            backgroundCheckCompletedAt,
+            backgroundCheckExpiresAt,
+            backgroundCheckUrl: res.data.backgroundCheckUrl,
+            notes: res.data.notes,
+            userId: null,
+            user: null,
+            status: computed.status,
+            daysUntilMinistrySafeExpires: computed.daysUntilMinistrySafeExpires,
+            daysUntilBackgroundCheckExpires: computed.daysUntilBackgroundCheckExpires,
+            daysUntilNextRenewal: computed.daysUntilNextRenewal,
+            createdAt,
+            updatedAt,
+          };
+
+          onSaved(createdRecord);
         } else {
           setError(res.error || 'Failed to create record.');
         }
@@ -883,7 +1042,7 @@ function RecordFormModal({
                   type="checkbox"
                   checked={docusignSigned}
                   onChange={(e) => setDocusignSigned(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                 />
                 <span className="text-slate-700 dark:text-slate-300 font-medium">Agreement Signed</span>
               </label>
@@ -1004,7 +1163,7 @@ function RecordFormModal({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 disabled:opacity-50"
             >
               {isSubmitting ? 'Saving...' : record ? 'Save Changes' : 'Add Volunteer'}
             </button>
@@ -1178,7 +1337,7 @@ function ReviewTaskModal({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 disabled:opacity-50"
             >
               {isSubmitting ? 'Creating Task...' : 'Create Review Task'}
             </button>
@@ -1314,7 +1473,7 @@ function ImportCsvModal({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 disabled:opacity-50"
             >
               {isSubmitting ? 'Importing...' : 'Start Import'}
             </button>

@@ -187,7 +187,7 @@ export function BoardPacketViewer({
       {currentSlideIndex === 0 && (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm space-y-6 dark:border-slate-800 dark:bg-slate-900">
           <div className="border-b border-slate-100 pb-6 dark:border-slate-800">
-            <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800 uppercase tracking-wider dark:bg-indigo-950/60 dark:text-indigo-300">
+            <span className="rounded-full bg-brand-100 px-3 py-1 text-xs font-bold text-brand-800 uppercase tracking-wider dark:bg-brand-950/60 dark:text-brand-300">
               Elder Board Packet
             </span>
             <h2 className="mt-3 text-3xl font-extrabold text-slate-900 dark:text-white">{packet.title}</h2>
@@ -220,7 +220,7 @@ export function BoardPacketViewer({
               <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500 dark:border-slate-700">
                 <p>No strategic frameworks have been attached to this packet yet.</p>
                 <p className="mt-1">
-                  Go to <Link href="/xp" className="text-indigo-600 font-semibold hover:underline">XP Hub &gt; Strategic Frameworks</Link> to build a framework and click &ldquo;Add to Board Packet&rdquo;.
+                  Go to <Link href="/xp" className="text-brand-600 font-semibold hover:underline">XP Hub &gt; Strategic Frameworks</Link> to build a framework and click &ldquo;Add to Board Packet&rdquo;.
                 </p>
               </div>
             ) : (
@@ -238,7 +238,7 @@ export function BoardPacketViewer({
                         <h4 className="font-bold text-slate-900 dark:text-white text-sm">{item.title}</h4>
                         <div className="flex items-center gap-2 mt-0.5 text-slate-500">
                           {item.definition && (
-                            <span className="rounded bg-indigo-50 px-1.5 py-0.2 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                            <span className="rounded bg-brand-50 px-1.5 py-0.2 text-[10px] font-semibold text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">
                               {item.definition.name} ({item.definition.primitive})
                             </span>
                           )}
@@ -278,7 +278,7 @@ export function BoardPacketViewer({
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 dark:border-slate-800 gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                <span className="rounded-md bg-brand-50 px-2 py-0.5 text-[10px] font-bold uppercase text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">
                   Slide {currentSlideIndex} · {currentItem.definition.primitive}
                 </span>
                 <span className="text-xs text-slate-400">

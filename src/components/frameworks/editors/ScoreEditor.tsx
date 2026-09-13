@@ -100,7 +100,7 @@ export function ScoreEditor({
                         <select
                           value={opt.scores[c.key] ?? 5}
                           onChange={(e) => updateScore(opt.id, c.key, Number(e.target.value))}
-                          className="rounded border border-slate-200 bg-white px-2 py-1 text-center font-mono text-xs font-semibold focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          className="rounded border border-slate-200 bg-white px-2 py-1 text-center font-mono text-xs font-semibold focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                         >
                           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
                             <option key={num} value={num}>
@@ -111,7 +111,7 @@ export function ScoreEditor({
                       </td>
                     ))}
                     <td className="px-4 py-3 text-center">
-                      <span className="inline-block rounded-lg bg-indigo-50 px-2.5 py-1 font-mono text-xs font-bold text-indigo-700 border border-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800">
+                      <span className="inline-block rounded-lg bg-brand-50 px-2.5 py-1 font-mono text-xs font-bold text-brand-700 border border-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:border-brand-800">
                         {total.toFixed(1)} / 10
                       </span>
                     </td>
@@ -142,7 +142,7 @@ export function ScoreEditor({
             placeholder="e.g. Planning Center Suite, Vendor A…"
             value={newOptionName}
             onChange={(e) => setNewOptionName(e.target.value)}
-            className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
           <button
             type="submit"

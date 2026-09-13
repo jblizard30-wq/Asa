@@ -266,7 +266,7 @@ export function ManageAccessModal({
 
                     <div className="flex items-center gap-3">
                       {share.access === 'EDIT' ? (
-                        <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                        <span className="inline-flex items-center rounded-md bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300">
                           EDIT
                         </span>
                       ) : (
@@ -309,7 +309,7 @@ export function ManageAccessModal({
                 }}
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                   shareType === 'PERSON'
-                    ? 'bg-indigo-600 text-white shadow-sm dark:bg-indigo-600 dark:text-white'
+                    ? 'bg-brand-600 text-white shadow-sm dark:bg-brand-600 dark:text-white'
                     : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
                 }`}
               >
@@ -323,7 +323,7 @@ export function ManageAccessModal({
                 }}
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                   shareType === 'TEAM'
-                    ? 'bg-indigo-600 text-white shadow-sm dark:bg-indigo-600 dark:text-white'
+                    ? 'bg-brand-600 text-white shadow-sm dark:bg-brand-600 dark:text-white'
                     : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
                 }`}
               >
@@ -383,7 +383,7 @@ export function ManageAccessModal({
             <button
               type="submit"
               disabled={isSubmitting || !selectedTargetId}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 disabled:opacity-50"
             >
               {isSubmitting ? 'Granting…' : 'Grant access'}
             </button>

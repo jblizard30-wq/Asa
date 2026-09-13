@@ -5,7 +5,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getVisibleNavDefs, SETTINGS_NAV_ITEM } from '@/lib/navItems';
-import { isModuleEnabled } from '@/lib/modules';
+import { isModuleEnabled, type ModuleKey } from '@/lib/modules';
 import { listToolDefinitions } from '@/lib/tools/registry';
 
 export interface SearchResults {
@@ -54,27 +54,44 @@ export async function searchAll(query: string): Promise<SearchResults> {
   const canManageTeams = isAdmin || session.user.role === 'MANAGER';
   const lowerTerm = term.toLowerCase();
 
-  const pages = [...getVisibleNavDefs({ isAdmin, canManageTeams }), SETTINGS_NAV_ITEM]
+  // Filter accessible projects and teams, and check module shares concurrently
+  const [childProtectionShare, accessibleProjects, userTeams] = await Promise.all([
+    isAdmin || !isModuleEnabled('child_protection')
+      ? Promise.resolve(null)
+      : prisma.childProtectionShare.findFirst({
+          where: {
+            OR: [
+              { userId: session.user.id },
+              { team: { members: { some: { userId: session.user.id } } } },
+            ],
+          },
+          select: { id: true },
+        }),
+    prisma.project.findMany({
+      where: isAdmin
+        ? { OR: [{ isPersonal: false }, { isPersonal: true, createdById: session.user.id }] }
+        : { members: { some: { userId: session.user.id } } },
+      select: { id: true },
+    }),
+    prisma.teamMember.findMany({
+      where: { userId: session.user.id },
+      select: { teamId: true },
+    }),
+  ]);
+
+  const sharedModules = new Set<ModuleKey>();
+  if (childProtectionShare) {
+    sharedModules.add('child_protection');
+  }
+
+  const pages = [...getVisibleNavDefs({ isAdmin, canManageTeams, sharedModules }), SETTINGS_NAV_ITEM]
     .filter(
       (def) =>
         def.label.toLowerCase().includes(lowerTerm) || def.keywords?.some((keyword) => keyword.includes(lowerTerm))
     )
     .map((def) => ({ key: def.key, label: def.label, href: def.href }));
 
-  // Filter accessible projects
-  const accessibleProjects = await prisma.project.findMany({
-    where: isAdmin
-      ? { OR: [{ isPersonal: false }, { isPersonal: true, createdById: session.user.id }] }
-      : { members: { some: { userId: session.user.id } } },
-    select: { id: true },
-  });
   const projectIds = accessibleProjects.map((p) => p.id);
-
-  // User teams for permission filtering
-  const userTeams = await prisma.teamMember.findMany({
-    where: { userId: session.user.id },
-    select: { teamId: true },
-  });
   const userTeamIds = userTeams.map((t) => t.teamId);
 
   // Run all module queries concurrently

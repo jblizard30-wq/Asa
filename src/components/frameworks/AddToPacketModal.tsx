@@ -125,7 +125,7 @@ export function AddToPacketModal({
                     key={p.id}
                     className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${
                       selectedPacketId === p.id
-                        ? 'border-indigo-600 bg-indigo-50/60 dark:border-indigo-500 dark:bg-indigo-950/40'
+                        ? 'border-brand-600 bg-brand-50/60 dark:border-brand-500 dark:bg-brand-950/40'
                         : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'
                     }`}
                   >
@@ -135,7 +135,7 @@ export function AddToPacketModal({
                         name="packetSelect"
                         checked={selectedPacketId === p.id}
                         onChange={() => setSelectedPacketId(p.id)}
-                        className="text-indigo-600"
+                        className="text-brand-600"
                       />
                       <span className="font-semibold text-slate-800 dark:text-slate-200">{p.title}</span>
                     </div>
@@ -146,7 +146,7 @@ export function AddToPacketModal({
                 <label
                   className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${
                     selectedPacketId === 'new'
-                      ? 'border-indigo-600 bg-indigo-50/60 dark:border-indigo-500 dark:bg-indigo-950/40'
+                      ? 'border-brand-600 bg-brand-50/60 dark:border-brand-500 dark:bg-brand-950/40'
                       : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'
                   }`}
                 >
@@ -155,9 +155,9 @@ export function AddToPacketModal({
                     name="packetSelect"
                     checked={selectedPacketId === 'new'}
                     onChange={() => setSelectedPacketId('new')}
-                    className="text-indigo-600"
+                    className="text-brand-600"
                   />
-                  <span className="font-bold text-indigo-700 dark:text-indigo-300">+ Create New Board Packet</span>
+                  <span className="font-bold text-brand-700 dark:text-brand-300">+ Create New Board Packet</span>
                 </label>
               </div>
             </div>
@@ -174,7 +174,7 @@ export function AddToPacketModal({
                     placeholder="e.g. Session Stated Meeting - September 2026"
                     value={newPacketTitle}
                     onChange={(e) => setNewPacketTitle(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-white"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-white"
                   />
                 </div>
                 <div>
@@ -186,7 +186,7 @@ export function AddToPacketModal({
                     required
                     value={newMeetingDate}
                     onChange={(e) => setNewMeetingDate(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-white"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-white"
                   />
                 </div>
               </div>
@@ -201,7 +201,7 @@ export function AddToPacketModal({
                 placeholder="Notes or context for the elder deck slide…"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />
             </div>
 

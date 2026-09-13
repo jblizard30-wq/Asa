@@ -74,7 +74,7 @@ export function TableEditor({
                         type="text"
                         value={String(row[col.key] ?? '')}
                         onChange={(e) => updateRowCell(row.id, col.key, e.target.value)}
-                        className="w-full rounded bg-transparent px-1.5 py-1 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:text-slate-200 dark:focus:bg-slate-800"
+                        className="w-full rounded bg-transparent px-1.5 py-1 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 dark:text-slate-200 dark:focus:bg-slate-800"
                       />
                     </td>
                   ))}
@@ -109,7 +109,7 @@ export function TableEditor({
                 value={newRowValues[col.key] || ''}
                 onChange={(e) => setNewRowValues({ ...newRowValues, [col.key]: e.target.value })}
                 placeholder={`Enter ${col.label.toLowerCase()}…`}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />
             </div>
           ))}

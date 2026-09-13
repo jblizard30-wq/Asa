@@ -310,7 +310,7 @@ export function XpClient({
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-slate-800 dark:text-white">{p.title}</span>
                     {p.itemsCount !== undefined && p.itemsCount > 0 && (
-                      <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800">
+                      <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700 border border-brand-100 dark:bg-brand-950/40 dark:text-brand-300 dark:border-brand-800">
                         {p.itemsCount} {p.itemsCount === 1 ? 'framework' : 'frameworks'}
                       </span>
                     )}

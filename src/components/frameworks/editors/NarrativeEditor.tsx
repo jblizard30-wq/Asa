@@ -48,7 +48,7 @@ export function NarrativeEditor({
             value={sections[sec.key] || ''}
             onChange={(e) => setSections({ ...sections, [sec.key]: e.target.value })}
             onBlur={(e) => handleBlur(sec.key, e.target.value)}
-            className="w-full rounded-lg border border-slate-300 p-3 text-xs leading-relaxed text-slate-800 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white print:hidden"
+            className="w-full rounded-lg border border-slate-300 p-3 text-xs leading-relaxed text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white print:hidden"
           />
         </div>
       ))}

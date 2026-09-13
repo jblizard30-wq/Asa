@@ -303,26 +303,26 @@ export function CalendarView() {
               {isSunday && inMonth && (() => {
                 const readings = getLectionaryReadings(day);
                 return (
-                  <div className="mt-1 rounded-md border border-indigo-200 bg-indigo-50/75 p-1.5 text-[10px] text-indigo-950 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200 shadow-2xs">
-                    <div className="flex items-center justify-between font-bold text-[9px] text-indigo-900 dark:text-indigo-200 border-b border-indigo-200/60 dark:border-indigo-900/60 pb-0.5 mb-1">
+                  <div className="mt-1 rounded-md border border-brand-200 bg-brand-50/75 p-1.5 text-[10px] text-brand-950 dark:border-brand-900/60 dark:bg-brand-950/40 dark:text-brand-200 shadow-2xs">
+                    <div className="flex items-center justify-between font-bold text-[9px] text-brand-900 dark:text-brand-200 border-b border-brand-200/60 dark:border-brand-900/60 pb-0.5 mb-1">
                       <span className="truncate" title={readings.sundayName}>
                         📖 {readings.sundayName}
                       </span>
-                      <span className="rounded bg-indigo-200/70 px-1 py-0.2 text-[8px] font-bold text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300 shrink-0 ml-1">
+                      <span className="rounded bg-brand-200/70 px-1 py-0.2 text-[8px] font-bold text-brand-800 dark:bg-brand-900 dark:text-brand-300 shrink-0 ml-1">
                         Yr {readings.cycle}
                       </span>
                     </div>
-                    <div className="space-y-0.5 text-[9px] text-indigo-900/90 dark:text-indigo-300">
+                    <div className="space-y-0.5 text-[9px] text-brand-900/90 dark:text-brand-300">
                       <div className="truncate" title={`First Reading: ${readings.firstReading}`}>
-                        <span className="font-semibold text-indigo-700 dark:text-indigo-400">1st:</span> {readings.firstReading}
+                        <span className="font-semibold text-brand-700 dark:text-brand-400">1st:</span> {readings.firstReading}
                       </div>
                       <div className="truncate" title={`Psalm: ${readings.psalm}`}>
-                        <span className="font-semibold text-indigo-700 dark:text-indigo-400">Ps:</span> {readings.psalm}
+                        <span className="font-semibold text-brand-700 dark:text-brand-400">Ps:</span> {readings.psalm}
                       </div>
                       <div className="truncate" title={`Epistle: ${readings.epistle}`}>
-                        <span className="font-semibold text-indigo-700 dark:text-indigo-400">Ep:</span> {readings.epistle}
+                        <span className="font-semibold text-brand-700 dark:text-brand-400">Ep:</span> {readings.epistle}
                       </div>
-                      <div className="truncate font-semibold text-indigo-950 dark:text-indigo-100" title={`Gospel: ${readings.gospel}`}>
+                      <div className="truncate font-semibold text-brand-950 dark:text-brand-100" title={`Gospel: ${readings.gospel}`}>
                         <span className="text-brand-700 dark:text-brand-400">Gosp:</span> {readings.gospel}
                       </div>
                     </div>
@@ -333,7 +333,7 @@ export function CalendarView() {
                         handleCreateSermonPrep(key);
                       }}
                       disabled={creatingPrepDate === key}
-                      className="mt-1.5 flex w-full items-center justify-center gap-1 rounded bg-indigo-600 px-1.5 py-1 text-center text-[9px] font-semibold text-white shadow-2xs hover:bg-indigo-700 disabled:opacity-50 transition-colors leading-tight"
+                      className="mt-1.5 flex w-full items-center justify-center gap-1 rounded bg-brand-600 px-1.5 py-1 text-center text-[9px] font-semibold text-white shadow-2xs hover:bg-brand-700 disabled:opacity-50 transition-colors leading-tight"
                       title="Create Sermon Prep Task with Lectionary Readings"
                       aria-label="Create Sermon Prep Task with Lectionary Readings"
                     >

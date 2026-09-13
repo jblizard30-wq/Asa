@@ -237,7 +237,7 @@ export function ServiceTemplatesManager({
                             <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400">
                               Detected Liturgical Season
                             </label>
-                            <span className="mt-1 inline-block rounded bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                            <span className="mt-1 inline-block rounded bg-brand-100 px-2 py-1 text-xs font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
                               ✨ {detectedSeason.replace('_', ' ')}
                             </span>
                           </div>

@@ -319,7 +319,7 @@ export function SearchModal() {
               {/* Strategic Discernment Tools */}
               {results.tools.length > 0 && (
                 <div className="py-2.5">
-                  <p className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                  <p className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400">
                     🛠️ Discernment Frameworks
                   </p>
                   {results.tools.map((t) => (
@@ -332,7 +332,7 @@ export function SearchModal() {
                         <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">
                           {t.name}
                         </span>
-                        <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                        <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand-700 dark:bg-brand-950 dark:text-brand-300">
                           {t.primitive}
                         </span>
                       </div>
